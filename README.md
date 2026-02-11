@@ -8,8 +8,6 @@
 
 > A free, single-file browser-based image editor with layers, AI tools, pixel-level selections, filters, PSD import, and a Photoshop-inspired workflow. No server, no signup, no install.
 
-![Screenshot](screenshot.png)
-
 ## Quick Start
 
 1. Download `OpenShop-v0.16.0.html`
