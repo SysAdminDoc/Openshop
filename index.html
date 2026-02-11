@@ -36,16 +36,18 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg-depth-0);co
 #topbar .logo span{color:var(--text-muted);font-weight:400;font-size:10px;margin-left:4px}
 .menu-item{position:relative;padding:4px 10px;border-radius:4px;cursor:pointer;color:var(--text-secondary);font-size:12px;transition:all .15s}
 .menu-item:hover{background:var(--bg-depth-3);color:var(--text-primary)}
-.menu-dropdown{display:none;position:absolute;top:100%;left:0;min-width:210px;max-height:calc(100vh - 50px);overflow-y:auto;background:var(--bg-depth-2);border:1px solid var(--border);border-radius:6px;padding:4px;z-index:1000;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+.menu-dropdown{display:none;position:absolute;top:100%;left:0;min-width:210px;background:var(--bg-depth-2);border:1px solid var(--border);border-radius:6px;padding:4px;z-index:1000;box-shadow:0 8px 32px rgba(0,0,0,.5)}
 .menu-item:hover>.menu-dropdown{display:block}
 .dd-item{padding:6px 12px;border-radius:4px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;color:var(--text-secondary);transition:all .1s;white-space:nowrap}
 .dd-item:hover{background:var(--accent-dim);color:var(--text-primary)}
 .dd-sep{height:1px;background:var(--border);margin:4px 8px}
-.dd-sub{position:relative}.dd-sub>.menu-dropdown{display:none;left:100%;top:-4px;max-height:calc(100vh - 50px);overflow-y:auto}
+.dd-sub{position:relative}.dd-sub>.menu-dropdown{display:none;left:100%;top:-4px}
 .dd-sub:hover>.menu-dropdown{display:block}
+.dd-sub.flip-left>.menu-dropdown{left:auto;right:100%}
 .dd-sub::after{content:'\25B8';float:right;margin-left:12px;font-size:9px;color:var(--text-muted)}
 .ctx-sub{position:relative}.ctx-sub>.ctx-submenu{display:none;position:absolute;left:100%;top:-4px;min-width:180px;background:var(--bg-depth-1);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.45);padding:4px;z-index:30001}
 .ctx-sub:hover>.ctx-submenu{display:block}
+.ctx-sub.flip-left>.ctx-submenu{left:auto;right:100%}
 .ctx-sub::after{content:'\25B8';float:right;margin-left:12px;font-size:9px;color:var(--text-muted)}
 
 /* === TOOLBAR === */
@@ -5293,6 +5295,46 @@ const OS = {
             menu.classList.add('visible');
         });
         document.addEventListener('click', () => document.getElementById('context-menu').classList.remove('visible'));
+
+        // Viewport-aware submenu positioning: flip left when submenu would overflow right edge, shift up if below viewport
+        document.addEventListener('mouseenter', (e) => {
+            // Handle top-level menu dropdowns near right edge
+            const menuItem = e.target.closest('.menu-item');
+            if (menuItem && e.target === menuItem) {
+                const dd = menuItem.querySelector(':scope > .menu-dropdown');
+                if (dd) {
+                    dd.style.left = ''; dd.style.right = '';
+                    requestAnimationFrame(() => {
+                        const miRect = menuItem.getBoundingClientRect();
+                        if (miRect.left + (dd.offsetWidth||210) > window.innerWidth) {
+                            dd.style.left = 'auto'; dd.style.right = '0';
+                        }
+                    });
+                }
+            }
+            // Handle submenus
+            const sub = e.target.closest('.dd-sub, .ctx-sub');
+            if (!sub) return;
+            const child = sub.querySelector('.menu-dropdown, .ctx-submenu');
+            if (!child) return;
+            child.style.display = 'block';
+            child.style.visibility = 'hidden';
+            child.style.top = '';
+            const rect = sub.getBoundingClientRect();
+            const childW = child.offsetWidth || 210;
+            const childH = child.offsetHeight || 200;
+            child.style.display = '';
+            child.style.visibility = '';
+            if (rect.right + childW > window.innerWidth) {
+                sub.classList.add('flip-left');
+            } else {
+                sub.classList.remove('flip-left');
+            }
+            const subTop = rect.top - 4;
+            if (subTop + childH > window.innerHeight - 8) {
+                child.style.top = Math.max(-(childH - sub.offsetHeight - 8), -(subTop - 40)) + 'px';
+            }
+        }, true);
     },
 
     // ====================== DROPZONE ======================
