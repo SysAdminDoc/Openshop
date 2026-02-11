@@ -1,232 +1,194 @@
 # OpenShop
 
-![Version](https://img.shields.io/badge/version-0.10.0-blue)
+![Version](https://img.shields.io/badge/version-0.16.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Browser-orange)
-![Zero Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
-![Single File](https://img.shields.io/badge/architecture-single%20file-blueviolet)
-![PWA](https://img.shields.io/badge/PWA-ready-5A0FC8)
+![Zero Install](https://img.shields.io/badge/install-none_required-brightgreen)
+![Single File](https://img.shields.io/badge/single_file-HTML-E34F26?logo=html5&logoColor=white)
 
-> A professional browser-based image editor in a single HTML file. 33 tools, 40+ filters, layer system, PSD import, animation timeline, macro recording, and a Photoshop-style grouped toolbar — no install, no server, no dependencies.
+> A free, single-file browser-based image editor with layers, AI tools, pixel-level selections, filters, PSD import, and a Photoshop-inspired workflow. No server, no signup, no install.
+
+![Screenshot](screenshot.png)
 
 ## Quick Start
 
-**Option A — Open directly:**
-1. Download `OpenShop-v0.10.0.html`
-2. Double-click to open in any modern browser
+1. Download `OpenShop-v0.16.0.html`
+2. Open it in any modern browser (Chrome, Edge, Firefox, Safari)
 3. Start editing
 
-**Option B — Serve locally (for PWA/offline support):**
-```bash
-npx serve .
-# or
-python -m http.server 8000
-```
+That's it. Everything runs client-side. Your images never leave your machine.
 
-**Option C — Deploy anywhere:**
-
-Upload the single HTML file to any static host — GitHub Pages, Netlify, Vercel, S3, or drop it on a USB drive. It's fully self-contained.
+**Or host it** — drop the file on any static host (GitHub Pages, Netlify, S3, Nginx) and it works as a full web app.
 
 ## Features
 
-### Tools (33)
+### Core Editor
 
-Tools are organized in Photoshop-style grouped flyouts. Long-press or right-click a grouped tool to access all tools in that group.
-
-| Group | Tools | Description |
-|-------|-------|-------------|
-| **Move** | Select / Move | Select, move, resize, rotate objects |
-| **Selection** | Rect Marquee, Ellipse Marquee, Lasso, Magic Wand | Pixel-level selections with tolerance and contiguous options |
-| **Crop** | Crop, Measure | Pro crop with 10 aspect presets, 8 resize handles, rule-of-thirds grid, live dimensions. Measure tool for distance/angle |
-| **Brush** | Brush, Pencil, Spray/Airbrush | 5 brush presets (Round, Soft, Flat, Scatter, Pixel) with size, opacity, and color controls |
-| **Eraser** | Eraser | Standalone — uses brush settings with white output |
-| **Stamp** | Clone Stamp, Healing Brush | Alt+click to set source, paint to clone. Healing auto-blends |
-| **Retouch** | Dodge, Burn, Sponge, Smudge | Non-destructive retouching on image objects. Size, exposure, and tonal range controls |
-| **Shape** | Rectangle, Ellipse, Triangle, Line, Arrow, Polygon, Star | Fill/stroke/width controls, 5 dash patterns, polygon sides, star inner radius |
-| **Pen** | Pen / Bezier | Click to add anchor points, drag for curves. Close path to create shape |
-| **Text** | Text | IText with font family, size, color, bold, italic. Shadow and outline effects |
-| **Fill** | Gradient, Fill Bucket, Pattern Fill | Linear/radial gradients, object fill, 6 pattern types (grid, dots, stripes, etc.) |
-| **Eyedropper** | Eyedropper | Sample any pixel on canvas to set foreground color |
-| **Note** | Sticky Note | Place draggable, resizable, color-coded annotations on canvas |
-| **Navigate** | Pan, Zoom | Pan with drag or spacebar. Zoom with scroll, click, or slider (5%–2000%) |
-
-### Filters & Adjustments (40+)
-
-| Category | Filters |
-|----------|---------|
-| **Basic** | Grayscale, Invert, Sepia, Black & White, Sharpen, Emboss, Blur, Pixelate |
-| **Color** | Brightness, Contrast, Saturation, Hue Rotation, Gamma, Vibrance, Exposure |
-| **Advanced** | Posterize, Threshold, Solarize, Edge Detect, Vignette, Unsharp Mask |
-| **Artistic** | Oil Paint, Halftone, Duotone, Tilt Shift, Chromatic Aberration, Noise Generator |
-| **Pro Adjust** | Curves, Levels, Color Balance, Channel Mixer, Shadows/Highlights, Photo Filter, Selective Color, Replace Color, Lens Correction, Gradient Map |
-| **Auto** | Auto Levels, Auto Contrast |
-
-### Layer System
-
-- Unlimited layers with add, delete, duplicate, merge, and reorder (drag)
-- Per-layer opacity (0–100%) and visibility toggle
-- 16 blend modes: Normal, Multiply, Screen, Overlay, Darken, Lighten, Color Dodge, Color Burn, Hard Light, Soft Light, Difference, Exclusion, Hue, Saturation, Color, Luminosity
-- Layer masks with brush painting (black conceals, white reveals)
-- Layer styles panel: Drop Shadow, Outer Glow, Stroke
-- Object count per layer
-
-### Canvas & View
-
-- Rulers (horizontal + vertical) with pixel markings
-- Draggable guides (click ruler to create, drag to position)
-- Grid overlay with configurable size
-- Snap-to-grid for precision alignment
-- Navigator / Minimap panel with click-to-pan
-- Pixel grid (visible at 800%+ zoom)
-- Before / After split comparison with draggable divider
-- Canvas rotate (90° CW/CCW) and flip (horizontal/vertical)
-- Fullscreen mode (F11)
+| Feature | Description |
+|---------|-------------|
+| **Layer System** | Multi-layer canvas with add, delete, duplicate, merge, flatten, visibility toggle, opacity, and blend modes |
+| **33 Tools** | Move, Brush, Pencil, Eraser, Spray, Clone Stamp, Healing Brush, Dodge, Burn, Sponge, Smudge, Shapes (rect, ellipse, triangle, polygon, star, arrow, line), Pen, Text, Gradient, Pattern Fill, Flood Fill, Eyedropper, Crop, Measure, Sticky Notes, Pan, Zoom |
+| **Brush Engine** | Round, Soft, Flat, Fan, Splatter, Pixel presets with adjustable size, opacity, and flow |
+| **Selection Tools** | Rectangular/Elliptical Marquee, Magic Wand (contiguous + global), Lasso, Color Range dialog with fuzziness, presets (Reds/Greens/Blues/Highlights/Midtones/Shadows), and live preview |
+| **Selection Operations** | Select All, Deselect, Reselect, Inverse, Grow, Similar, Modify (Expand, Contract, Feather, Border, Smooth) |
+| **Undo/Redo** | 60-step history with named entries and visual history panel |
+| **Free Transform** | Resize, rotate, skew, perspective, and warp on any object |
 
 ### File I/O
 
 | Format | Import | Export |
 |--------|--------|--------|
-| PNG | Yes | Yes |
-| JPEG | Yes | Yes (quality slider) |
-| WebP | Yes | Yes (quality slider) |
-| SVG | Yes | Yes |
-| PDF | — | Yes |
-| PSD | Yes (layers preserved) | — |
-| Project JSON | Yes | Yes (full state save/restore) |
+| **PNG** | Yes | Yes |
+| **JPEG** | Yes | Yes |
+| **WebP** | Yes | Yes |
+| **SVG** | — | Yes |
+| **PDF** | — | Yes |
+| **PSD** | Yes (layers preserved) | — |
+| **GIF** | — | Yes (animated, frame-based) |
+| **OpenShop JSON** | Yes | Yes (full project with layers) |
 
-Export settings dialog with format selection, quality slider, scale (0.25x–2x), transparent background option, and live file size estimation.
+Batch export to multiple formats in one click.
 
-### Animation Timeline
-
-- Frame-based animation with visual thumbnails
-- Transport controls: previous, play/pause, next
-- Add, duplicate, and delete frames
-- Configurable FPS (1–60)
-- Export as PNG spritesheet with auto-layout grid
-- Frame selection loads state back onto canvas
-
-### Action / Macro System
-
-- Record button captures every canvas action
-- Playback executes recorded steps sequentially
-- Save macros as JSON, load from file
-- Visual recording indicator
-
-### Additional Features
+### AI Features (Client-Side, via Transformers.js)
 
 | Feature | Description |
 |---------|-------------|
-| **Command Palette** | Ctrl+K spotlight search across 100+ commands with fuzzy matching |
-| **Context Menu** | Right-click for dynamic actions based on selection state |
-| **Align & Distribute** | 6 alignment + 2 distribution modes for multi-object layouts |
-| **Free Transform** | Scale, rotate, skew with interactive handles |
-| **Perspective Transform** | 4-corner perspective warp for images |
-| **Liquify** | Full-screen editor: Forward Warp, Bloat, Pucker, Twirl CW/CCW |
-| **Curved Text** | Text along circular arc with radius, angle, size controls |
-| **Watermark** | Custom text watermarks with tiling option |
-| **Histogram** | Live histogram panel with L/R/G/B channel selection |
-| **HSB Color Wheel** | Visual color picker with hue ring and saturation/brightness square |
-| **Color Palettes** | 24 default colors + save/export/import custom palettes |
-| **Templates** | 16 canvas presets (social media, print, web, display) |
-| **Themes** | Dark (default), Midnight, OLED Black |
-| **Clipboard Paste** | Ctrl+V to paste images from system clipboard |
-| **File Dropzone** | Drag and drop files anywhere on the window |
-| **AI Background Removal** | One-click subject isolation via remove.bg API |
-| **PWA** | Installable as a desktop app with offline support |
-| **Plugin API** | `registerPlugin({ name, init })` for custom extensions |
+| **Background Removal** | MODNet-based automatic background removal |
+| **Depth Map** | Depth-Anything monocular depth estimation |
+| **Object Detection** | DETR-based object detection with bounding boxes |
+| **Smart Upscale** | 2x / 4x AI super-resolution |
+
+All AI models download once and run entirely in-browser via WebGPU/WASM. No API keys, no server calls.
+
+### Adjustments & Filters
+
+Levels, Curves (per-channel), Brightness/Contrast, Hue/Saturation, Color Balance, Auto Levels, Grayscale, Sepia, Invert, Black & White, Sharpen, Blur, Noise, Vignette, Posterize, Threshold, Emboss, Edge Detect, Pixelate, Oil Paint, and more.
+
+### Interface
+
+| Feature | Description |
+|---------|-------------|
+| **Dark Theme** | Professional dark UI with depth-layered panels |
+| **Command Palette** | `Ctrl+K` to search and run any command |
+| **Context Menus** | Right-click for contextual actions |
+| **Rulers & Guides** | Draggable guides with snapping and pixel grid at high zoom |
+| **Grid Overlay** | Toggleable composition grid |
+| **Keyboard Shortcuts** | Full Photoshop-style shortcut set (40+ bindings) |
+| **Marching Ants** | Animated selection borders |
+| **Welcome Screen** | Template presets for common canvas sizes |
+| **Tab Toggle** | `Tab` hides all panels for distraction-free editing |
+| **PWA Support** | Installable as a standalone desktop app |
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+K` | Command Palette |
+| `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / Redo |
+| `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Copy / Cut / Paste |
+| `Ctrl+J` | Duplicate Object |
+| `Ctrl+A` | Select All |
+| `Ctrl+D` | Deselect |
+| `Ctrl+Shift+D` | Reselect |
+| `Ctrl+Shift+I` | Inverse Selection |
+| `Ctrl+T` | Free Transform |
+| `Ctrl+E` | Merge Down |
+| `Ctrl+S` | Save Project |
+| `Ctrl+N` | New Document |
+| `Ctrl+G` / `Ctrl+R` | Toggle Grid / Rulers |
+| `Ctrl+0` / `Ctrl+1` | Zoom Fit / Zoom 100% |
+| `Space` (hold) | Temporary Pan |
+| `Tab` | Toggle UI Panels |
+| `[ / ]` | Brush Size |
+| `X` | Swap FG/BG Colors |
+| `D` | Reset to Black/White |
+| `V B E T G C Z H L R P M W S I J A N` | Tool shortcuts |
 
 ## How It Works
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                    OpenShop v0.10.0                       │
-│                  Single HTML File (338K)                  │
-├──────────┬───────────────┬───────────────┬───────────────┤
-│  Toolbar │  Canvas Area  │  Right Panels │  Status Bar   │
-│  33 Tools│  Fabric.js    │  Layers       │  Zoom / Info  │
-│  Grouped │  Canvas API   │  Adjustments  │  Tool Display │
-│  Flyouts │  WebGL        │  Histogram    │  Dimensions   │
-│          │               │  Navigator    │               │
-│          │               │  Palettes     │               │
-│          │               │  History      │               │
-│          │               │  Info         │               │
-├──────────┴───────────────┴───────────────┴───────────────┤
-│                      Menu Bar                             │
-│  File │ Edit │ Image │ Layer │ Select │ Filter │ View    │
-├──────────────────────────────────────────────────────────┤
-│  Dependencies: Fabric.js 5.x (loaded from CDN)          │
-│  Storage: localStorage (palettes, preferences)           │
-│  Offline: Service Worker + Web App Manifest              │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  Single HTML File (~6,400 lines)                             │
+│                                                              │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────┐               │
+│  │  CSS     │  │  HTML    │  │  JavaScript  │               │
+│  │  Styles  │  │  Layout  │  │  Engine      │               │
+│  └──────────┘  └──────────┘  └──────┬───────┘               │
+│                                      │                       │
+│       ┌──────────────────────────────┼──────────────┐        │
+│       │                              │              │        │
+│  ┌────▼─────┐  ┌─────────────┐  ┌───▼──────┐  ┌────▼─────┐ │
+│  │ Fabric.js│  │ ag-psd      │  │ jsPDF    │  │Transformers│ │
+│  │ Canvas   │  │ PSD Import  │  │ PDF Out  │  │.js AI     │ │
+│  └──────────┘  └─────────────┘  └──────────┘  └──────────┘  │
+│                                                              │
+│  Everything runs client-side. Zero server dependency.        │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-All pixel manipulation (filters, retouching, adjustments) operates on image object data via offscreen canvases, commits changes back to Fabric objects, and records to the undo history. The layer system wraps Fabric.js object groups with metadata for visibility, opacity, blend modes, masks, and styles.
+### Dependencies (loaded via CDN)
 
-## Configuration
+| Library | Purpose |
+|---------|---------|
+| [Fabric.js 5.3.1](http://fabricjs.com/) | Canvas rendering, object manipulation, serialization |
+| [ag-psd 22.2](https://github.com/nicktomlin/ag-psd) | Photoshop PSD file parsing with layer support |
+| [jsPDF 2.5.1](https://github.com/parallax/jsPDF) | PDF document generation |
+| [Transformers.js](https://huggingface.co/docs/transformers.js) | Client-side AI inference (loaded on demand) |
+| [Google Fonts](https://fonts.google.com/) | JetBrains Mono + DM Sans |
 
-### Preferences (Edit > Preferences)
+## Self-Hosting
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Default Canvas Width | 1920 | New document width in pixels |
-| Default Canvas Height | 1080 | New document height in pixels |
-| Grid Size | 20 | Grid spacing in pixels |
-| Snap Tolerance | 5 | Snap distance in pixels |
-| History States | 60 | Maximum undo steps |
-| Accent Color | `#6c8cff` | UI accent color |
+```bash
+# Simplest possible deployment
+cp OpenShop-v0.16.0.html /var/www/html/index.html
 
-### Themes (View > Theme)
+# Or with GitHub Pages
+git init && git add . && git commit -m "init"
+# Enable Pages in repo settings → serves as a live editor
+```
 
-| Theme | Background | Accent | Best For |
-|-------|-----------|--------|----------|
-| **Dark** | `#0d1117` | `#6c8cff` | General use |
-| **Midnight** | `#0a0e1a` | `#7c9cff` | Late night editing |
-| **OLED** | `#000000` | `#6c8cff` | OLED displays, battery saving |
+No build step. No bundler. No `node_modules`. One file.
 
 ## Browser Support
 
-| Browser | Version | Status |
-|---------|---------|--------|
-| Chrome | 90+ | Full support |
-| Firefox | 90+ | Full support |
-| Edge | 90+ | Full support |
-| Safari | 15+ | Supported (no File Handling API) |
-
-Requires a modern browser with ES6+, Canvas API, and Blob support. PWA installation requires HTTPS or localhost.
+| Browser | Status |
+|---------|--------|
+| Chrome / Edge 90+ | Full support (including AI via WebGPU) |
+| Firefox 90+ | Full support (AI via WASM fallback) |
+| Safari 15+ | Full support (AI via WASM fallback) |
+| Mobile Chrome/Safari | Functional, desktop recommended |
 
 ## FAQ
 
-**Q: How do I access grouped tools?**
-Long-press or right-click any tool with a small triangle indicator in the bottom-right corner. The flyout panel shows all tools in that group. Selecting a tool swaps it into the visible position.
+**Q: Is this really just one HTML file?**
+Yes. All CSS, HTML, and JavaScript are in a single self-contained file. External resources are limited to CDN-hosted libraries and fonts.
+
+**Q: Do my images get uploaded anywhere?**
+No. Everything runs in your browser. Images are processed locally via Canvas API and never leave your machine. AI models are downloaded once to your browser cache and run client-side.
 
 **Q: Can I use this offline?**
-Yes. Serve it from localhost or any HTTPS host once to install the service worker, then it works fully offline. The only online dependency is the Fabric.js CDN load on first visit.
+After the first load (which caches CDN resources), most features work offline. AI features require their models to be cached from a prior use. Install as a PWA for the best offline experience.
 
-**Q: How do I use the crop aspect ratio lock?**
-Select the Crop tool, then choose a ratio from the dropdown in the tool options bar. The crop box will enforce that ratio when resizing via handles. Use the swap button (⇆) to toggle between landscape and portrait orientation.
+**Q: How does PSD import work?**
+OpenShop uses the ag-psd library to parse `.psd` files client-side. Layers, blend modes, and visibility are preserved. Some advanced PSD features (layer effects, smart objects, adjustment layers) may not import perfectly.
 
-**Q: Where are my saved palettes stored?**
-In the browser's localStorage under the site origin. Export palettes as JSON to back them up.
-
-**Q: Can I extend this with plugins?**
-Yes. Use the Plugin API:
-```javascript
-OS.registerPlugin({
-    name: 'My Plugin',
-    init(app) {
-        // app is the OS instance
-        // Add tools, filters, panels, etc.
-    }
-});
-```
-
-**Q: Does PSD import preserve layers?**
-Yes. OpenShop parses PSD files and imports each layer as a separate Fabric image object with name, position, and visibility preserved.
+**Q: Why not React/Vue/Svelte?**
+Simplicity. A single HTML file can be hosted anywhere, shared as an email attachment, opened from a USB drive, or embedded in any environment. No build toolchain means zero maintenance burden.
 
 ## Contributing
 
-Issues and PRs welcome. The codebase is a single HTML file — all CSS, HTML, and JavaScript are inline for zero-build deployment.
+Issues and PRs welcome. The codebase is a single file — just open `OpenShop-v0.16.0.html` in any editor.
+
+When contributing:
+- Test in Chrome and Firefox at minimum
+- Maintain the single-file architecture
+- Keep the dark theme consistent with existing CSS variables
+- Add undo history entries (`saveHistory('Action Name')`) for any canvas-modifying operation
 
 ## License
 
-MIT License — free for personal and commercial use.
+MIT License. See [LICENSE](LICENSE) for details.
+
+---
+
+**OpenShop** is built by the community for the community. No accounts, no tracking, no paywalls. Just open and edit.
