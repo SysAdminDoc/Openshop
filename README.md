@@ -9,8 +9,6 @@
 
 > A professional browser-based image editor in a single HTML file. 33 tools, 40+ filters, layer system, PSD import, animation timeline, macro recording, and a Photoshop-style grouped toolbar — no install, no server, no dependencies.
 
-![Screenshot](screenshot.png)
-
 ## Quick Start
 
 **Option A — Open directly:**
