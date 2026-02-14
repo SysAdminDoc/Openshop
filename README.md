@@ -10,6 +10,8 @@
 
 ## Quick Start
 
+Web: https://sysadmindoc.github.io/Openshop/
+
 1. Download `OpenShop-v0.16.0.html`
 2. Open it in any modern browser (Chrome, Edge, Firefox, Safari)
 3. Start editing
