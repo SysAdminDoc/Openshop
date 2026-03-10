@@ -158,6 +158,13 @@ No build step. No bundler. No `node_modules`. One file.
 | Safari 15+ | Full support (AI via WASM fallback) |
 | Mobile Chrome/Safari | Functional, desktop recommended |
 
+## Related Tools
+
+| Tool | Type | Best For |
+|------|------|----------|
+| **OpenShop** (this repo) | Single-file browser app | Zero-install editing in any browser — 33 tools, PSD import, client-side AI, works offline |
+| [PyShop](https://github.com/SysAdminDoc/PyShop) | Python desktop app | Native desktop image editor if you prefer a traditional installed application |
+
 ## FAQ
 
 **Q: Is this really just one HTML file?**
