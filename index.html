@@ -1701,6 +1701,8 @@ const OS = {
         const blob = new Blob([data],{type:'application/json'});
         const a = document.createElement('a'); a.download='openshop-project.json'; a.href=URL.createObjectURL(blob); a.click();
         this.toast('Project saved','success');
+        this._autoSaveDirty = false;
+        this._clearAutoSave();
     },
     openProject() { document.getElementById('project-input').click(); },
     _sanitizeProjectJSON(obj) {
@@ -3312,7 +3314,7 @@ const OS = {
         const snap=JSON.stringify(this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']));
         this.history.push({action,snapshot:snap});
         if(this.history.length>this.maxHistory) this.history.shift();
-        this.historyIdx=this.history.length-1; this.updateHistoryPanel(); this.updateStatus();
+        this.historyIdx=this.history.length-1; this._autoSaveDirty=true; this.updateHistoryPanel(); this.updateStatus();
         this.recordMacroStep(action);
         this.updateHistogram();
     },
@@ -3699,18 +3701,52 @@ const OS = {
         } catch(e) { console.debug('Discard recovery:', e.message); }
     },
 
+    _autoSaveWorker: null,
+    _getAutoSaveWorker() {
+        if (this._autoSaveWorker) return this._autoSaveWorker;
+        const code = `
+self.onmessage = async function(e) {
+    const {action, data} = e.data;
+    try {
+        const root = await navigator.storage.getDirectory();
+        if (action === 'write') {
+            const file = await root.getFileHandle('openshop-autosave.json', {create: true});
+            const handle = await file.createSyncAccessHandle();
+            const encoded = new TextEncoder().encode(data);
+            handle.truncate(0);
+            handle.write(encoded);
+            handle.flush();
+            handle.close();
+            self.postMessage({ok: true});
+        } else if (action === 'delete') {
+            await root.removeEntry('openshop-autosave.json').catch(() => {});
+            self.postMessage({ok: true});
+        }
+    } catch(e) { self.postMessage({ok: false, error: e.message}); }
+};`;
+        const blob = new Blob([code], {type:'application/javascript'});
+        this._autoSaveWorker = new Worker(URL.createObjectURL(blob));
+        return this._autoSaveWorker;
+    },
     async _autoSave() {
+        if (!this._autoSaveDirty) return;
         if (this.historyIdx <= 0) return;
         if (!navigator.storage || !navigator.storage.getDirectory) return;
         try {
             const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
             json._openShop = { version:'0.18.0', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
             const data = JSON.stringify(json);
-            const root = await navigator.storage.getDirectory();
-            const file = await root.getFileHandle('openshop-autosave.json', { create: true });
-            const writable = await file.createWritable();
-            await writable.write(data);
-            await writable.close();
+            try {
+                const root = await navigator.storage.getDirectory();
+                const file = await root.getFileHandle('openshop-autosave.json', { create: true });
+                const writable = await file.createWritable();
+                await writable.write(data);
+                await writable.close();
+            } catch(e) {
+                const worker = this._getAutoSaveWorker();
+                worker.postMessage({action:'write', data});
+            }
+            this._autoSaveDirty = false;
         } catch(e) { console.warn('Auto-save failed:', e); }
     },
 
@@ -6811,9 +6847,9 @@ self.onmessage = function(e) {
     },
 
     _modelRevisions: {
-        'Xenova/modnet': 'main',
-        'Xenova/depth-anything-small-hf': 'main',
-        'Xenova/detr-resnet-50': 'main',
+        'Xenova/modnet': 'fa2fa546052fba4c08921230a26cc69a333fca12',
+        'Xenova/depth-anything-small-hf': '2e942621ab9f2371c1df9eb223291b5ac31475e6',
+        'Xenova/detr-resnet-50': '8be7ab59ff663484ee9ba2e8d8f267330d5ad03e',
     },
     async _loadPipeline(task, model, label) {
         const key = task + ':' + model;
@@ -7272,6 +7308,8 @@ self.onmessage = function(e) {
     },
 };
 
+window.addEventListener('error', e => { console.error('Unhandled error:', e.error || e.message); if (typeof OS !== 'undefined' && OS.toast) OS.toast('Something went wrong — see console', 'error'); });
+window.addEventListener('unhandledrejection', e => { console.error('Unhandled promise rejection:', e.reason); if (typeof OS !== 'undefined' && OS.toast) OS.toast('Something went wrong — see console', 'error'); });
 window.addEventListener('DOMContentLoaded', () => OS.init());
 </script>
 </body>
