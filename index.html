@@ -2294,7 +2294,7 @@ const OS = {
         opt.e.preventDefault(); let z=this.zoom*(0.999**opt.e.deltaY);
         z=Math.min(Math.max(0.05,z),20);
         this.canvas.zoomToPoint({x:opt.e.offsetX,y:opt.e.offsetY},z);
-        this.zoom=z; document.getElementById('zoom-display').textContent=Math.round(z*100)+'%'; this.drawGrid(); this.drawRulers(); this._drawPixelGrid();
+        this.zoom=z; document.getElementById('zoom-display').textContent=Math.round(z*100)+'%'; this.drawGrid(); this.drawRulers(); this._drawPixelGrid(); this.updateMinimap();
     },
 
     // ====================== CLONE STAMP ======================
@@ -3314,7 +3314,7 @@ const OS = {
         const snap=JSON.stringify(this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']));
         this.history.push({action,snapshot:snap});
         if(this.history.length>this.maxHistory) this.history.shift();
-        this.historyIdx=this.history.length-1; this._autoSaveDirty=true; this.updateHistoryPanel(); this.updateStatus();
+        this.historyIdx=this.history.length-1; this._autoSaveDirty=true; this.updateHistoryPanel(); this.updateStatus(); this.updateMinimap();
         this.recordMacroStep(action);
         this.updateHistogram();
     },
@@ -3467,7 +3467,7 @@ const OS = {
         this.initDefaultPalette();
         this.loadSavedPalette();
         this._initKeyboardShortcuts();
-        setInterval(() => this.updateMinimap(), 2000);
+        this.updateMinimap();
     },
     populateTemplates() {
         const grid = document.getElementById('template-grid');
@@ -6837,7 +6837,7 @@ self.onmessage = function(e) {
         if (this._aiLib) return this._aiLib;
         this._showAIProgress('Loading Transformers.js', 'Fetching AI runtime library...');
         try {
-            this._aiLib = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.3');
+            this._aiLib = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.0.0');
             return this._aiLib;
         } catch(e) {
             this._hideAIProgress();
