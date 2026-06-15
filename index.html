@@ -4,7 +4,7 @@
     <meta property="og:image" content="https://raw.githubusercontent.com/SysAdminDoc/Openshop/main/banner.png">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="OpenShop - A free, browser-based image editor with layers, AI background removal,">
+    <meta name="description" content="OpenShop — Free browser-based image editor with layers, AI tools, selections, filters, PSD import, and a Photoshop-inspired workflow. No server, no signup, no install.">
 <meta property="og:title" content="OpenShop — Free Online Image Editor">
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
@@ -48,6 +48,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg-depth-0);co
 .menu-item:hover>.menu-dropdown{display:block}
 .dd-item{padding:7px 12px;border-radius:5px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;color:var(--text-secondary);transition:all .1s var(--ease-out);white-space:nowrap;font-size:12.5px}
 .dd-item:hover{background:var(--accent-dim);color:var(--text-primary)}
+.dd-shortcut{float:right;color:var(--text-muted);font-size:10px;font-family:'JetBrains Mono',monospace;opacity:.7;margin-left:16px}
+.dd-note{padding:6px 12px;font-size:10.5px;color:var(--text-muted);pointer-events:none;user-select:none;font-style:italic}
 .dd-sep{height:1px;background:var(--border);margin:4px 8px}
 .dd-sub{position:relative}.dd-sub>.menu-dropdown{display:none;left:100%;top:-4px}
 .dd-sub:hover>.menu-dropdown{display:block}
@@ -504,7 +506,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 /* === THEME VARIANTS === */
 :root.theme-midnight{--bg-depth-0:#0a0e1a;--bg-depth-1:#0f1424;--bg-depth-2:#141a2e;--bg-depth-3:#1a2038;--bg-depth-4:#202842;--accent:#7c9cff;--accent-dim:rgba(124,156,255,.12);--border:rgba(124,156,255,.12)}
-:root.theme-oled{--bg-depth-0:#000;--bg-depth-1:#0a0a0a;--bg-depth-2:#111;--bg-depth-3:#1a1a1a;--bg-depth-4:#222;--accent:#6c8cff;--accent-dim:rgba(108,140,255,.1);--border:rgba(255,255,255,.08)}
+:root.theme-oled{--bg-depth-0:#000;--bg-depth-1:#0a0a0a;--bg-depth-2:#111;--bg-depth-3:#1a1a1a;--bg-depth-4:#222;--accent:#6c8cff;--accent-dim:rgba(108,140,255,.1);--border:rgba(255,255,255,.08);--text-secondary:#9aa0b0;--text-muted:#666e80}
 
 /* === PIXEL GRID === */
 .pixel-grid-canvas{position:absolute;inset:0;pointer-events:none;z-index:3;image-rendering:pixelated}
@@ -609,10 +611,10 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
     </div>
     <div class="menu-item" role="menuitem" aria-haspopup="true">Select
         <div class="menu-dropdown">
-            <div class="dd-item" onclick="OS.selectAll()">All<span style="float:right;color:var(--text-muted);font-size:10px">Ctrl+A</span></div>
-            <div class="dd-item" onclick="OS.deselectAll()">Deselect<span style="float:right;color:var(--text-muted);font-size:10px">Ctrl+D</span></div>
-            <div class="dd-item" onclick="OS.reselectSelection()">Reselect<span style="float:right;color:var(--text-muted);font-size:10px">Ctrl+Shift+D</span></div>
-            <div class="dd-item" onclick="OS.invertSelection()">Inverse<span style="float:right;color:var(--text-muted);font-size:10px">Ctrl+Shift+I</span></div>
+            <div class="dd-item" onclick="OS.selectAll()">All<span class="dd-shortcut">Ctrl+A</span></div>
+            <div class="dd-item" onclick="OS.deselectAll()">Deselect<span class="dd-shortcut">Ctrl+D</span></div>
+            <div class="dd-item" onclick="OS.reselectSelection()">Reselect<span class="dd-shortcut">Ctrl+Shift+D</span></div>
+            <div class="dd-item" onclick="OS.invertSelection()">Inverse<span class="dd-shortcut">Ctrl+Shift+I</span></div>
             <div class="dd-sep"></div>
             <div class="dd-item" onclick="OS.showColorRange()">Color Range...</div>
             <div class="dd-sep"></div>
@@ -742,9 +744,8 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
             </div>
             <div class="dd-sep"></div>
             <div class="dd-item" onclick="OS.autoLevels()">Auto Levels</div>
-                            <div class="dd-sep"></div>
-                            <div class="dd-item" onclick="OS.showPresets()">Photo Presets...</div>
             <div class="dd-item" onclick="OS.autoContrast()">Auto Contrast</div>
+            <div class="dd-item" onclick="OS.showPresets()">Photo Presets...</div>
             <div class="dd-sep"></div>
             <div class="dd-item" onclick="OS.aiRemoveBackground()">Remove Background (AI)</div>
             <div class="dd-sep"></div>
@@ -760,8 +761,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
             <div class="dd-item" onclick="OS.aiUpscale(2)">Smart Upscale 2x</div>
             <div class="dd-item" onclick="OS.aiUpscale(4)">Smart Upscale 4x</div>
             <div class="dd-sep"></div>
-            <div class="dd-item" style="color:var(--text-muted);font-size:10px;pointer-events:none">Models load on first use</div>
-            <div class="dd-item" style="color:var(--text-muted);font-size:10px;pointer-events:none">No API keys required</div>
+            <div class="dd-note" role="note" aria-hidden="true">Models download on first use — no API keys needed</div>
         </div>
     </div>
     <div class="menu-item" role="menuitem" aria-haspopup="true">View
@@ -1058,14 +1058,15 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 </div>
 
 <!-- ===== WELCOME SCREEN ===== -->
-<div id="welcome-overlay" role="dialog" aria-label="Welcome to OpenShop"
+<div id="welcome-overlay" role="dialog" aria-label="Welcome to OpenShop">
     <div class="welcome-inner">
         <h1>OpenShop</h1>
-        <p>A free, browser-based image editor. No uploads. No accounts. 100% client-side.</p>
+        <p>Professional image editing, entirely in your browser.<br>No uploads, no accounts, no install.</p>
         <div class="welcome-actions">
             <button class="btn btn-primary" onclick="OS.dismissWelcome();OS.newImage()">New Canvas</button>
             <button class="btn" onclick="OS.dismissWelcome();OS.openFile()">Open Image</button>
             <button class="btn" onclick="OS.dismissWelcome();OS.openPSD()">Open PSD</button>
+            <button class="btn" onclick="OS.dismissWelcome()" style="opacity:.7">Skip</button>
         </div>
         <div class="template-section">
             <h3>Start from Template</h3>
@@ -1285,7 +1286,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
     <span id="tool-display">Select</span><span style="flex:1"></span>
     <span id="object-count">0 objects</span>
 </div>
-<div id="ai-progress" role="dialog" aria-label="AI processing" aria-live="polite"
+<div id="ai-progress" role="dialog" aria-label="AI processing" aria-live="polite">
     <div class="ai-box">
         <div class="ai-title" id="ai-title"><span class="ai-spinner"></span>Loading AI Model...</div>
         <div class="ai-msg" id="ai-msg">Downloading model weights (cached after first use)</div>
@@ -1557,7 +1558,7 @@ const OS = {
             <button class="btn btn-primary" onclick="OS.doNewImage(this.closest('.modal-overlay'))">Create</button></div></div>`;
         document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('show'));
     },
-    doNewImage(o) { const w=+o.querySelector('#ni-w').value||1920, h=+o.querySelector('#ni-h').value||1080; this.createNewDocument(w,h); o.remove(); this.toast(`New ${w}x${h}`, 'success'); },
+    doNewImage(o) { const w=+o.querySelector('#ni-w').value||1920, h=+o.querySelector('#ni-h').value||1080; this.createNewDocument(w,h); o.remove(); this.toast(`Created ${w} × ${h} canvas`, 'success'); },
 
     // ====================== FILE I/O ======================
     async openFile() {
@@ -1817,7 +1818,7 @@ const OS = {
         this.canvas.renderAll(); this.updateLayersPanel(); this.saveHistory('Duplicate Layer');
     },
     mergeDown() {
-        if (this.activeLayerIdx === 0) { this.toast('No layer below','error'); return; }
+        if (this.activeLayerIdx === 0) { this.toast('Already at the bottom layer','info'); return; }
         const upper = this.layers[this.activeLayerIdx], lower = this.layers[this.activeLayerIdx-1];
         upper.objects.forEach(o => lower.objects.push(o));
         this.layers.splice(this.activeLayerIdx, 1); this.activeLayerIdx--;
@@ -3283,7 +3284,7 @@ const OS = {
     },
     applyFilterDirect(name) {
         const active=this.canvas.getActiveObject();
-        if(!active||active.type!=='image') { this.toast('Select an image','info'); return; }
+        if(!active||active.type!=='image') { this.toast('Select an image first','info'); return; }
         let f;
         switch(name) {
             case 'Grayscale': f=new fabric.Image.filters.Grayscale(); break;
@@ -3297,7 +3298,7 @@ const OS = {
     },
     clearFilters() {
         const active=this.canvas.getActiveObject();
-        if(!active||active.type!=='image') { this.toast('Select an image','info'); return; }
+        if(!active||active.type!=='image') { this.toast('Select an image first','info'); return; }
         active.filters=[]; active.applyFilters(); this.canvas.renderAll(); this.saveHistory('Clear Filters'); this.toast('Filters cleared','success');
     },
 
@@ -3451,7 +3452,7 @@ const OS = {
         const el = document.getElementById('welcome-overlay');
         el.classList.add('hidden');
         setTimeout(() => el.style.display = 'none', 400);
-        this.toast('OpenShop v0.18.0 ready', 'info');
+        this.toast('Ready to edit', 'success');
         // Capture initial state for before/after
         setTimeout(() => this._captureBA(), 500);
         // Phase 8
@@ -5108,7 +5109,8 @@ self.onmessage = function(e) {
     _esUpdateSize() {
         const fmt = document.querySelector('.export-format-row .btn.active')?.textContent?.toLowerCase() || 'png';
         const scale = +document.getElementById('es-scale')?.value || 1;
-        const w = Math.round(this.canvasW * scale), h = Math.round(this.canvasH * scale);
+        const cw = this.canvasW || 1920, ch = this.canvasH || 1080;
+        const w = Math.round(cw * scale), h = Math.round(ch * scale);
         const bpp = fmt === 'png' ? 4 : 3;
         const raw = w * h * bpp;
         const ratio = fmt === 'png' ? 0.5 : fmt === 'jpeg' ? 0.1 : 0.08;
@@ -7211,13 +7213,21 @@ self.onmessage = function(e) {
         this.toast(`Applied: ${preset.name}`, 'success');
     },
     saveCurrentAsPreset(overlay) {
-        const name = prompt('Preset name:');
-        if (!name) return;
+        if (overlay) overlay.remove();
+        const o = document.createElement('div'); o.className = 'modal-overlay';
+        o.innerHTML = `<div class="modal"><h3>Save Preset</h3>
+            <div class="modal-row"><label>Name</label><input id="preset-name-input" type="text" placeholder="My Preset" autofocus></div>
+            <div class="modal-btns"><button class="btn" onclick="this.closest('.modal-overlay').remove();OS.showPresets()">Cancel</button>
+            <button class="btn btn-primary" onclick="OS._doSavePreset(this.closest('.modal-overlay'))">Save</button></div></div>`;
+        document.body.appendChild(o); requestAnimationFrame(() => { o.classList.add('show'); o.querySelector('#preset-name-input').focus(); });
+    },
+    _doSavePreset(overlay) {
+        const name = overlay.querySelector('#preset-name-input').value.trim();
+        if (!name) { this.toast('Enter a preset name', 'info'); return; }
         this._presets.push({ name, adjustments:{brightness:0,contrast:0,saturation:0,hue:0,vibrance:0}, custom:true });
         try { localStorage.setItem('os_presets', JSON.stringify(this._presets)); } catch(e) { console.warn('Preset save:', e.message); }
-        this.toast(`Saved preset: ${name}`, 'success');
-        if (overlay) overlay.remove();
-        this.showPresets();
+        this.toast(`Saved: ${name}`, 'success');
+        overlay.remove(); this.showPresets();
     },
     importPreset() {
         const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
