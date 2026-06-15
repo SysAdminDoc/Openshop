@@ -3644,6 +3644,24 @@ const OS = {
         const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
         const link = document.getElementById('pwa-manifest');
         if (link) link.href = URL.createObjectURL(blob);
+        this._precacheCDN();
+    },
+    async _precacheCDN() {
+        if (!('caches' in window)) return;
+        try {
+            const cache = await caches.open('openshop-cdn-v1');
+            const urls = [
+                'https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js',
+                'https://cdn.jsdelivr.net/npm/ag-psd@22.0.2/dist/bundle.js',
+                'https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js',
+                'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap'
+            ];
+            for (const url of urls) {
+                if (!await cache.match(url)) {
+                    try { await cache.add(url); } catch(e) { console.debug('Cache add failed for', url, e.message); }
+                }
+            }
+        } catch(e) { console.debug('CDN precache failed:', e.message); }
     },
 
     // ====================== AUTO-SAVE (OPFS) ======================
