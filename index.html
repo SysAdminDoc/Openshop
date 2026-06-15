@@ -539,9 +539,9 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 <body>
 
 <!-- ===== TOP MENU ===== -->
-<div id="topbar">
-    <div class="logo">OpenShop<span>v0.18.0</span></div>
-    <div class="menu-item">File
+<div id="topbar" role="menubar" aria-label="Main menu">
+    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.0</span></div>
+    <div class="menu-item" role="menuitem" aria-haspopup="true">File
         <div class="menu-dropdown">
             <div class="dd-item" onclick="OS.newImage()">New</div>
             <div class="dd-item" onclick="OS.openFile()">Open Image</div>
@@ -565,7 +565,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
             <div class="dd-item" onclick="OS.openProject()">Open Project</div>
         </div>
     </div>
-    <div class="menu-item">Edit
+    <div class="menu-item" role="menuitem" aria-haspopup="true">Edit
         <div class="menu-dropdown">
             <div class="dd-item" onclick="OS.undo()">Undo</div>
             <div class="dd-item" onclick="OS.redo()">Redo</div>
@@ -589,7 +589,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
             <div class="dd-item" onclick="OS.showPreferences()">Preferences...</div>
         </div>
     </div>
-    <div class="menu-item">Select
+    <div class="menu-item" role="menuitem" aria-haspopup="true">Select
         <div class="menu-dropdown">
             <div class="dd-item" onclick="OS.selectAll()">All<span style="float:right;color:var(--text-muted);font-size:10px">Ctrl+A</span></div>
             <div class="dd-item" onclick="OS.deselectAll()">Deselect<span style="float:right;color:var(--text-muted);font-size:10px">Ctrl+D</span></div>
@@ -612,7 +612,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
             <div class="dd-item" onclick="OS.similarSelection()">Similar</div>
         </div>
     </div>
-    <div class="menu-item">Image
+    <div class="menu-item" role="menuitem" aria-haspopup="true">Image
         <div class="menu-dropdown">
             <div class="dd-item" onclick="OS.showResize()">Resize Canvas</div>
             <div class="dd-sep"></div>
@@ -643,7 +643,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
             <div class="dd-item" onclick="OS.showBeforeAfter()">Before / After Compare</div>
         </div>
     </div>
-    <div class="menu-item">Filter
+    <div class="menu-item" role="menuitem" aria-haspopup="true">Filter
         <div class="menu-dropdown">
             <div class="dd-sub dd-item">Blur
                 <div class="menu-dropdown">
@@ -731,7 +731,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
             <div class="dd-item" onclick="OS.clearFilters()">Clear All Filters</div>
         </div>
     </div>
-    <div class="menu-item">AI
+    <div class="menu-item" role="menuitem" aria-haspopup="true">AI
         <div class="menu-dropdown">
             <div class="dd-item" onclick="OS.aiRemoveBackground()">Background Remove</div>
             <div class="dd-item" onclick="OS.aiDepthMap()">Depth Map</div>
@@ -744,7 +744,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
             <div class="dd-item" style="color:var(--text-muted);font-size:10px;pointer-events:none">No API keys required</div>
         </div>
     </div>
-    <div class="menu-item">View
+    <div class="menu-item" role="menuitem" aria-haspopup="true">View
         <div class="menu-dropdown">
             <div class="dd-sub dd-item">Zoom
                 <div class="menu-dropdown">
@@ -792,7 +792,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 </div>
 
 <!-- ===== LEFT TOOLBAR ===== -->
-<div id="toolbar">
+<div id="toolbar" role="toolbar" aria-label="Drawing tools">
     <button class="tool-btn active" data-tool="select" data-tip="Move / Select (V)" onclick="OS.setTool('select')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg></button>
     <div class="tool-sep"></div>
     <div class="tool-group" data-group="selection">
@@ -874,7 +874,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 </div>
 
 <!-- ===== TOOL OPTIONS BAR ===== -->
-<div id="tool-options">
+<div id="tool-options" role="region" aria-label="Tool options">
     <div class="opt-group" id="opt-brush" style="display:none">
         <label>Preset</label>
         <select id="brush-preset" onchange="OS.setBrushPreset(this.value)">
@@ -1017,8 +1017,8 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 <div class="ruler-v" id="ruler-v"><canvas id="ruler-v-canvas" width="20"></canvas></div>
 
 <!-- ===== CANVAS ===== -->
-<div id="canvas-area">
-    <canvas id="editor-canvas"></canvas>
+<div id="canvas-area" role="application" aria-label="Image canvas">
+    <canvas id="editor-canvas" aria-label="Drawing surface"></canvas>
     <canvas class="canvas-grid" id="grid-overlay"></canvas>
     <div id="guides-container"></div>
     <div id="lasso-overlay" class="lasso-overlay" style="display:none"><svg><polygon class="lasso-path" points=""/></svg></div>
@@ -1029,7 +1029,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 </div>
 
 <!-- ===== WELCOME SCREEN ===== -->
-<div id="welcome-overlay">
+<div id="welcome-overlay" role="dialog" aria-label="Welcome to OpenShop"
     <div class="welcome-inner">
         <h1>OpenShop</h1>
         <p>A free, browser-based image editor. No uploads. No accounts. 100% client-side.</p>
@@ -1047,7 +1047,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 </div>
 
 <!-- ===== RIGHT PANELS ===== -->
-<div id="panels">
+<div id="panels" role="complementary" aria-label="Editor panels">
     <!-- ===== TAB GROUP 1: Layers / Properties / Align ===== -->
     <div class="panel-tab-group ptg-flex">
         <div class="panel-tabs">
@@ -1081,7 +1081,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
                     <input type="range" id="layer-opacity" min="0" max="100" value="100" oninput="OS.setLayerOpacity(this.value)">
                     <span class="opt-val" id="layer-opacity-val">100</span>
                 </div>
-                <div id="layers-list"></div>
+                <div id="layers-list" role="listbox" aria-label="Layers"></div>
                 <div id="layers-empty">No layers. Click + to add one.</div>
             </div>
         </div>
@@ -1212,7 +1212,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
         </div>
         <div class="panel-tab-content active" id="ptg3-history" data-group="ptg3">
             <div class="ptc-inner">
-                <div id="history-list"></div>
+                <div id="history-list" role="listbox" aria-label="Undo history"></div>
             </div>
         </div>
         <div class="panel-tab-content" id="ptg3-nav" data-group="ptg3">
@@ -1249,14 +1249,14 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 </div>
 
 <!-- ===== STATUS BAR ===== -->
-<div id="statusbar">
+<div id="statusbar" role="status" aria-label="Status bar" aria-live="polite">
     <span id="canvas-dims">1920 x 1080</span><span class="sep"></span>
     <span id="zoom-display" onclick="OS.zoomFit()">100%</span><span class="sep"></span>
     <span id="cursor-pos">X: 0 Y: 0</span><span class="sep"></span>
     <span id="tool-display">Select</span><span style="flex:1"></span>
     <span id="object-count">0 objects</span>
 </div>
-<div id="ai-progress">
+<div id="ai-progress" role="dialog" aria-label="AI processing" aria-live="polite"
     <div class="ai-box">
         <div class="ai-title" id="ai-title"><span class="ai-spinner"></span>Loading AI Model...</div>
         <div class="ai-msg" id="ai-msg">Downloading model weights (cached after first use)</div>
@@ -1264,16 +1264,16 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
         <div class="ai-pct" id="ai-pct">0%</div>
     </div>
 </div>
-<div id="toast-container"></div>
+<div id="toast-container" role="alert" aria-live="assertive" aria-atomic="true"></div>
 <!-- ===== COMMAND PALETTE ===== -->
-<div id="cmd-palette" onclick="if(event.target===this)OS.closeCmdPalette()">
+<div id="cmd-palette" role="dialog" aria-label="Command palette" onclick="if(event.target===this)OS.closeCmdPalette()">
     <div id="cmd-box">
         <input id="cmd-input" type="text" placeholder="Type a command... (Ctrl+K)" oninput="OS.filterCommands(this.value)" onkeydown="OS.cmdKeyDown(event)">
         <div id="cmd-results"></div>
     </div>
 </div>
 <!-- ===== CONTEXT MENU ===== -->
-<div id="context-menu"></div>
+<div id="context-menu" role="menu" aria-label="Context menu"></div>
 <!-- ===== DROPZONE ===== -->
 <div id="dropzone-overlay">
     <div class="dropzone-ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
@@ -1461,6 +1461,19 @@ const OS = {
         // Welcome screen
         this.populateTemplates();
         this.populateRecentFiles();
+        // Accessibility: add aria-labels to tool buttons from their tooltips
+        document.querySelectorAll('.tool-btn[data-tip]').forEach(btn => {
+            btn.setAttribute('aria-label', btn.dataset.tip);
+            btn.setAttribute('role', 'button');
+            btn.setAttribute('tabindex', '0');
+            btn.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); btn.click(); } });
+        });
+        document.querySelectorAll('.dd-item').forEach(item => {
+            item.setAttribute('role', 'menuitem');
+        });
+        document.querySelectorAll('.panel-tab').forEach(tab => {
+            tab.setAttribute('role', 'tab');
+        });
         // PWA manifest
         this.initPWA();
         // Auto-save recovery check
