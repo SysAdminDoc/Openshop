@@ -4706,6 +4706,55 @@ const OS = {
         if (el('info-zoom')) el('info-zoom').textContent = Math.round(this.zoom * 100) + '%';
     },
 
+    // ====================== FILTER WORKER ======================
+    _filterWorker: null,
+    _getFilterWorker() {
+        if (this._filterWorker) return this._filterWorker;
+        const code = `
+self.onmessage = function(e) {
+    const {filter, data, width, height, params} = e.data;
+    const d = new Uint8ClampedArray(data);
+    const w = width, h = height;
+    if (filter === 'oilPaint') {
+        const radius = params.radius, levels = params.levels;
+        const src = new Uint8ClampedArray(d);
+        for (let y=radius;y<h-radius;y++){for(let x=radius;x<w-radius;x++){
+            const bins=new Array(levels).fill(0),sr=new Array(levels).fill(0),sg=new Array(levels).fill(0),sb=new Array(levels).fill(0);
+            for(let dy=-radius;dy<=radius;dy++)for(let dx=-radius;dx<=radius;dx++){const i=((y+dy)*w+x+dx)*4;const l=Math.round((src[i]+src[i+1]+src[i+2])/3/(256/levels));const b=Math.min(l,levels-1);bins[b]++;sr[b]+=src[i];sg[b]+=src[i+1];sb[b]+=src[i+2];}
+            let maxBin=0,maxCount=0;for(let b=0;b<levels;b++){if(bins[b]>maxCount){maxCount=bins[b];maxBin=b;}}
+            const i=(y*w+x)*4;d[i]=sr[maxBin]/maxCount;d[i+1]=sg[maxBin]/maxCount;d[i+2]=sb[maxBin]/maxCount;
+        }}
+    } else if (filter === 'tiltShift') {
+        const focusY=params.focusY,focusW=params.focusW,blurR=params.blurR;
+        const src=new Uint8ClampedArray(d);
+        for(let y=0;y<h;y++){const ny=y/h,dist=Math.abs(ny-focusY);const blurAmt=Math.max(0,(dist-focusW/2)/(0.5-focusW/2));const r=Math.round(blurAmt*blurR);if(r<1)continue;
+        for(let x=0;x<w;x++){let sr=0,sg=0,sb=0,cnt=0;for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const sy=Math.max(0,Math.min(h-1,y+dy)),sx=Math.max(0,Math.min(w-1,x+dx));const i=(sy*w+sx)*4;sr+=src[i];sg+=src[i+1];sb+=src[i+2];cnt++;}
+        const i=(y*w+x)*4;d[i]=sr/cnt;d[i+1]=sg/cnt;d[i+2]=sb/cnt;}}
+    } else if (filter === 'unsharpMask') {
+        const amount=params.amount,radius=params.radius;
+        const blurred=new Uint8ClampedArray(d),r=Math.ceil(radius);
+        for(let y=r;y<h-r;y++){for(let x=r;x<w-r;x++){let sr=0,sg=0,sb=0,cnt=0;for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const i=((y+dy)*w+x+dx)*4;sr+=d[i];sg+=d[i+1];sb+=d[i+2];cnt++;}
+        const i=(y*w+x)*4;blurred[i]=sr/cnt;blurred[i+1]=sg/cnt;blurred[i+2]=sb/cnt;}}
+        for(let i=0;i<d.length;i+=4){for(let c=0;c<3;c++)d[i+c]=Math.max(0,Math.min(255,Math.round(d[i+c]+amount*(d[i+c]-blurred[i+c]))));}
+    }
+    self.postMessage({data: d.buffer, width, height}, [d.buffer]);
+};`;
+        const blob = new Blob([code], {type:'application/javascript'});
+        this._filterWorker = new Worker(URL.createObjectURL(blob));
+        return this._filterWorker;
+    },
+    _runFilterInWorker(filter, imgData, width, height, params) {
+        return new Promise((resolve) => {
+            const worker = this._getFilterWorker();
+            const buf = imgData.data.buffer.slice(0);
+            worker.onmessage = (e) => {
+                const result = new ImageData(new Uint8ClampedArray(e.data.data), e.data.width, e.data.height);
+                resolve(result);
+            };
+            worker.postMessage({filter, data: buf, width, height, params}, [buf]);
+        });
+    },
+
     // ====================== PHASE 7: ADVANCED FILTERS ======================
     _getActiveImageData() {
         const active = this.canvas.getActiveObject();
@@ -4792,23 +4841,13 @@ const OS = {
         this._openFilterPanel('unsharpmask-overlay', 'Unsharp Mask', body,
             ()=>this._removeFilterPanel('unsharpmask-overlay'), ()=>this._doUnsharpMask());
     },
-    _doUnsharpMask() {
+    async _doUnsharpMask() {
         const panel = document.getElementById('unsharpmask-overlay');
         const info = this._getActiveImageData(); if (!info) { this._removeFilterPanel('unsharpmask-overlay'); return; }
         const amount = +(panel.querySelector('#fu-amt')?.value||100) / 100, radius = +(panel.querySelector('#fu-rad')?.value||2);
-        const d = info.imgData.data, w = info.canvas.width, h = info.canvas.height;
-        const blurred = new Uint8ClampedArray(d);
-        const r = Math.ceil(radius);
-        for (let y = r; y < h-r; y++) {
-            for (let x = r; x < w-r; x++) {
-                let sr=0,sg=0,sb=0,cnt=0;
-                for (let dy=-r;dy<=r;dy++) for (let dx=-r;dx<=r;dx++) { const i=((y+dy)*w+x+dx)*4; sr+=d[i]; sg+=d[i+1]; sb+=d[i+2]; cnt++; }
-                const i=(y*w+x)*4; blurred[i]=sr/cnt; blurred[i+1]=sg/cnt; blurred[i+2]=sb/cnt;
-            }
-        }
-        for (let i = 0; i < d.length; i += 4) {
-            for (let c = 0; c < 3; c++) d[i+c] = Math.max(0, Math.min(255, Math.round(d[i+c] + amount * (d[i+c] - blurred[i+c]))));
-        }
+        this.toast('Applying unsharp mask...', 'info');
+        const result = await this._runFilterInWorker('unsharpMask', info.imgData, info.canvas.width, info.canvas.height, {amount, radius});
+        info.imgData = result;
         this._commitImageData(info, 'Unsharp Mask'); this._removeFilterPanel('unsharpmask-overlay'); this.toast('Unsharp mask applied', 'success');
     },
     filterOilPaint() {
@@ -4816,23 +4855,13 @@ const OS = {
         this._openFilterPanel('oilpaint-overlay', 'Oil Paint', body,
             ()=>this._removeFilterPanel('oilpaint-overlay'), ()=>this._doOilPaint());
     },
-    _doOilPaint() {
+    async _doOilPaint() {
         const panel = document.getElementById('oilpaint-overlay');
         const info = this._getActiveImageData(); if (!info) { this._removeFilterPanel('oilpaint-overlay'); return; }
         const radius = +(panel.querySelector('#fo-rad')?.value||3), levels = +(panel.querySelector('#fo-lvl')?.value||16);
-        const d = info.imgData.data, w = info.canvas.width, h = info.canvas.height;
-        const src = new Uint8ClampedArray(d);
-        for (let y = radius; y < h-radius; y++) {
-            for (let x = radius; x < w-radius; x++) {
-                const bins = new Array(levels).fill(0); const sr = new Array(levels).fill(0); const sg = new Array(levels).fill(0); const sb = new Array(levels).fill(0);
-                for (let dy=-radius;dy<=radius;dy++) for (let dx=-radius;dx<=radius;dx++) {
-                    const i=((y+dy)*w+x+dx)*4; const l=Math.round((src[i]+src[i+1]+src[i+2])/3/(256/levels));
-                    const b=Math.min(l,levels-1); bins[b]++; sr[b]+=src[i]; sg[b]+=src[i+1]; sb[b]+=src[i+2];
-                }
-                let maxBin=0,maxCount=0; for(let b=0;b<levels;b++){if(bins[b]>maxCount){maxCount=bins[b];maxBin=b;}}
-                const i=(y*w+x)*4; d[i]=sr[maxBin]/maxCount; d[i+1]=sg[maxBin]/maxCount; d[i+2]=sb[maxBin]/maxCount;
-            }
-        }
+        this.toast('Applying oil paint...', 'info');
+        const result = await this._runFilterInWorker('oilPaint', info.imgData, info.canvas.width, info.canvas.height, {radius, levels});
+        info.imgData = result;
         this._commitImageData(info, 'Oil Paint'); this._removeFilterPanel('oilpaint-overlay'); this.toast('Oil paint applied', 'success');
     },
     filterHalftone() {
@@ -4885,26 +4914,13 @@ const OS = {
         this._openFilterPanel('tiltshift-overlay', 'Tilt Shift', body,
             ()=>this._removeFilterPanel('tiltshift-overlay'), ()=>this._doTiltShift());
     },
-    _doTiltShift() {
+    async _doTiltShift() {
         const panel = document.getElementById('tiltshift-overlay');
         const info = this._getActiveImageData(); if (!info) { this._removeFilterPanel('tiltshift-overlay'); return; }
         const focusY = +(panel.querySelector('#fts-y')?.value||50)/100, focusW = +(panel.querySelector('#fts-w')?.value||20)/100, blurR = +(panel.querySelector('#fts-blur')?.value||4);
-        const d = info.imgData.data, w = info.canvas.width, h = info.canvas.height;
-        const src = new Uint8ClampedArray(d);
-        for (let y = 0; y < h; y++) {
-            const ny = y / h, dist = Math.abs(ny - focusY);
-            const blurAmt = Math.max(0, (dist - focusW/2) / (0.5 - focusW/2));
-            const r = Math.round(blurAmt * blurR);
-            if (r < 1) continue;
-            for (let x = 0; x < w; x++) {
-                let sr=0,sg=0,sb=0,cnt=0;
-                for (let dy=-r;dy<=r;dy++) for (let dx=-r;dx<=r;dx++) {
-                    const sy=Math.max(0,Math.min(h-1,y+dy)), sx=Math.max(0,Math.min(w-1,x+dx));
-                    const i=(sy*w+sx)*4; sr+=src[i]; sg+=src[i+1]; sb+=src[i+2]; cnt++;
-                }
-                const i=(y*w+x)*4; d[i]=sr/cnt; d[i+1]=sg/cnt; d[i+2]=sb/cnt;
-            }
-        }
+        this.toast('Applying tilt shift...', 'info');
+        const result = await this._runFilterInWorker('tiltShift', info.imgData, info.canvas.width, info.canvas.height, {focusY, focusW, blurR});
+        info.imgData = result;
         this._commitImageData(info, 'Tilt Shift'); this._removeFilterPanel('tiltshift-overlay'); this.toast('Tilt shift applied', 'success');
     },
     filterChromaticAberration() {
