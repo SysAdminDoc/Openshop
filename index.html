@@ -759,6 +759,15 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
                     <div class="dd-item" onclick="OS.toggleGrid()">Toggle Grid</div>
                     <div class="dd-item" onclick="OS.toggleRulers()">Toggle Rulers</div>
                     <div class="dd-item" onclick="OS.toggleSnap()">Toggle Snap to Grid</div>
+                    <div class="dd-sub dd-item">Symmetry
+                        <div class="menu-dropdown">
+                            <div class="dd-item" onclick="OS.setSymmetryMode('off')">Off</div>
+                            <div class="dd-item" onclick="OS.setSymmetryMode('horizontal')">Horizontal</div>
+                            <div class="dd-item" onclick="OS.setSymmetryMode('vertical')">Vertical</div>
+                            <div class="dd-item" onclick="OS.setSymmetryMode('both')">Both Axes</div>
+                            <div class="dd-item" onclick="OS.setSymmetryMode('radial')">Radial (6-fold)</div>
+                        </div>
+                    </div>
                     <div class="dd-item" onclick="OS.togglePixelGrid()">Pixel Grid</div>
                 </div>
             </div>
@@ -1378,6 +1387,7 @@ const OS = {
     _animFrames: [], _animIdx: 0, _animPlaying: false, _animTimer: null,
     _macroRecording: false, _macroSteps: [],
     _liquifyData: null,
+    _symmetryMode: 'off',
     _prefs: { gridSize: 20, historyStates: 60, defaultW: 1920, defaultH: 1080, theme: 'dark', snapTolerance: 5 },
     gridVisible: false, rulersVisible: false, snapEnabled: false, gridSize: 20,
     templates: [
@@ -1434,12 +1444,12 @@ const OS = {
         this.canvas.on('selection:cleared', () => this.updateStatus());
         this.canvas.on('mouse:wheel', opt => this.onMouseWheel(opt));
         this.canvas.on('path:created', e => {
-            // Eraser paths should erase to transparency, not draw white
             if (this.state.tool === 'eraser') {
                 e.path.globalCompositeOperation = 'destination-out';
                 e.path.stroke = 'rgba(0,0,0,1)';
             }
             this.layers[this.activeLayerIdx].objects.push(e.path);
+            if (this._symmetryMode !== 'off') this._mirrorPath(e.path);
             this.saveHistory('Draw'); this.updateLayersPanel();
         });
         window.addEventListener('resize', () => { this.resizeCanvas(); this.drawGrid(); this.drawRulers(); });
@@ -5312,6 +5322,11 @@ self.onmessage = function(e) {
             {label:'Toggle Grid',cat:'View',fn:()=>this.toggleGrid(),key:'Ctrl+G'},
             {label:'Toggle Rulers',cat:'View',fn:()=>this.toggleRulers()},
             {label:'Toggle Snap',cat:'View',fn:()=>this.toggleSnap()},
+            {label:'Symmetry: Off',cat:'View',fn:()=>this.setSymmetryMode('off')},
+            {label:'Symmetry: Horizontal',cat:'View',fn:()=>this.setSymmetryMode('horizontal')},
+            {label:'Symmetry: Vertical',cat:'View',fn:()=>this.setSymmetryMode('vertical')},
+            {label:'Symmetry: Both Axes',cat:'View',fn:()=>this.setSymmetryMode('both')},
+            {label:'Symmetry: Radial',cat:'View',fn:()=>this.setSymmetryMode('radial')},
             {label:'Fullscreen',cat:'View',fn:()=>this.toggleFullscreen(),key:'F11'},
             {label:'Zoom In',cat:'View',fn:()=>this.zoomIn(),key:'Ctrl++'},
             {label:'Zoom Out',cat:'View',fn:()=>this.zoomOut(),key:'Ctrl+-'},
@@ -6089,6 +6104,53 @@ self.onmessage = function(e) {
         const h = +overlay.querySelector('#nd-h').value || 1080;
         overlay.remove();
         this.createNewDocument(w, h);
+    },
+
+    // ====================== SYMMETRY ======================
+    setSymmetryMode(mode) {
+        this._symmetryMode = mode;
+        this.toast(mode === 'off' ? 'Symmetry off' : `Symmetry: ${mode}`, 'info');
+    },
+    _mirrorPath(path) {
+        const cx = this.canvasW / 2, cy = this.canvasH / 2;
+        const mode = this._symmetryMode;
+        const mirrors = [];
+        if (mode === 'horizontal' || mode === 'both') {
+            path.clone(c => {
+                c.set({ flipX: true, left: 2 * cx - path.left - path.width * path.scaleX });
+                this.canvas.add(c); this.layers[this.activeLayerIdx].objects.push(c);
+                mirrors.push(c);
+            });
+        }
+        if (mode === 'vertical' || mode === 'both') {
+            path.clone(c => {
+                c.set({ flipY: true, top: 2 * cy - path.top - path.height * path.scaleY });
+                this.canvas.add(c); this.layers[this.activeLayerIdx].objects.push(c);
+                mirrors.push(c);
+            });
+        }
+        if (mode === 'both') {
+            path.clone(c => {
+                c.set({ flipX: true, flipY: true, left: 2 * cx - path.left - path.width * path.scaleX, top: 2 * cy - path.top - path.height * path.scaleY });
+                this.canvas.add(c); this.layers[this.activeLayerIdx].objects.push(c);
+                mirrors.push(c);
+            });
+        }
+        if (mode === 'radial') {
+            const folds = 6;
+            for (let i = 1; i < folds; i++) {
+                const angle = (360 / folds) * i;
+                path.clone(c => {
+                    const rad = angle * Math.PI / 180;
+                    const px = path.left + path.width * path.scaleX / 2, py = path.top + path.height * path.scaleY / 2;
+                    const nx = cx + (px - cx) * Math.cos(rad) - (py - cy) * Math.sin(rad);
+                    const ny = cy + (px - cx) * Math.sin(rad) + (py - cy) * Math.cos(rad);
+                    c.set({ left: nx - c.width * c.scaleX / 2, top: ny - c.height * c.scaleY / 2, angle: angle });
+                    this.canvas.add(c); this.layers[this.activeLayerIdx].objects.push(c);
+                });
+            }
+        }
+        this.canvas.renderAll();
     },
 
     // ====================== THEME SYSTEM ======================
