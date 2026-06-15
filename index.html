@@ -1461,6 +1461,8 @@ const OS = {
         this.populateRecentFiles();
         // PWA manifest
         this.initPWA();
+        // Auto-save recovery check
+        this._initAutoSave();
         // Phase 6
         this.initColorWheel();
         this.updateHistogram();
@@ -3498,7 +3500,6 @@ const OS = {
 
     // ====================== PWA ======================
     initPWA() {
-        // Inline manifest
         const manifest = {
             name: 'OpenShop Image Editor',
             short_name: 'OpenShop',
@@ -3512,19 +3513,89 @@ const OS = {
                 sizes: '512x512', type: 'image/svg+xml'
             }],
             file_handlers: [
-                { action: './', accept: { 'image/png': ['.png'], 'image/jpeg': ['.jpg','.jpeg'], 'image/webp': ['.webp'] } }
+                { action: './', accept: { 'image/png': ['.png'], 'image/jpeg': ['.jpg','.jpeg'], 'image/webp': ['.webp'], 'image/vnd.adobe.photoshop': ['.psd'] } }
             ]
         };
         const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
         const link = document.getElementById('pwa-manifest');
         if (link) link.href = URL.createObjectURL(blob);
-        // Register SW if available
-        if ('serviceWorker' in navigator) {
-            // Inline SW via blob
-            const swCode = `self.addEventListener('fetch', e => e.respondWith(fetch(e.request).catch(() => new Response('Offline'))));`;
-            const swBlob = new Blob([swCode], { type: 'application/javascript' });
-            navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(() => {});
-        }
+    },
+
+    // ====================== AUTO-SAVE (OPFS) ======================
+    _autoSaveTimer: null,
+    _autoSaveDirty: false,
+
+    async _initAutoSave() {
+        if (!navigator.storage || !navigator.storage.getDirectory) return;
+        try {
+            const root = await navigator.storage.getDirectory();
+            const file = await root.getFileHandle('openshop-autosave.json', { create: false }).catch(() => null);
+            if (file) {
+                const f = await file.getFile();
+                if (f.size > 0 && Date.now() - f.lastModified < 86400000) {
+                    this._offerRecovery(await f.text());
+                }
+            }
+        } catch(e) { console.warn('Auto-save check failed:', e); }
+        this._autoSaveTimer = setInterval(() => this._autoSave(), 30000);
+    },
+
+    _offerRecovery(jsonText) {
+        const o = document.createElement('div'); o.className = 'modal-overlay';
+        o.innerHTML = `<div class="modal"><h3>Recover Unsaved Work?</h3>
+            <p style="font-size:12px;color:var(--text-secondary);margin-bottom:16px">An auto-saved project was found. Would you like to restore it?</p>
+            <div class="modal-btns">
+                <button class="btn btn-danger" onclick="OS._discardRecovery();this.closest('.modal-overlay').remove()">Discard</button>
+                <button class="btn btn-primary" onclick="OS._restoreRecovery(this.closest('.modal-overlay'))">Restore</button>
+            </div></div>`;
+        document.body.appendChild(o);
+        this._recoveryData = jsonText;
+        requestAnimationFrame(() => o.classList.add('show'));
+    },
+
+    _restoreRecovery(overlay) {
+        if (!this._recoveryData) { overlay.remove(); return; }
+        try {
+            const json = JSON.parse(this._recoveryData);
+            if (json._openShop) { this.canvasW = json._openShop.w; this.canvasH = json._openShop.h; }
+            this.canvas.loadFromJSON(json, () => {
+                this.canvas.renderAll(); this.rebuildLayersFromCanvas();
+                this.zoomFit(); this.saveHistory('Recovered Project');
+                this.toast('Project restored from auto-save', 'success');
+            });
+        } catch(e) { this.toast('Recovery failed: ' + e.message, 'error'); }
+        this._recoveryData = null;
+        overlay.remove();
+    },
+
+    async _discardRecovery() {
+        this._recoveryData = null;
+        try {
+            const root = await navigator.storage.getDirectory();
+            await root.removeEntry('openshop-autosave.json').catch(() => {});
+        } catch(e) {}
+    },
+
+    async _autoSave() {
+        if (this.historyIdx <= 0) return;
+        if (!navigator.storage || !navigator.storage.getDirectory) return;
+        try {
+            const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
+            json._openShop = { version:'0.18.0', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+            const data = JSON.stringify(json);
+            const root = await navigator.storage.getDirectory();
+            const file = await root.getFileHandle('openshop-autosave.json', { create: true });
+            const writable = await file.createWritable();
+            await writable.write(data);
+            await writable.close();
+        } catch(e) { console.warn('Auto-save failed:', e); }
+    },
+
+    async _clearAutoSave() {
+        try {
+            const root = await navigator.storage.getDirectory();
+            await root.removeEntry('openshop-autosave.json').catch(() => {});
+        } catch(e) {}
     },
 
     // ====================== LASSO SELECTION ======================
