@@ -9,6 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src blob:;">
 <title>OpenShop v0.18.0 — Online Image Editor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js" integrity="sha384-sLpuECXYCB5TUyTbC06pftm/rgurDambREZmV4eRHwEqJzCQtU6lxI2Ve00z4XW5" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/ag-psd@22.0.2/dist/bundle.js" integrity="sha384-kla4KJzEnshZnuWyJ8+AF8KEX0YZ2rpxTaQpDtDUmDdUv7jK94knsRx/lcRZ/HF4" crossorigin="anonymous"></script>
@@ -637,6 +638,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
             <div class="dd-item" onclick="OS.flattenImage()">Flatten Image</div>
             <div class="dd-sep"></div>
             <div class="dd-item" onclick="OS.addWatermark()">Add Watermark...</div>
+            <div class="dd-item" onclick="OS.autoEnhance()">Auto Enhance</div>
             <div class="dd-item" onclick="OS.showImageInfo()">Image Info...</div>
             <div class="dd-item" onclick="OS.showBeforeAfter()">Before / After Compare</div>
         </div>
@@ -1515,9 +1517,20 @@ const OS = {
     doNewImage(o) { const w=+o.querySelector('#ni-w').value||1920, h=+o.querySelector('#ni-h').value||1080; this.createNewDocument(w,h); o.remove(); this.toast(`New ${w}x${h}`, 'success'); },
 
     // ====================== FILE I/O ======================
-    openFile() { document.getElementById('file-input').click(); },
-    handleFileOpen(e) {
-        const file = e.target.files[0]; if (!file) return;
+    async openFile() {
+        if (window.showOpenFilePicker) {
+            try {
+                const [handle] = await window.showOpenFilePicker({
+                    types: [{ description: 'Images', accept: { 'image/*': ['.png','.jpg','.jpeg','.webp','.gif','.bmp'] } }]
+                });
+                const file = await handle.getFile();
+                this._handleFileLoad(file);
+                return;
+            } catch(e) { if (e.name === 'AbortError') return; }
+        }
+        document.getElementById('file-input').click();
+    },
+    _handleFileLoad(file) {
         this._docName = file.name.replace(/\.[^.]+$/, '');
         const r = new FileReader(); r.onload = ev => {
             fabric.Image.fromURL(ev.target.result, img => {
@@ -1527,7 +1540,12 @@ const OS = {
                 this.zoomFit(); this.saveHistory('Open Image'); this.updateLayersPanel();
                 this.toast(`Opened: ${file.name}`, 'success');
             });
-        }; r.readAsDataURL(file); e.target.value='';
+        }; r.readAsDataURL(file);
+    },
+    handleFileOpen(e) {
+        const file = e.target.files[0]; if (!file) return;
+        this._handleFileLoad(file);
+        e.target.value='';
     },
     handleDrop(e) {
         const file = e.dataTransfer.files[0];
@@ -1609,10 +1627,34 @@ const OS = {
         ['png','jpeg','webp','svg','pdf'].forEach(f => { if (o.querySelector('#batch-'+f).checked) { if(f==='pdf') this.exportPDF(); else this.saveFile(f); } });
         o.remove(); this.toast('Batch export complete', 'success');
     },
-    saveProject() {
+    _projectFileHandle: null,
+    async saveProject() {
         const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
         json._openShop = { version:'0.18.0', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
-        const blob = new Blob([JSON.stringify(json)],{type:'application/json'});
+        const data = JSON.stringify(json);
+        if (this._projectFileHandle) {
+            try {
+                const writable = await this._projectFileHandle.createWritable();
+                await writable.write(data);
+                await writable.close();
+                this.toast('Project saved','success');
+                return;
+            } catch(e) { console.warn('File handle save failed, falling back:', e.message); }
+        }
+        if (window.showSaveFilePicker) {
+            try {
+                this._projectFileHandle = await window.showSaveFilePicker({
+                    suggestedName: (this._docName || 'openshop-project') + '.json',
+                    types: [{ description: 'OpenShop Project', accept: { 'application/json': ['.json'] } }]
+                });
+                const writable = await this._projectFileHandle.createWritable();
+                await writable.write(data);
+                await writable.close();
+                this.toast('Project saved','success');
+                return;
+            } catch(e) { if (e.name === 'AbortError') return; console.warn('Save picker failed:', e.message); }
+        }
+        const blob = new Blob([data],{type:'application/json'});
         const a = document.createElement('a'); a.download='openshop-project.json'; a.href=URL.createObjectURL(blob); a.click();
         this.toast('Project saved','success');
     },
@@ -2067,11 +2109,18 @@ const OS = {
             return;
         }
         if (tool==='eyedropper') {
-            const ctx=this.canvas.getContext('2d'), vpt=this.canvas.viewportTransform;
-            const sx=ptr.x*vpt[0]+vpt[4], sy=ptr.y*vpt[3]+vpt[5];
-            const px=ctx.getImageData(sx,sy,1,1).data;
-            const hex='#'+[px[0],px[1],px[2]].map(c=>c.toString(16).padStart(2,'0')).join('');
-            this.setFgColor(hex); this.toast(`Picked: ${hex}`,'info'); return;
+            if (window.EyeDropper) {
+                new EyeDropper().open().then(r => {
+                    this.setFgColor(r.sRGBHex); this.toast(`Picked: ${r.sRGBHex}`,'info');
+                }).catch(() => {});
+            } else {
+                const ctx=this.canvas.getContext('2d'), vpt=this.canvas.viewportTransform;
+                const sx=ptr.x*vpt[0]+vpt[4], sy=ptr.y*vpt[3]+vpt[5];
+                const px=ctx.getImageData(sx,sy,1,1).data;
+                const hex='#'+[px[0],px[1],px[2]].map(c=>c.toString(16).padStart(2,'0')).join('');
+                this.setFgColor(hex); this.toast(`Picked: ${hex}`,'info');
+            }
+            return;
         }
         if (tool==='gradient'||tool==='pattern') { this.state.isDrawing=true; this._shapeStart={x:ptr.x,y:ptr.y}; return; }
         if (['line','rect','circle','triangle','arrow','polygon','star'].includes(tool)) {
@@ -4058,6 +4107,32 @@ const OS = {
         this._replaceActiveImage(active, oc.toDataURL(), 'Auto Contrast');
         this.toast('Auto contrast applied', 'success');
     },
+    autoEnhance() {
+        const active = this.canvas.getActiveObject();
+        if (!active || active.type !== 'image') { this.toast('Select an image first', 'info'); return; }
+        const el = active.getElement();
+        const oc = document.createElement('canvas'); oc.width = el.naturalWidth || el.width; oc.height = el.naturalHeight || el.height;
+        const ctx = oc.getContext('2d'); ctx.drawImage(el, 0, 0);
+        const imgData = ctx.getImageData(0, 0, oc.width, oc.height); const d = imgData.data;
+        let rMin=255,rMax=0,gMin=255,gMax=0,bMin=255,bMax=0;
+        for (let i=0;i<d.length;i+=4) { if(d[i]<rMin)rMin=d[i];if(d[i]>rMax)rMax=d[i];if(d[i+1]<gMin)gMin=d[i+1];if(d[i+1]>gMax)gMax=d[i+1];if(d[i+2]<bMin)bMin=d[i+2];if(d[i+2]>bMax)bMax=d[i+2]; }
+        const stretch=(v,mn,mx)=>mx===mn?v:Math.round((v-mn)/(mx-mn)*255);
+        for (let i=0;i<d.length;i+=4) {
+            d[i]=stretch(d[i],rMin,rMax); d[i+1]=stretch(d[i+1],gMin,gMax); d[i+2]=stretch(d[i+2],bMin,bMax);
+            const l=(d[i]+d[i+1]+d[i+2])/3;
+            for(let c=0;c<3;c++){const diff=d[i+c]-l;d[i+c]=Math.max(0,Math.min(255,Math.round(d[i+c]+diff*0.15)));}
+            const mid=128,contrast=1.08;
+            for(let c=0;c<3;c++) d[i+c]=Math.max(0,Math.min(255,Math.round((d[i+c]-mid)*contrast+mid)));
+        }
+        const w=oc.width,h=oc.height,src=new Uint8ClampedArray(d);
+        for(let y=1;y<h-1;y++) for(let x=1;x<w-1;x++){
+            const i=(y*w+x)*4;
+            for(let c=0;c<3;c++){const s=src[i+c]*5-src[((y-1)*w+x)*4+c]-src[((y+1)*w+x)*4+c]-src[(y*w+x-1)*4+c]-src[(y*w+x+1)*4+c];d[i+c]=Math.max(0,Math.min(255,Math.round(d[i+c]*0.7+s*0.3)));}
+        }
+        ctx.putImageData(imgData, 0, 0);
+        this._replaceActiveImage(active, oc.toDataURL(), 'Auto Enhance');
+        this.toast('Auto enhance applied', 'success');
+    },
     _replaceActiveImage(active, dataUrl, histName) {
         fabric.Image.fromURL(dataUrl, newImg => {
             newImg.set({ left: active.left, top: active.top, scaleX: active.scaleX, scaleY: active.scaleY, angle: active.angle, flipX: active.flipX, flipY: active.flipY, originX: active.originX, originY: active.originY, selectable: true, name: histName });
@@ -5162,6 +5237,7 @@ const OS = {
             {label:'Canvas Rotate CW',cat:'Image',fn:()=>this.canvasRotate(90)},
             {label:'Canvas Rotate CCW',cat:'Image',fn:()=>this.canvasRotate(-90)},
             {label:'Add Watermark',cat:'Image',fn:()=>this.addWatermark()},
+            {label:'Auto Enhance',cat:'Image',fn:()=>this.autoEnhance()},
             {label:'Image Info',cat:'Image',fn:()=>this.showImageInfo()},
             {label:'Before / After',cat:'Image',fn:()=>this.showBeforeAfter()},
             {label:'Grayscale',cat:'Filter',fn:()=>this.applyFilter('Grayscale')},
