@@ -1571,10 +1571,25 @@ const OS = {
         }
         this.toast(`Exported as ${fmt.toUpperCase()}`, 'success');
     },
+    _sanitizeSVG(svg) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(svg, 'image/svg+xml');
+        doc.querySelectorAll('script, [onload], [onerror], [onclick], [onmouseover]').forEach(el => el.remove());
+        doc.querySelectorAll('[xlink\\:href]').forEach(el => {
+            const href = el.getAttribute('xlink:href') || '';
+            if (href.startsWith('javascript:') || href.startsWith('data:text/html')) el.removeAttribute('xlink:href');
+        });
+        doc.querySelectorAll('[href]').forEach(el => {
+            const href = el.getAttribute('href') || '';
+            if (href.startsWith('javascript:') || href.startsWith('data:text/html')) el.removeAttribute('href');
+        });
+        return new XMLSerializer().serializeToString(doc);
+    },
     _exportSVG() {
         const vpt = this.canvas.viewportTransform.slice();
         this.canvas.viewportTransform = [1,0,0,1,0,0]; this.canvas.renderAll();
-        const svg = this.canvas.toSVG({ viewBox: { x:0, y:0, width:this.canvasW, height:this.canvasH }, width:this.canvasW, height:this.canvasH });
+        let svg = this.canvas.toSVG({ viewBox: { x:0, y:0, width:this.canvasW, height:this.canvasH }, width:this.canvasW, height:this.canvasH });
+        svg = this._sanitizeSVG(svg);
         this.canvas.viewportTransform = vpt; this.canvas.renderAll();
         const blob = new Blob([svg], { type:'image/svg+xml' });
         const a = document.createElement('a'); a.download='openshop-export.svg'; a.href=URL.createObjectURL(blob); a.click();
@@ -1602,11 +1617,26 @@ const OS = {
         this.toast('Project saved','success');
     },
     openProject() { document.getElementById('project-input').click(); },
+    _sanitizeProjectJSON(obj) {
+        if (Array.isArray(obj)) { obj.forEach(o => this._sanitizeProjectJSON(o)); return; }
+        if (obj && typeof obj === 'object') {
+            for (const key of Object.keys(obj)) {
+                if (typeof obj[key] === 'string') {
+                    obj[key] = obj[key].replace(/javascript:/gi, '').replace(/on\w+\s*=/gi, '');
+                }
+                if (key === 'id' && typeof obj[key] === 'string') {
+                    obj[key] = obj[key].replace(/[<>"'&]/g, '');
+                }
+                this._sanitizeProjectJSON(obj[key]);
+            }
+        }
+    },
     handleProjectOpen(e) {
         const file = e.target.files[0]; if (!file) return;
         const r = new FileReader(); r.onload = ev => {
             try {
                 const json = JSON.parse(ev.target.result);
+                this._sanitizeProjectJSON(json);
                 if (json._openShop) { this.canvasW=json._openShop.w; this.canvasH=json._openShop.h; }
                 this.canvas.loadFromJSON(json, () => {
                     this.canvas.renderAll(); this.rebuildLayersFromCanvas();
