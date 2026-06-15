@@ -574,6 +574,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
                     <div class="dd-item" onclick="OS.saveFile('webp')">WebP</div>
                     <div class="dd-item" onclick="OS.saveFile('svg')">SVG</div>
                     <div class="dd-item" onclick="OS.exportPDF()">PDF</div>
+                    <div class="dd-item" onclick="OS.exportPSD()">PSD (Photoshop)</div>
                 </div>
             </div>
             <div class="dd-item" onclick="OS.batchExport()">Batch Export...</div>
@@ -3448,6 +3449,53 @@ const OS = {
         pdf.save('openshop-export.pdf');
         this.toast('Exported as PDF', 'success');
     },
+    exportPSD() {
+        const lib = window.agPsd || (typeof agPsd !== 'undefined' ? agPsd : null);
+        if (!lib || !lib.writePsd) { this.toast('PSD library not loaded or does not support writing', 'error'); return; }
+        this.toast('Generating PSD...', 'info');
+        const vpt = this.canvas.viewportTransform.slice();
+        this.canvas.viewportTransform = [1,0,0,1,0,0]; this.canvas.renderAll();
+        const psd = { width: this.canvasW, height: this.canvasH, children: [] };
+        for (let i = 0; i < this.layers.length; i++) {
+            const layer = this.layers[i];
+            const objs = layer.objects.filter(o => o.name !== '__boundary__');
+            if (!objs.length) continue;
+            const layerCanvas = document.createElement('canvas');
+            layerCanvas.width = this.canvasW; layerCanvas.height = this.canvasH;
+            const layerCtx = layerCanvas.getContext('2d');
+            for (const obj of objs) {
+                if (!obj.visible) continue;
+                const tmpCanvas = document.createElement('canvas');
+                tmpCanvas.width = this.canvasW; tmpCanvas.height = this.canvasH;
+                const tmpCtx = tmpCanvas.getContext('2d');
+                const objCanvas = obj.toCanvasElement ? obj.toCanvasElement() : null;
+                if (objCanvas) {
+                    tmpCtx.drawImage(objCanvas, obj.left || 0, obj.top || 0);
+                }
+                layerCtx.globalAlpha = obj.opacity || 1;
+                layerCtx.drawImage(tmpCanvas, 0, 0);
+                layerCtx.globalAlpha = 1;
+            }
+            psd.children.push({
+                name: layer.name || 'Layer ' + i,
+                canvas: layerCanvas,
+                left: 0, top: 0,
+                opacity: Math.round((layer.opacity / 100) * 255),
+                hidden: !layer.visible,
+            });
+        }
+        this.canvas.viewportTransform = vpt; this.canvas.renderAll();
+        try {
+            const buffer = lib.writePsd(psd);
+            const blob = new Blob([buffer], { type: 'application/octet-stream' });
+            const docName = (this._docName || 'openshop-export').replace(/[^a-zA-Z0-9_-]/g, '_');
+            const a = document.createElement('a'); a.download = `${docName}.psd`; a.href = URL.createObjectURL(blob); a.click();
+            this.toast('Exported as PSD', 'success');
+        } catch(e) {
+            console.error('PSD export error:', e);
+            this.toast('PSD export failed: ' + e.message, 'error');
+        }
+    },
 
     // ====================== WELCOME SCREEN ======================
     dismissWelcome() {
@@ -5274,6 +5322,7 @@ self.onmessage = async function(e) {
             {label:'Export WebP',cat:'File',fn:()=>this.saveFile('webp')},
             {label:'Export SVG',cat:'File',fn:()=>this.saveFile('svg')},
             {label:'Export PDF',cat:'File',fn:()=>this.exportPDF()},
+            {label:'Export PSD',cat:'File',fn:()=>this.exportPSD()},
             {label:'Export Settings',cat:'File',fn:()=>this.showExportSettings()},
             {label:'Save Project',cat:'File',fn:()=>this.saveProject()},
             {label:'Open Project',cat:'File',fn:()=>this.openProject()},
