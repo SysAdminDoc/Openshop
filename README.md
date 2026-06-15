@@ -10,7 +10,7 @@
 
 # OpenShop
 
-![Version](https://img.shields.io/badge/version-0.16.0-blue)
+![Version](https://img.shields.io/badge/version-0.18.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Browser-orange)
 ![Zero Install](https://img.shields.io/badge/install-none_required-brightgreen)
@@ -22,7 +22,7 @@
 
 Web: https://sysadmindoc.github.io/Openshop/
 
-1. Download `OpenShop-v0.16.0.html`
+1. Download `OpenShop-v0.18.0.html`
 2. Open it in any modern browser (Chrome, Edge, Firefox, Safari)
 3. Start editing
 
@@ -150,7 +150,7 @@ Levels, Curves (per-channel), Brightness/Contrast, Hue/Saturation, Color Balance
 
 ```bash
 # Simplest possible deployment
-cp OpenShop-v0.16.0.html /var/www/html/index.html
+cp OpenShop-v0.18.0.html /var/www/html/index.html
 
 # Or with GitHub Pages
 git init && git add . && git commit -m "init"
@@ -194,7 +194,7 @@ Simplicity. A single HTML file can be hosted anywhere, shared as an email attach
 
 ## Contributing
 
-Issues and PRs welcome. The codebase is a single file — just open `OpenShop-v0.16.0.html` in any editor.
+Issues and PRs welcome. The codebase is a single file — just open `OpenShop-v0.18.0.html` in any editor.
 
 When contributing:
 - Test in Chrome and Firefox at minimum
