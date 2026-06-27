@@ -1,6 +1,10 @@
 *.bak
 .env
 *.log
+node_modules/
+test-results/
+playwright-report/
+coverage/
 CLAUDE.md
 
 # Markdown files local-only (except README)
