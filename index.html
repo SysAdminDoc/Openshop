@@ -10,7 +10,7 @@
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src blob:;">
-<title>OpenShop v0.18.4 — Online Image Editor</title>
+<title>OpenShop v0.18.5 — Online Image Editor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js" integrity="sha384-sLpuECXYCB5TUyTbC06pftm/rgurDambREZmV4eRHwEqJzCQtU6lxI2Ve00z4XW5" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/ag-psd@22.0.2/dist/bundle.js" integrity="sha384-kla4KJzEnshZnuWyJ8+AF8KEX0YZ2rpxTaQpDtDUmDdUv7jK94knsRx/lcRZ/HF4" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js" integrity="sha384-qovJwSBbRDPP5cEjCp8S0UP66wrvnjaa60XMOGzTNanrThcrGfXfnZkvgY8N1KT3" crossorigin="anonymous"></script>
@@ -560,7 +560,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <!-- ===== TOP MENU ===== -->
 <div id="topbar" role="menubar" aria-label="Main menu">
-    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.4</span></div>
+    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.5</span></div>
     <div class="menu-item" role="menuitem" aria-haspopup="true">File
         <div class="menu-dropdown">
             <div class="dd-item" onclick="OS.newImage()">New</div>
@@ -758,6 +758,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
             <div class="dd-item" onclick="OS.aiRemoveBackground()">Background Remove</div>
             <div class="dd-item" onclick="OS.aiDepthMap()">Depth Map</div>
             <div class="dd-item" onclick="OS.aiObjectDetect()">Detect Objects</div>
+            <div class="dd-item" onclick="OS.activateSegmentSelect()">Segment Select</div>
             <div class="dd-sep"></div>
             <div class="dd-item" onclick="OS.aiUpscale(2)">Smart Upscale 2x</div>
             <div class="dd-item" onclick="OS.aiUpscale(4)">Smart Upscale 4x</div>
@@ -832,6 +833,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
             <button class="tool-btn" data-tool="marquee-ellipse" data-tip="Ellipse Marquee" onclick="OS.flyoutSelect(this,'selection')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2"><ellipse cx="12" cy="12" rx="10" ry="7"/></svg></button>
             <button class="tool-btn" data-tool="lasso" data-tip="Lasso" onclick="OS.flyoutSelect(this,'selection')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12c0 4.97 4.03 9 9 9s9-4.03 9-9-4.03-9-9-9c-3.04 0-5.73 1.51-7.36 3.82"/><circle cx="7" cy="20" r="2" fill="currentColor"/></svg></button>
             <button class="tool-btn" data-tool="magic-wand" data-tip="Magic Wand (W)" onclick="OS.flyoutSelect(this,'selection')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 4V2m0 14v-2M8 9H6m14 0h-2m-2.8-3.8L14 4m-4.2 9.8L8.6 15m9.8-1.2L19.6 15M9.8 5.2L8.6 4"/><path d="M2 22l10-10"/><circle cx="15" cy="9" r="1" fill="currentColor"/></svg></button>
+            <button class="tool-btn" data-tool="ai-segment" data-tip="AI Segment Select" onclick="OS.flyoutSelect(this,'selection')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7" stroke-dasharray="3 2"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3"/><path d="M8.5 13.5c2.2 1.7 5.8 1.2 7-1.5" stroke-linecap="round"/></svg></button>
         </div>
     </div>
     <div class="tool-group" data-group="crop">
@@ -995,6 +997,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
     </div>
     <div class="opt-group" id="opt-marquee" style="display:none"><span style="color:var(--text-muted);font-size:11px">Drag to create selection.</span></div>
     <div class="opt-group" id="opt-lasso" style="display:none"><span style="color:var(--text-muted);font-size:11px">Click to add points. Double-click to close selection.</span></div>
+    <div class="opt-group" id="opt-ai-segment" style="display:none"><span style="color:var(--text-muted);font-size:11px">Segment Select</span><span style="color:var(--accent);font-size:11px;margin-left:8px">Panoptic model loads on demand</span></div>
     <div class="opt-group" id="opt-pen" style="display:none">
         <span style="color:var(--text-muted);font-size:11px">Click to add anchor points. Double-click to finish path.</span>
         <label>Stroke</label><input type="color" id="pen-stroke" value="#ffffff" onchange="OS.state.penStroke=this.value">
@@ -1382,7 +1385,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <script>
 // ================================================================
-//  OpenShop v0.18.4 — Core Engine (Phase 10: Pro Toolbar)
+//  OpenShop v0.18.5 — Core Engine (Phase 10: Pro Toolbar)
 // ================================================================
 const OS = {
     _esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
@@ -1675,7 +1678,7 @@ const OS = {
     _projectFileHandle: null,
     async saveProject() {
         const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-        json._openShop = { version:'0.18.4', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+        json._openShop = { version:'0.18.5', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
         const data = JSON.stringify(json);
         if (this._projectFileHandle) {
             try {
@@ -2058,6 +2061,7 @@ const OS = {
             case 'zoom': c.defaultCursor='zoom-in'; break;
             case 'marquee-rect': case 'marquee-ellipse': document.getElementById('opt-marquee').style.display='flex'; break;
             case 'magic-wand': document.getElementById('opt-wand').style.display='flex'; break;
+            case 'ai-segment': c.defaultCursor='crosshair'; c.hoverCursor='crosshair'; document.getElementById('opt-ai-segment').style.display='flex'; break;
             case 'lasso':
                 document.getElementById('opt-lasso').style.display='flex';
                 document.getElementById('lasso-overlay').style.display='block';
@@ -2071,7 +2075,7 @@ const OS = {
             case 'note': c.defaultCursor='crosshair'; c.hoverCursor='crosshair'; break;
             case 'crop': document.getElementById('opt-crop').style.display='flex'; this._initCrop(); break;
         }
-        const toolNames = {'marquee-rect':'Rect Marquee','marquee-ellipse':'Ellipse Marquee','magic-wand':'Magic Wand'};
+        const toolNames = {'marquee-rect':'Rect Marquee','marquee-ellipse':'Ellipse Marquee','magic-wand':'Magic Wand','ai-segment':'AI Segment'};
         document.getElementById('tool-display').textContent = toolNames[tool] || tool.charAt(0).toUpperCase()+tool.replace(/-/g,' ').slice(1);
     },
     setBrushSize(v) { this.state.brushSize=+v; document.getElementById('brush-size-val').textContent=v; if(this.canvas.freeDrawingBrush) this.canvas.freeDrawingBrush.width=+v; },
@@ -2133,6 +2137,10 @@ const OS = {
             // Clear previous marquee overlay when making new wand selection
             document.getElementById('selection-overlay').style.display='none';
             this._doMagicWand(ptr); return;
+        }
+        if (tool==='ai-segment') {
+            document.getElementById('selection-overlay').style.display='none';
+            this.aiSegmentSelectAt(ptr); return;
         }
         if (tool==='lasso') { this._lassoClick(opt.e); return; }
         if (tool==='pen') { this._penClick(ptr, opt.e); return; }
@@ -3832,7 +3840,7 @@ self.onmessage = async function(e) {
         if (!navigator.storage || !navigator.storage.getDirectory) return;
         try {
             const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-            json._openShop = { version:'0.18.4', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+            json._openShop = { version:'0.18.5', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
             const data = JSON.stringify(json);
             try {
                 const root = await navigator.storage.getDirectory();
@@ -5489,6 +5497,7 @@ self.onmessage = async function(e) {
             {label:'AI Background Remove',cat:'AI',fn:()=>this.aiRemoveBackground()},
             {label:'AI Depth Map',cat:'AI',fn:()=>this.aiDepthMap()},
             {label:'AI Object Detection',cat:'AI',fn:()=>this.aiObjectDetect()},
+            {label:'AI Segment Select',cat:'AI',fn:()=>this.activateSegmentSelect()},
             {label:'AI Smart Upscale 2x',cat:'AI',fn:()=>this.aiUpscale(2)},
             {label:'AI Smart Upscale 4x',cat:'AI',fn:()=>this.aiUpscale(4)},
             {label:'Curved Text',cat:'Edit',fn:()=>this.showCurvedText()},
@@ -5516,7 +5525,7 @@ self.onmessage = async function(e) {
             {label:'Duplicate Layer',cat:'Layer',fn:()=>this.duplicateLayer()},
             {label:'Merge Down',cat:'Layer',fn:()=>this.mergeDown()},
             // Tools
-            ...['select','marquee-rect','marquee-ellipse','wand','lasso','brush','eraser','pencil','spray',
+            ...['select','marquee-rect','marquee-ellipse','wand','lasso','ai-segment','brush','eraser','pencil','spray',
                 'clone','healing','line','rect','circle','triangle','arrow','polygon','star','pen',
                 'text','gradient','pattern','fill','eyedropper','measure','note','crop','pan','zoom'
             ].map(t => ({label:'Tool: '+t.charAt(0).toUpperCase()+t.slice(1).replace(/-/g,' '),cat:'Tool',fn:()=>this.setTool(t)})),
@@ -6967,6 +6976,7 @@ self.onmessage = async function(e) {
         'Xenova/modnet': 'fa2fa546052fba4c08921230a26cc69a333fca12',
         'Xenova/depth-anything-small-hf': '2e942621ab9f2371c1df9eb223291b5ac31475e6',
         'Xenova/detr-resnet-50': '8be7ab59ff663484ee9ba2e8d8f267330d5ad03e',
+        'Xenova/detr-resnet-50-panoptic': 'ea24b2d4e0bfae31f0a1299ba3fb892a2df064de',
     },
     async _loadPipeline(task, model, label) {
         const key = task + ':' + model;
@@ -7026,6 +7036,207 @@ self.onmessage = async function(e) {
         oc.height = el.naturalHeight || el.height;
         oc.getContext('2d').drawImage(el, 0, 0);
         return oc.toDataURL('image/png');
+    },
+
+    activateSegmentSelect() {
+        this.setTool('ai-segment');
+        this.toast('Segment Select active', 'info');
+    },
+
+    _imageSize(target) {
+        const el = target.getElement();
+        return {
+            w: el.naturalWidth || el.width || target.width || 0,
+            h: el.naturalHeight || el.height || target.height || 0
+        };
+    },
+
+    _originOffset(_origin, size) {
+        return size / 2;
+    },
+
+    _imageLocalFromCanvasPoint(target, ptr, imageW, imageH) {
+        const matrix = target.calcTransformMatrix();
+        const inv = fabric.util.invertTransform(matrix);
+        const local = fabric.util.transformPoint(ptr, inv);
+        const objectW = target.width || imageW;
+        const objectH = target.height || imageH;
+        return {
+            x: (local.x + this._originOffset(target.originX, objectW)) * imageW / objectW,
+            y: (local.y + this._originOffset(target.originY, objectH)) * imageH / objectH
+        };
+    },
+
+    _imageCanvasPointFromLocal(target, imageX, imageY, imageW, imageH) {
+        const objectW = target.width || imageW;
+        const objectH = target.height || imageH;
+        const local = {
+            x: imageX * objectW / imageW - this._originOffset(target.originX, objectW),
+            y: imageY * objectH / imageH - this._originOffset(target.originY, objectH)
+        };
+        return fabric.util.transformPoint(local, target.calcTransformMatrix());
+    },
+
+    _segmentTargetAtPoint(ptr) {
+        const objects = this.canvas.getObjects().filter(o => o.type === 'image' && o.visible !== false);
+        const active = this.canvas.getActiveObject();
+        const candidates = [];
+        if (active && active.type === 'image' && active.visible !== false) candidates.push(active);
+        for (let i = objects.length - 1; i >= 0; i--) {
+            if (!candidates.includes(objects[i])) candidates.push(objects[i]);
+        }
+        for (const target of candidates) {
+            const size = this._imageSize(target);
+            if (!size.w || !size.h) continue;
+            const local = this._imageLocalFromCanvasPoint(target, ptr, size.w, size.h);
+            if (local.x >= 0 && local.y >= 0 && local.x < size.w && local.y < size.h) {
+                return { target, imageW: size.w, imageH: size.h, clickX: local.x, clickY: local.y };
+            }
+        }
+        return null;
+    },
+
+    _segmentMaskFor(segment) {
+        return segment?.mask || segment?.segmentation || segment?.image || segment;
+    },
+
+    _segmentMaskInfo(rawMask, fallbackW, fallbackH) {
+        const data = rawMask?.data || rawMask;
+        const w = rawMask?.width || fallbackW;
+        const h = rawMask?.height || fallbackH;
+        if (!data || !w || !h) return null;
+        const channels = rawMask?.channels || Math.max(1, Math.round(data.length / (w * h)));
+        let useAlpha = false;
+        let maxValue = 0;
+        if (channels >= 4) {
+            let maxRgb = 0, maxAlpha = 0;
+            for (let i = 0; i < data.length; i += channels) {
+                maxRgb = Math.max(maxRgb, data[i] || 0, data[i + 1] || 0, data[i + 2] || 0);
+                maxAlpha = Math.max(maxAlpha, data[i + 3] || 0);
+            }
+            useAlpha = maxRgb === 0 && maxAlpha > 0;
+            maxValue = useAlpha ? maxAlpha : maxRgb;
+        } else {
+            for (let i = 0; i < data.length; i += channels) maxValue = Math.max(maxValue, data[i] || 0);
+        }
+        return { data, w, h, channels, useAlpha, threshold: maxValue <= 1 ? 0.5 : maxValue * 0.5 };
+    },
+
+    _segmentMaskValue(info, x, y) {
+        const px = Math.max(0, Math.min(info.w - 1, Math.round(x)));
+        const py = Math.max(0, Math.min(info.h - 1, Math.round(y)));
+        const idx = (py * info.w + px) * info.channels;
+        if (info.channels >= 4) {
+            return info.useAlpha ? (info.data[idx + 3] || 0) : Math.max(info.data[idx] || 0, info.data[idx + 1] || 0, info.data[idx + 2] || 0);
+        }
+        if (info.channels >= 3) return Math.max(info.data[idx] || 0, info.data[idx + 1] || 0, info.data[idx + 2] || 0);
+        return info.data[idx] || 0;
+    },
+
+    _segmentMaskActive(info, x, y) {
+        return this._segmentMaskValue(info, x, y) > info.threshold;
+    },
+
+    _normalizeSegmentationResults(results) {
+        if (Array.isArray(results)) return results;
+        if (Array.isArray(results?.segments)) return results.segments;
+        if (Array.isArray(results?.masks)) return results.masks;
+        return [];
+    },
+
+    _segmentIncludesPoint(segment, clickX, clickY, imageW, imageH) {
+        const info = this._segmentMaskInfo(this._segmentMaskFor(segment), imageW, imageH);
+        if (!info) return false;
+        const mx = clickX / imageW * (info.w - 1);
+        const my = clickY / imageH * (info.h - 1);
+        const radius = 2;
+        for (let dy = -radius; dy <= radius; dy++) {
+            for (let dx = -radius; dx <= radius; dx++) {
+                const x = mx + dx, y = my + dy;
+                if (x >= 0 && y >= 0 && x < info.w && y < info.h && this._segmentMaskActive(info, x, y)) return true;
+            }
+        }
+        return false;
+    },
+
+    _selectSegmentFromResults(results, clickX, clickY, imageW, imageH) {
+        return this._normalizeSegmentationResults(results)
+            .filter(segment => this._segmentIncludesPoint(segment, clickX, clickY, imageW, imageH))
+            .sort((a, b) => (b.score || 0) - (a.score || 0))[0] || null;
+    },
+
+    _setPixelSelectionMask(mask, w, h) {
+        let count = 0;
+        for (let i = 0; i < mask.length; i++) if (mask[i]) count++;
+        const el = document.getElementById('selection-overlay');
+        if (!count) {
+            this._selectionMask = null;
+            this._selectionBounds = null;
+            if (el) el.style.display = 'none';
+            this.canvas.getObjects().filter(o => o._wandOverlay).forEach(o => this.canvas.remove(o));
+            this.canvas.renderAll();
+            return 0;
+        }
+        this._selectionMask = { mask, w, h };
+        this._recalcSelectionBounds(this._selectionMask);
+        this._showMaskOverlay(this._selectionMask);
+        return count;
+    },
+
+    _applySegmentSelection(target, segment, imageW, imageH) {
+        const info = this._segmentMaskInfo(this._segmentMaskFor(segment), imageW, imageH);
+        if (!info) return 0;
+        const cw = this.canvas.width, ch = this.canvas.height;
+        const fullMask = new Uint8Array(cw * ch);
+        const vpt = this.canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
+        const pixelW = Math.abs((target.scaleX || 1) * (vpt[0] || 1) * imageW / info.w);
+        const pixelH = Math.abs((target.scaleY || 1) * (vpt[3] || 1) * imageH / info.h);
+        const fillRadius = Math.min(2, Math.max(0, Math.ceil(Math.max(pixelW, pixelH)) - 1));
+        for (let y = 0; y < info.h; y++) {
+            for (let x = 0; x < info.w; x++) {
+                if (!this._segmentMaskActive(info, x, y)) continue;
+                const pt = this._imageCanvasPointFromLocal(target, (x + 0.5) * imageW / info.w, (y + 0.5) * imageH / info.h, imageW, imageH);
+                const sx = Math.round(pt.x * vpt[0] + vpt[4]);
+                const sy = Math.round(pt.y * vpt[3] + vpt[5]);
+                for (let yy = sy - fillRadius; yy <= sy + fillRadius; yy++) {
+                    if (yy < 0 || yy >= ch) continue;
+                    for (let xx = sx - fillRadius; xx <= sx + fillRadius; xx++) {
+                        if (xx >= 0 && xx < cw) fullMask[yy * cw + xx] = 1;
+                    }
+                }
+            }
+        }
+        return this._setPixelSelectionMask(fullMask, cw, ch);
+    },
+
+    async aiSegmentSelectAt(ptr) {
+        const hit = this._segmentTargetAtPoint(ptr);
+        if (!hit) { this.toast('Click inside an image layer', 'info'); return; }
+        if (this.canvas.setActiveObject) this.canvas.setActiveObject(hit.target);
+        const pipe = await this._loadPipeline(
+            'image-segmentation', 'Xenova/detr-resnet-50-panoptic', 'Segment Select'
+        );
+        if (!pipe) return;
+        this._showAIProgress('Segment Select', 'Analyzing image...');
+        try {
+            const dataUrl = this._imageToDataURL(hit.target);
+            const results = await pipe(dataUrl);
+            const segment = this._selectSegmentFromResults(results, hit.clickX, hit.clickY, hit.imageW, hit.imageH);
+            if (!segment) {
+                this._hideAIProgress();
+                this.toast('No segment found at click point', 'info');
+                return;
+            }
+            const count = this._applySegmentSelection(hit.target, segment, hit.imageW, hit.imageH);
+            this._hideAIProgress();
+            if (!count) { this.toast('Segment mask was empty', 'info'); return; }
+            const label = segment.label ? ': ' + segment.label : '';
+            this.toast('Selected segment' + label + ' (' + count.toLocaleString() + ' px)', 'success');
+        } catch(e) {
+            this._hideAIProgress();
+            this.toast('Segment Select error: ' + e.message, 'error');
+            console.error('AI Segment error:', e);
+        }
     },
 
     // === AI BACKGROUND REMOVAL ===

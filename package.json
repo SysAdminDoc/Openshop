@@ -1,6 +1,6 @@
 {
   "name": "openshop",
-  "version": "0.18.4",
+  "version": "0.18.5",
   "private": true,
   "description": "Single-file browser image editor test harness",
   "type": "module",

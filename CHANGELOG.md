@@ -2,6 +2,15 @@
 
 All notable changes to Openshop will be documented in this file.
 
+## [v0.18.5] - 2026-06-27
+
+### Added
+- AI Segment Select tool with click-to-mask pixel selections using pinned `Xenova/detr-resnet-50-panoptic`
+- Unit and Playwright coverage for mocked panoptic segmentation result routing into the existing pixel-selection mask path
+
+### Changed
+- README AI docs now distinguish the supported Transformers.js panoptic segmentation workflow from unsupported SAM-style mask-generation
+
 ## [v0.18.4] - 2026-06-27
 
 ### Added
@@ -31,7 +40,7 @@ All notable changes to Openshop will be documented in this file.
 - CDN resources pre-cached via Cache API for offline capability (Fabric.js, ag-psd, jsPDF, fonts)
 - Filter Worker redesigned as generic function executor — any filter can now run off-thread
 - Posterize, Threshold, Vignette, Edge Detect filters moved to Web Worker (joins Oil Paint, Tilt Shift, Unsharp Mask)
-- Upgrade Transformers.js from 3.3.3 to 4.0.0 (WebGPU C++ runtime, SAM-2 support, esbuild bundles)
+- Upgrade Transformers.js from 3.3.3 to 4.0.0 (WebGPU C++ runtime, image segmentation support, esbuild bundles)
 - Minimap updates are now event-driven (on canvas change/zoom) instead of polling every 2 seconds
 
 ### Fixed

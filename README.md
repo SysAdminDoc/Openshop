@@ -1,6 +1,6 @@
 # OpenShop
 
-![Version](https://img.shields.io/badge/version-0.18.4-blue)
+![Version](https://img.shields.io/badge/version-0.18.5-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Browser-orange)
 ![Zero Install](https://img.shields.io/badge/install-none_required-brightgreen)
@@ -29,7 +29,7 @@ Or download `index.html` and open it locally. Everything runs client-side. Your 
 | Feature | Description |
 |---------|-------------|
 | **Layer System** | Multi-layer canvas with add, delete, duplicate, merge, flatten, visibility toggle, opacity, blend modes, and drag reorder |
-| **33 Tools** | Move, Brush, Pencil, Eraser, Spray, Clone Stamp, Healing Brush, Dodge, Burn, Sponge, Smudge, Shapes (rect, ellipse, triangle, polygon, star, arrow, line), Pen, Text, Gradient, Pattern Fill, Flood Fill, Eyedropper, Crop, Measure, Sticky Notes, Pan, Zoom |
+| **34 Tools** | Move, Brush, Pencil, Eraser, Spray, Clone Stamp, Healing Brush, Dodge, Burn, Sponge, Smudge, Shapes (rect, ellipse, triangle, polygon, star, arrow, line), Pen, Text, Gradient, Pattern Fill, Flood Fill, Eyedropper, Crop, Measure, Sticky Notes, AI Segment Select, Pan, Zoom |
 | **Brush Engine** | Round, Soft, Flat, Scatter, Pixel presets with adjustable size, opacity, and flow |
 | **Selection Tools** | Rectangular/Elliptical Marquee, Magic Wand (contiguous + global), Lasso, Color Range dialog with fuzziness, presets, and live preview |
 | **Selection Operations** | Select All, Deselect, Reselect, Inverse, Grow, Similar, Modify (Expand, Contract, Feather, Border, Smooth) |
@@ -60,9 +60,10 @@ Batch export to multiple formats in one click. Native save/open dialogs on Chrom
 | **Background Removal** | MODNet-based automatic background removal |
 | **Depth Map** | Depth-Anything monocular depth estimation |
 | **Object Detection** | DETR-based object detection with bounding boxes |
+| **Segment Select** | Click-to-segment pixel selections via pinned DETR panoptic segmentation |
 | **Smart Upscale** | 2x / 4x AI super-resolution |
 
-All AI models download once and run entirely in-browser via WebGPU/WASM. No API keys, no server calls. Model revisions are pinned to immutable commit SHAs for supply-chain security.
+All AI models download once and run entirely in-browser via WebGPU/WASM. No API keys, no server calls. Model revisions are pinned to immutable commit SHAs for supply-chain security. Segment Select uses `Xenova/detr-resnet-50-panoptic`; SAM-style mask-generation is not available in current Transformers.js browser pipelines.
 
 ### Adjustments & Filters
 
@@ -192,7 +193,7 @@ npm run test:e2e
 
 | Tool | Type | Best For |
 |------|------|----------|
-| **OpenShop** (this repo) | Single-file browser app | Zero-install editing in any browser — 33 tools, PSD import/export, client-side AI, works offline |
+| **OpenShop** (this repo) | Single-file browser app | Zero-install editing in any browser — 34 tools, PSD import/export, client-side AI, works offline |
 | [PyShop](https://github.com/SysAdminDoc/PyShop) | Python desktop app | Native desktop image editor if you prefer a traditional installed application |
 
 ## FAQ

@@ -33,6 +33,20 @@ export function installFabricMock() {
   }
 
   globalThis.fabric = {
+    util: {
+      invertTransform(matrix) {
+        const [a = 1, b = 0, c = 0, d = 1, e = 0, f = 0] = matrix || [];
+        const det = a * d - b * c || 1;
+        return [d / det, -b / det, -c / det, a / det, (c * f - d * e) / det, (b * e - a * f) / det];
+      },
+      transformPoint(point, matrix) {
+        const [a = 1, b = 0, c = 0, d = 1, e = 0, f = 0] = matrix || [];
+        return {
+          x: point.x * a + point.y * c + e,
+          y: point.x * b + point.y * d + f
+        };
+      }
+    },
     PencilBrush: Brush,
     SprayBrush: class extends Brush {},
     Shadow: class {
@@ -122,10 +136,11 @@ export function mountEditorDom() {
     'opt-marquee',
     'opt-wand',
     'opt-lasso',
+    'opt-ai-segment',
     'opt-measure',
     'opt-crop'
   ];
-  const tools = ['select', 'brush', 'eraser', 'crop', 'marquee-rect', 'magic-wand'];
+  const tools = ['select', 'brush', 'eraser', 'crop', 'marquee-rect', 'magic-wand', 'ai-segment'];
 
   document.body.innerHTML = `
     <div id="toolbar">
@@ -137,6 +152,7 @@ export function mountEditorDom() {
     <div id="lasso-overlay" style="display:none"><svg><polygon points=""></polygon></svg></div>
     <div id="pen-overlay" style="display:none"></div>
     <div id="measure-overlay" style="display:none"></div>
+    <div id="selection-overlay" style="display:none"></div>
     <div id="tool-display"></div>
     <div id="layers-list"></div>
     <input id="layer-opacity" value="100">

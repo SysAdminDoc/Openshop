@@ -32,6 +32,13 @@ describe('OpenShop core object', () => {
     expect(OS.canvas.defaultCursor).toBe('default');
     expect(object.selectable).toBe(true);
     expect(object.evented).toBe(true);
+
+    OS.setTool('ai-segment');
+
+    expect(OS.state.tool).toBe('ai-segment');
+    expect(OS.canvas.defaultCursor).toBe('crosshair');
+    expect(document.querySelector('[data-tool="ai-segment"]').classList.contains('active')).toBe(true);
+    expect(document.getElementById('opt-ai-segment').style.display).toBe('flex');
   });
 
   it('adds and deletes layers while keeping canvas objects in sync', () => {
@@ -135,6 +142,60 @@ describe('OpenShop core object', () => {
     expect(OS.redo).toHaveBeenCalledTimes(1);
     expect(OS.saveProject).toHaveBeenCalledTimes(1);
     expect(OS.setTool).toHaveBeenCalledWith('brush');
+  });
+
+  it('converts a clicked segmentation result into a pixel selection mask', async () => {
+    const OS = loadOpenShop();
+    const target = {
+      name: 'Subject Photo',
+      type: 'image',
+      width: 16,
+      height: 16,
+      scaleX: 1,
+      scaleY: 1,
+      originX: 'left',
+      originY: 'top',
+      visible: true,
+      getElement: () => ({ naturalWidth: 16, naturalHeight: 16 }),
+      calcTransformMatrix: () => [1, 0, 0, 1, 8, 8]
+    };
+    const canvas = createCanvasMock([target]);
+    canvas.setActiveObject(target);
+    OS.canvas = canvas;
+    quietUiMethods(OS);
+    OS._showAIProgress = vi.fn();
+    OS._hideAIProgress = vi.fn();
+    OS._showMaskOverlay = vi.fn();
+    OS._imageToDataURL = vi.fn(() => 'data:image/png;base64,TEST');
+
+    const makeMask = (predicate) => {
+      const data = new Uint8Array(16 * 16);
+      for (let y = 0; y < 16; y++) {
+        for (let x = 0; x < 16; x++) {
+          if (predicate(x, y)) data[y * 16 + x] = 255;
+        }
+      }
+      return { width: 16, height: 16, channels: 1, data };
+    };
+    const results = [
+      { label: 'left-object', score: 0.95, mask: makeMask((x, y) => x >= 1 && x <= 4 && y >= 4 && y <= 11) },
+      { label: 'right-object', score: 0.9, mask: makeMask((x, y) => x >= 12 && x <= 15 && y >= 4 && y <= 11) }
+    ];
+    const segmenter = vi.fn().mockResolvedValue(results);
+    OS._loadPipeline = vi.fn().mockResolvedValue(segmenter);
+
+    await OS.aiSegmentSelectAt({ x: 14, y: 8 });
+
+    expect(OS._loadPipeline).toHaveBeenCalledWith(
+      'image-segmentation',
+      'Xenova/detr-resnet-50-panoptic',
+      'Segment Select'
+    );
+    expect(segmenter).toHaveBeenCalledWith('data:image/png;base64,TEST');
+    expect(OS._selectionBounds).toEqual({ x: 13, y: 5, w: 4, h: 8 });
+    expect(OS._selectionMask.mask.filter(Boolean)).toHaveLength(32);
+    expect(OS._showMaskOverlay).toHaveBeenCalledWith(OS._selectionMask);
+    expect(OS.toast).toHaveBeenCalledWith('Selected segment: right-object (32 px)', 'success');
   });
 
   it('prefers Photon filters and falls back to the JS worker after failure', async () => {
