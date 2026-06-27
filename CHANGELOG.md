@@ -2,6 +2,16 @@
 
 All notable changes to Openshop will be documented in this file.
 
+## [v0.18.4] - 2026-06-27
+
+### Added
+- Optional Photon WASM filter backend loaded on demand from jsDelivr for supported pixel filters
+- JS worker fallback path when Photon/WASM loading fails or an operation is unsupported
+- Unit coverage for Photon preference, fallback disablement, and direct filter routing
+
+### Fixed
+- Command palette direct color filters now route to `applyFilterDirect()` instead of the missing `applyFilter()` helper
+
 ## [v0.18.3] - 2026-06-27
 
 ### Added

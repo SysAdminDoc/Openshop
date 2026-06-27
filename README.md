@@ -1,6 +1,6 @@
 # OpenShop
 
-![Version](https://img.shields.io/badge/version-0.18.3-blue)
+![Version](https://img.shields.io/badge/version-0.18.4-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Browser-orange)
 ![Zero Install](https://img.shields.io/badge/install-none_required-brightgreen)
@@ -68,7 +68,7 @@ All AI models download once and run entirely in-browser via WebGPU/WASM. No API 
 
 Levels, Curves (per-channel), Brightness/Contrast, Hue/Saturation, Color Balance, Auto Levels, Auto Enhance, Grayscale, Sepia, Invert, Black & White, Sharpen, Blur, Noise, Vignette, Posterize, Threshold, Emboss, Edge Detect, Pixelate, Oil Paint, Halftone, Duotone, Tilt Shift, Chromatic Aberration, Gradient Map, Vibrance, Exposure, Shadows/Highlights, Photo Filter, Selective Color, Replace Color, Lens Correction, and 8 built-in photo presets with custom preset import/export.
 
-Heavy filters (Oil Paint, Tilt Shift, Unsharp Mask, Posterize, Threshold, Vignette, Edge Detect, Duotone, Chromatic Aberration) run in a Web Worker so the UI stays responsive on large images.
+Heavy filters (Oil Paint, Tilt Shift, Unsharp Mask, Posterize, Threshold, Vignette, Edge Detect, Duotone, Chromatic Aberration) run in a Web Worker so the UI stays responsive on large images. Photon WASM is loaded on demand as an optional accelerator for supported pixel filters, with automatic fallback to the JavaScript worker.
 
 ### Interface
 
@@ -141,11 +141,13 @@ Heavy filters (Oil Paint, Tilt Shift, Unsharp Mask, Posterize, Threshold, Vignet
 | [ag-psd 22.0.2](https://github.com/Agamnentzar/ag-psd) | Photoshop PSD file import and export |
 | [jsPDF 4.2.1](https://github.com/parallax/jsPDF) | PDF document generation |
 | [Transformers.js 4.0](https://huggingface.co/docs/transformers.js) | Client-side AI inference via WebGPU/WASM (loaded on demand) |
+| [Photon 0.3.3](https://github.com/silvia-odwyer/photon) | Optional WASM acceleration for supported pixel filters (loaded on demand) |
 | [Google Fonts](https://fonts.google.com/) | JetBrains Mono + DM Sans |
 
 ## Security
 
-- All CDN scripts are loaded with [Subresource Integrity (SRI)](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity) hashes
+- Core startup CDN scripts are loaded with [Subresource Integrity (SRI)](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity) hashes
+- On-demand AI/filter modules are version-pinned and run client-side
 - Content Security Policy restricts script/style/connect sources
 - AI model revisions pinned to immutable commit SHAs (not mutable branch refs)
 - PSD layer names and project JSON are sanitized to prevent XSS injection

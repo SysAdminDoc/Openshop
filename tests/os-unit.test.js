@@ -136,4 +136,57 @@ describe('OpenShop core object', () => {
     expect(OS.saveProject).toHaveBeenCalledTimes(1);
     expect(OS.setTool).toHaveBeenCalledWith('brush');
   });
+
+  it('prefers Photon filters and falls back to the JS worker after failure', async () => {
+    const OS = loadOpenShop();
+    const input = { data: new Uint8ClampedArray([10, 20, 30, 255]) };
+    const photonResult = { data: new Uint8ClampedArray([255, 255, 255, 255]) };
+    const fallbackResult = { data: new Uint8ClampedArray([0, 0, 0, 255]) };
+
+    OS._runPhotonFilterInWorker = vi.fn().mockResolvedValueOnce(photonResult);
+    OS._runFilterInWorker = vi.fn();
+
+    await expect(OS._runFilterWithPhoton('edgeDetect', 'fallback()', input, 1, 1)).resolves.toBe(photonResult);
+    expect(OS._runPhotonFilterInWorker).toHaveBeenCalledWith('edgeDetect', input, 1, 1, undefined);
+    expect(OS._runFilterInWorker).not.toHaveBeenCalled();
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    OS._runPhotonFilterInWorker = vi.fn().mockRejectedValueOnce(new Error('WASM blocked'));
+    OS._runFilterInWorker = vi.fn().mockResolvedValueOnce(fallbackResult);
+
+    await expect(OS._runFilterWithPhoton('threshold', 'fallback()', input, 1, 1, { thr: 128 })).resolves.toBe(fallbackResult);
+    expect(OS._photonFilterDisabled).toBe(true);
+    expect(OS._runFilterInWorker).toHaveBeenCalledWith('fallback()', input, 1, 1, { thr: 128 });
+    warn.mockRestore();
+  });
+
+  it('routes one-click direct filters through the image-data backend', async () => {
+    const OS = loadOpenShop();
+    const active = { name: 'Photo', type: 'image' };
+    const canvas = createCanvasMock([active]);
+    canvas.setActiveObject(active);
+    OS.canvas = canvas;
+    quietUiMethods(OS);
+
+    const input = { data: new Uint8ClampedArray([10, 20, 30, 255]), width: 1, height: 1 };
+    const output = { data: new Uint8ClampedArray([30, 40, 50, 255]), width: 1, height: 1 };
+    const info = { active, canvas: { width: 1, height: 1 }, imgData: input };
+    OS._getActiveImageData = vi.fn(() => info);
+    OS._runFilterWithPhoton = vi.fn().mockResolvedValue(output);
+    OS._commitImageData = vi.fn();
+
+    await OS.applyFilterDirect('Sharpen');
+
+    expect(OS._runFilterWithPhoton).toHaveBeenCalledWith(
+      'sharpen',
+      expect.stringContaining('const src=new Uint8ClampedArray'),
+      input,
+      1,
+      1,
+      {}
+    );
+    expect(OS._commitImageData).toHaveBeenCalledWith({...info, imgData: output}, 'Filter: Sharpen');
+    expect(OS._lastFilter).toBe('Sharpen');
+    expect(OS.toast).toHaveBeenCalledWith('Applied Sharpen', 'success');
+  });
 });

@@ -10,7 +10,7 @@
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src blob:;">
-<title>OpenShop v0.18.3 — Online Image Editor</title>
+<title>OpenShop v0.18.4 — Online Image Editor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js" integrity="sha384-sLpuECXYCB5TUyTbC06pftm/rgurDambREZmV4eRHwEqJzCQtU6lxI2Ve00z4XW5" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/ag-psd@22.0.2/dist/bundle.js" integrity="sha384-kla4KJzEnshZnuWyJ8+AF8KEX0YZ2rpxTaQpDtDUmDdUv7jK94knsRx/lcRZ/HF4" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js" integrity="sha384-qovJwSBbRDPP5cEjCp8S0UP66wrvnjaa60XMOGzTNanrThcrGfXfnZkvgY8N1KT3" crossorigin="anonymous"></script>
@@ -560,7 +560,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <!-- ===== TOP MENU ===== -->
 <div id="topbar" role="menubar" aria-label="Main menu">
-    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.3</span></div>
+    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.4</span></div>
     <div class="menu-item" role="menuitem" aria-haspopup="true">File
         <div class="menu-dropdown">
             <div class="dd-item" onclick="OS.newImage()">New</div>
@@ -1382,7 +1382,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <script>
 // ================================================================
-//  OpenShop v0.18.3 — Core Engine (Phase 10: Pro Toolbar)
+//  OpenShop v0.18.4 — Core Engine (Phase 10: Pro Toolbar)
 // ================================================================
 const OS = {
     _esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
@@ -1675,7 +1675,7 @@ const OS = {
     _projectFileHandle: null,
     async saveProject() {
         const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-        json._openShop = { version:'0.18.3', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+        json._openShop = { version:'0.18.4', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
         const data = JSON.stringify(json);
         if (this._projectFileHandle) {
             try {
@@ -3285,9 +3285,39 @@ const OS = {
         this._removeFilterPanel('filter-dialog-overlay');
         this._filterBackup = null; this._filterBackupRaw = null; this._filterTarget = null;
     },
-    applyFilterDirect(name) {
+    _getDirectPhotonFilter(name) {
+        const convolution = (matrix) => `const src=new Uint8ClampedArray(d),m=${JSON.stringify(matrix)};for(let y=1;y<h-1;y++){for(let x=1;x<w-1;x++){const idx=(y*w+x)*4;for(let c=0;c<3;c++){let sum=0,k=0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){sum+=src[((y+dy)*w+x+dx)*4+c]*m[k++];}d[idx+c]=Math.max(0,Math.min(255,sum));}}}`;
+        switch(name) {
+            case 'Grayscale':
+                return {op:'grayscale', fn:`for(let i=0;i<d.length;i+=4){const l=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];d[i]=d[i+1]=d[i+2]=l;}`};
+            case 'Invert':
+                return {op:'invert', fn:`for(let i=0;i<d.length;i+=4){d[i]=255-d[i];d[i+1]=255-d[i+1];d[i+2]=255-d[i+2];}`};
+            case 'Sepia':
+                return {op:'sepia', fn:`for(let i=0;i<d.length;i+=4){const r=d[i],g=d[i+1],b=d[i+2];d[i]=Math.min(255,0.393*r+0.769*g+0.189*b);d[i+1]=Math.min(255,0.349*r+0.686*g+0.168*b);d[i+2]=Math.min(255,0.272*r+0.534*g+0.131*b);}`};
+            case 'BlackWhite':
+                return {op:'threshold', fn:`for(let i=0;i<d.length;i+=4){const l=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];const v=l>=128?255:0;d[i]=d[i+1]=d[i+2]=v;}`, params:{thr:128}};
+            case 'Sharpen':
+                return {op:'sharpen', fn:convolution([0,-1,0,-1,5,-1,0,-1,0])};
+            case 'Emboss':
+                return {op:'emboss', fn:convolution([-2,-1,0,-1,1,1,0,1,2])};
+            default:
+                return null;
+        }
+    },
+    async _applyImageDataFilterDirect(name, spec) {
+        const info = this._getActiveImageData(); if (!info) return false;
+        this.toast('Applying ' + name.replace('BlackWhite', 'Black & White') + '...', 'info');
+        info.imgData = await this._runFilterWithPhoton(spec.op, spec.fn, info.imgData, info.canvas.width, info.canvas.height, spec.params || {});
+        this._commitImageData(info, 'Filter: ' + name);
+        this.toast(`Applied ${name.replace('BlackWhite', 'Black & White')}`, 'success');
+        this._lastFilter = name;
+        return true;
+    },
+    async applyFilterDirect(name) {
         const active=this.canvas.getActiveObject();
         if(!active||active.type!=='image') { this.toast('Select an image first','info'); return; }
+        const photonSpec = this._getDirectPhotonFilter(name);
+        if (photonSpec) { await this._applyImageDataFilterDirect(name, photonSpec); return; }
         let f;
         switch(name) {
             case 'Grayscale': f=new fabric.Image.filters.Grayscale(); break;
@@ -3702,6 +3732,8 @@ const OS = {
                 'https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js',
                 'https://cdn.jsdelivr.net/npm/ag-psd@22.0.2/dist/bundle.js',
                 'https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js',
+                'https://cdn.jsdelivr.net/npm/@silvia-odwyer/photon@0.3.3/photon_rs.js',
+                'https://cdn.jsdelivr.net/npm/@silvia-odwyer/photon@0.3.3/photon_rs_bg.wasm',
                 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap'
             ];
             for (const url of urls) {
@@ -3800,7 +3832,7 @@ self.onmessage = async function(e) {
         if (!navigator.storage || !navigator.storage.getDirectory) return;
         try {
             const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-            json._openShop = { version:'0.18.3', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+            json._openShop = { version:'0.18.4', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
             const data = JSON.stringify(json);
             try {
                 const root = await navigator.storage.getDirectory();
@@ -4854,23 +4886,98 @@ self.onmessage = async function(e) {
 
     // ====================== FILTER WORKER ======================
     _filterWorker: null,
+    _photonFilterDisabled: false,
+    _photonFilterUrl: 'https://cdn.jsdelivr.net/npm/@silvia-odwyer/photon@0.3.3/photon_rs.js',
     _getFilterWorker() {
         if (this._filterWorker) return this._filterWorker;
-        const code = `self.onmessage=function(e){const{fn,data,width,height,params}=e.data;const d=new Uint8ClampedArray(data);const w=width,h=height,p=params;try{const F=new Function('d','w','h','p',fn);F(d,w,h,p);}catch(err){console.error('Filter worker error:',err);}self.postMessage({data:d.buffer,width,height},[d.buffer]);};`;
+        const code = `
+const PHOTON_URL = ${JSON.stringify(this._photonFilterUrl)};
+let photonModulePromise = null;
+async function getPhotonModule() {
+    if (!photonModulePromise) {
+        photonModulePromise = import(PHOTON_URL).then(async mod => {
+            if (mod.default) await mod.default();
+            return mod;
+        });
+    }
+    return photonModulePromise;
+}
+async function runPhotonFilter(op, d, w, h, p) {
+    const mod = await getPhotonModule();
+    const img = new mod.PhotonImage(d, w, h);
+    try {
+        switch (op) {
+            case 'edgeDetect': mod.edge_detection(img); break;
+            case 'threshold': mod.threshold(img, p.thr ?? p.threshold ?? 128); break;
+            case 'gaussianBlur': mod.gaussian_blur(img, p.radius ?? 2); break;
+            case 'sharpen': mod.sharpen(img); break;
+            case 'emboss': mod.emboss(img); break;
+            case 'grayscale': mod.grayscale(img); break;
+            case 'sepia': mod.sepia(img); break;
+            case 'invert': mod.invert(img); break;
+            default: throw new Error('Unsupported Photon filter: ' + op);
+        }
+        return img.get_raw_pixels();
+    } finally {
+        img.free();
+    }
+}
+self.onmessage = async function(e) {
+    const { fn, data, width, height, params, backend, op } = e.data;
+    const d = new Uint8ClampedArray(data);
+    const w = width, h = height, p = params || {};
+    try {
+        if (backend === 'photon') {
+            const out = await runPhotonFilter(op, d, w, h, p);
+            self.postMessage({ data: out.buffer, width, height, backend: 'photon' }, [out.buffer]);
+            return;
+        }
+        const F = new Function('d', 'w', 'h', 'p', fn);
+        F(d, w, h, p);
+        self.postMessage({ data: d.buffer, width, height, backend: 'worker' }, [d.buffer]);
+    } catch (err) {
+        const message = err && err.message ? err.message : String(err);
+        console.error('Filter worker error:', err);
+        self.postMessage({ data: d.buffer, width, height, backend: backend || 'worker', error: message }, [d.buffer]);
+    }
+};`;
         const blob = new Blob([code], {type:'application/javascript'});
         this._filterWorker = new Worker(URL.createObjectURL(blob));
         return this._filterWorker;
     },
-    _runFilterInWorker(fn, imgData, width, height, params) {
-        return new Promise((resolve) => {
+    _runFilterJob(payload, imgData, width, height, params) {
+        return new Promise((resolve, reject) => {
             const worker = this._getFilterWorker();
             const buf = imgData.data.buffer.slice(0);
             worker.onmessage = (e) => {
                 const result = new ImageData(new Uint8ClampedArray(e.data.data), e.data.width, e.data.height);
+                if (e.data.error && e.data.backend === 'photon') {
+                    reject(new Error(e.data.error));
+                    return;
+                }
+                if (e.data.error) console.warn('Filter worker error:', e.data.error);
                 resolve(result);
             };
-            worker.postMessage({fn, data: buf, width, height, params: params||{}}, [buf]);
+            worker.onerror = (err) => reject(err);
+            worker.postMessage({...payload, data: buf, width, height, params: params||{}}, [buf]);
         });
+    },
+    _runFilterInWorker(fn, imgData, width, height, params) {
+        return this._runFilterJob({backend:'worker', fn}, imgData, width, height, params);
+    },
+    _runPhotonFilterInWorker(op, imgData, width, height, params) {
+        return this._runFilterJob({backend:'photon', op}, imgData, width, height, params);
+    },
+    async _runFilterWithPhoton(op, fallbackFn, imgData, width, height, params) {
+        if (!this._photonFilterDisabled) {
+            try {
+                return await this._runPhotonFilterInWorker(op, imgData, width, height, params);
+            } catch (err) {
+                this._photonFilterDisabled = true;
+                console.warn('Photon filter backend unavailable; falling back to JS worker:', err);
+            }
+        }
+        return this._runFilterInWorker(fallbackFn, imgData, width, height, params);
     },
 
     // ====================== PHASE 7: ADVANCED FILTERS ======================
@@ -4908,7 +5015,8 @@ self.onmessage = async function(e) {
         const panel = document.getElementById('threshold-overlay');
         const info = this._getActiveImageData(); if (!info) { this._removeFilterPanel('threshold-overlay'); return; }
         const thr = +(panel.querySelector('#ft-thr')?.value||128);
-        info.imgData = await this._runFilterInWorker(`const thr=p.thr;for(let i=0;i<d.length;i+=4){const l=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];const v=l>=thr?255:0;d[i]=d[i+1]=d[i+2]=v;}`, info.imgData, info.canvas.width, info.canvas.height, {thr});
+        const fallbackFn = `const thr=p.thr;for(let i=0;i<d.length;i+=4){const l=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];const v=l>=thr?255:0;d[i]=d[i+1]=d[i+2]=v;}`;
+        info.imgData = await this._runFilterWithPhoton('threshold', fallbackFn, info.imgData, info.canvas.width, info.canvas.height, {thr});
         this._commitImageData(info, 'Threshold'); this._removeFilterPanel('threshold-overlay'); this.toast('Threshold applied', 'success');
     },
     filterSolarize() {
@@ -4920,7 +5028,8 @@ self.onmessage = async function(e) {
     async filterEdgeDetect() {
         const info = this._getActiveImageData(); if (!info) return;
         this.toast('Detecting edges...', 'info');
-        info.imgData = await this._runFilterInWorker(`const src=new Uint8ClampedArray(d);for(let y=1;y<h-1;y++){for(let x=1;x<w-1;x++){const idx=(y*w+x)*4;for(let c=0;c<3;c++){const gx=-src[((y-1)*w+x-1)*4+c]+src[((y-1)*w+x+1)*4+c]-2*src[(y*w+x-1)*4+c]+2*src[(y*w+x+1)*4+c]-src[((y+1)*w+x-1)*4+c]+src[((y+1)*w+x+1)*4+c];const gy=-src[((y-1)*w+x-1)*4+c]-2*src[((y-1)*w+x)*4+c]-src[((y-1)*w+x+1)*4+c]+src[((y+1)*w+x-1)*4+c]+2*src[((y+1)*w+x)*4+c]+src[((y+1)*w+x+1)*4+c];d[idx+c]=Math.min(255,Math.sqrt(gx*gx+gy*gy));}}}`, info.imgData, info.canvas.width, info.canvas.height);
+        const fallbackFn = `const src=new Uint8ClampedArray(d);for(let y=1;y<h-1;y++){for(let x=1;x<w-1;x++){const idx=(y*w+x)*4;for(let c=0;c<3;c++){const gx=-src[((y-1)*w+x-1)*4+c]+src[((y-1)*w+x+1)*4+c]-2*src[(y*w+x-1)*4+c]+2*src[(y*w+x+1)*4+c]-src[((y+1)*w+x-1)*4+c]+src[((y+1)*w+x+1)*4+c];const gy=-src[((y-1)*w+x-1)*4+c]-2*src[((y-1)*w+x)*4+c]-src[((y-1)*w+x+1)*4+c]+src[((y+1)*w+x-1)*4+c]+2*src[((y+1)*w+x)*4+c]+src[((y+1)*w+x+1)*4+c];d[idx+c]=Math.min(255,Math.sqrt(gx*gx+gy*gy));}}}`;
+        info.imgData = await this._runFilterWithPhoton('edgeDetect', fallbackFn, info.imgData, info.canvas.width, info.canvas.height);
         this._commitImageData(info, 'Edge Detect'); this.toast('Edge detect applied', 'success');
     },
     filterVignette() {
@@ -5345,10 +5454,10 @@ self.onmessage = async function(e) {
             {label:'Auto Enhance',cat:'Image',fn:()=>this.autoEnhance()},
             {label:'Image Info',cat:'Image',fn:()=>this.showImageInfo()},
             {label:'Before / After',cat:'Image',fn:()=>this.showBeforeAfter()},
-            {label:'Grayscale',cat:'Filter',fn:()=>this.applyFilter('Grayscale')},
-            {label:'Invert',cat:'Filter',fn:()=>this.applyFilter('Invert')},
-            {label:'Sepia',cat:'Filter',fn:()=>this.applyFilter('Sepia')},
-            {label:'B&W',cat:'Filter',fn:()=>this.applyFilter('Black & White')},
+            {label:'Grayscale',cat:'Filter',fn:()=>this.applyFilterDirect('Grayscale')},
+            {label:'Invert',cat:'Filter',fn:()=>this.applyFilterDirect('Invert')},
+            {label:'Sepia',cat:'Filter',fn:()=>this.applyFilterDirect('Sepia')},
+            {label:'B&W',cat:'Filter',fn:()=>this.applyFilterDirect('BlackWhite')},
             {label:'Posterize',cat:'Filter',fn:()=>this.filterPosterize()},
             {label:'Threshold',cat:'Filter',fn:()=>this.filterThreshold()},
             {label:'Solarize',cat:'Filter',fn:()=>this.filterSolarize()},
