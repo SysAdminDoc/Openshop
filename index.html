@@ -10,7 +10,7 @@
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src blob:;">
-<title>OpenShop v0.18.10 — Online Image Editor</title>
+<title>OpenShop v0.18.11 — Online Image Editor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js" integrity="sha384-sLpuECXYCB5TUyTbC06pftm/rgurDambREZmV4eRHwEqJzCQtU6lxI2Ve00z4XW5" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/ag-psd@22.0.2/dist/bundle.js" integrity="sha384-kla4KJzEnshZnuWyJ8+AF8KEX0YZ2rpxTaQpDtDUmDdUv7jK94knsRx/lcRZ/HF4" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js" integrity="sha384-qovJwSBbRDPP5cEjCp8S0UP66wrvnjaa60XMOGzTNanrThcrGfXfnZkvgY8N1KT3" crossorigin="anonymous"></script>
@@ -561,7 +561,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <!-- ===== TOP MENU ===== -->
 <div id="topbar" role="menubar" aria-label="Main menu">
-    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.10</span></div>
+    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.11</span></div>
     <div class="menu-item" role="menuitem" aria-haspopup="true">File
         <div class="menu-dropdown">
             <div class="dd-item" onclick="OS.newImage()">New</div>
@@ -1396,7 +1396,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <script>
 // ================================================================
-//  OpenShop v0.18.10 — Core Engine (Phase 10: Pro Toolbar)
+//  OpenShop v0.18.11 — Core Engine (Phase 10: Pro Toolbar)
 // ================================================================
 const OS = {
     _esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
@@ -1425,6 +1425,16 @@ const OS = {
     _liquifyData: null,
     _symmetryMode: 'off',
     _prefs: { gridSize: 20, historyStates: 60, defaultW: 1920, defaultH: 1080, theme: 'dark', snapTolerance: 5 },
+    _importLimits: {
+        maxJsonBytes: 10 * 1024 * 1024,
+        maxImageBytes: 100 * 1024 * 1024,
+        maxImagePixels: 80 * 1000 * 1000,
+        maxImageDimension: 30000,
+        maxProjectObjects: 5000,
+        maxProjectLayers: 512,
+        maxPaletteColors: 256,
+        maxPresets: 200
+    },
     gridVisible: false, rulersVisible: false, snapEnabled: false, gridSize: 20,
     templates: [
         { name:'HD 1080p', w:1920, h:1080, icon:'16:9', cat:'Video' },
@@ -1576,6 +1586,79 @@ const OS = {
     doNewImage(o) { const w=+o.querySelector('#ni-w').value||1920, h=+o.querySelector('#ni-h').value||1080; this.createNewDocument(w,h); o.remove(); this.toast(`Created ${w} × ${h} canvas`, 'success'); },
 
     // ====================== FILE I/O ======================
+    _assertJsonFileBudget(file, label = 'JSON') {
+        if (file && file.size > this._importLimits.maxJsonBytes) throw new Error(`${label} file exceeds 10 MB limit`);
+    },
+    _validateImageFile(file) {
+        if (!file || !file.type || !file.type.startsWith('image/')) throw new Error('Unsupported image file');
+        if (file.size > this._importLimits.maxImageBytes) throw new Error('Image file exceeds 100 MB limit');
+    },
+    _validateDecodedImage(img) {
+        const width = Number(img?.width || img?.naturalWidth || 0);
+        const height = Number(img?.height || img?.naturalHeight || 0);
+        if (width < 1 || height < 1) throw new Error('Image dimensions are invalid');
+        if (width > this._importLimits.maxImageDimension || height > this._importLimits.maxImageDimension) throw new Error('Image dimensions exceed import limits');
+        if (width * height > this._importLimits.maxImagePixels) throw new Error('Image pixel count exceeds import limits');
+        return { width, height };
+    },
+    _sanitizeProjectValue(value, depth = 0, stats = { objects:0, layers:0 }) {
+        if (depth > 80) throw new Error('Project nesting exceeds import limits');
+        if (Array.isArray(value)) {
+            if (value.length > this._importLimits.maxProjectObjects) throw new Error('Project array exceeds import limits');
+            value.forEach(item => this._sanitizeProjectValue(item, depth + 1, stats));
+            return value;
+        }
+        if (value && typeof value === 'object') {
+            stats.objects++;
+            if (stats.objects > this._importLimits.maxProjectObjects) throw new Error('Project object count exceeds import limits');
+            if (Array.isArray(value.layers)) {
+                stats.layers += value.layers.length;
+                if (stats.layers > this._importLimits.maxProjectLayers) throw new Error('Project layer count exceeds import limits');
+            }
+            for (const key of Object.keys(value)) {
+                if (typeof value[key] === 'string') value[key] = this._safeText(value[key].replace(/javascript:/gi, '').replace(/on\w+\s*=/gi, ''), 500);
+                if (key === 'id' && typeof value[key] === 'string') value[key] = value[key].replace(/[<>"'&]/g, '');
+                this._sanitizeProjectValue(value[key], depth + 1, stats);
+            }
+        }
+        return value;
+    },
+    _sanitizeProjectJSON(obj) {
+        this._sanitizeProjectValue(obj);
+        if (obj?._openShop) {
+            const w = Math.round(Number(obj._openShop.w || 0));
+            const h = Math.round(Number(obj._openShop.h || 0));
+            if (w < 1 || h < 1 || w > this._importLimits.maxImageDimension || h > this._importLimits.maxImageDimension || w * h > this._importLimits.maxImagePixels) {
+                throw new Error('Project dimensions exceed import limits');
+            }
+            obj._openShop.w = w;
+            obj._openShop.h = h;
+        }
+        return obj;
+    },
+    _sanitizePaletteColors(colors) {
+        return (Array.isArray(colors) ? colors : []).map(c => this._validHexColor(c)).filter(Boolean).slice(0, this._importLimits.maxPaletteColors);
+    },
+    _sanitizePresetList(data) {
+        const presets = Array.isArray(data) ? data : [data];
+        return presets.map(p => this._safePreset(p)).filter(Boolean).slice(0, this._importLimits.maxPresets);
+    },
+    _addDecodedImageToCanvas(img, { name, mode }) {
+        const { width } = this._validateDecodedImage(img);
+        if (mode === 'open') {
+            this.createNewDocument(img.width, img.height);
+            img.set({ left:0, top:0, selectable:true, name:this._safeText(name, 120) });
+            this.canvas.add(img); this.layers[this.activeLayerIdx].objects.push(img);
+            this.zoomFit(); this.saveHistory('Open Image'); this.updateLayersPanel();
+            this.toast(`Opened: ${this._safeText(name, 80)}`, 'success');
+            return;
+        }
+        if (width > this.canvasW) img.scaleToWidth(this.canvasW * 0.8);
+        img.set({ left:50, top:50, selectable:true, name:this._safeText(name, 120) });
+        this.canvas.add(img); this.layers[this.activeLayerIdx].objects.push(img);
+        this.canvas.setActiveObject(img); this.saveHistory(mode === 'paste' ? 'Paste Image' : 'Drop Image'); this.updateLayersPanel();
+        this.toast(mode === 'paste' ? 'Image pasted from clipboard' : `Added: ${this._safeText(name, 80)}`, 'success');
+    },
     async openFile() {
         if (window.showOpenFilePicker) {
             try {
@@ -1590,14 +1673,12 @@ const OS = {
         document.getElementById('file-input').click();
     },
     _handleFileLoad(file) {
-        this._docName = file.name.replace(/\.[^.]+$/, '');
+        try { this._validateImageFile(file); } catch(e) { this.toast(e.message, 'error'); return; }
+        this._docName = this._safeText(file.name.replace(/\.[^.]+$/, ''), 100);
         const r = new FileReader(); r.onload = ev => {
             fabric.Image.fromURL(ev.target.result, img => {
-                this.createNewDocument(img.width, img.height);
-                img.set({ left:0, top:0, selectable:true, name:file.name });
-                this.canvas.add(img); this.layers[this.activeLayerIdx].objects.push(img);
-                this.zoomFit(); this.saveHistory('Open Image'); this.updateLayersPanel();
-                this.toast(`Opened: ${file.name}`, 'success');
+                try { this._addDecodedImageToCanvas(img, { name:file.name, mode:'open' }); }
+                catch(err) { this.toast(err.message, 'error'); }
             });
         }; r.readAsDataURL(file);
     },
@@ -1610,14 +1691,11 @@ const OS = {
         const file = e.dataTransfer.files[0];
         if (!file) return;
         if (file.name.toLowerCase().endsWith('.psd')) { this._loadPSDFile(file); return; }
-        if (!file.type.startsWith('image/')) return;
+        try { this._validateImageFile(file); } catch(err) { this.toast(err.message, 'error'); return; }
         const r = new FileReader(); r.onload = ev => {
             fabric.Image.fromURL(ev.target.result, img => {
-                if (img.width > this.canvasW) img.scaleToWidth(this.canvasW * 0.8);
-                img.set({ left:50, top:50, selectable:true, name:file.name });
-                this.canvas.add(img); this.layers[this.activeLayerIdx].objects.push(img);
-                this.canvas.setActiveObject(img); this.saveHistory('Drop Image'); this.updateLayersPanel();
-                this.toast(`Added: ${file.name}`, 'success');
+                try { this._addDecodedImageToCanvas(img, { name:file.name, mode:'drop' }); }
+                catch(err) { this.toast(err.message, 'error'); }
             });
         }; r.readAsDataURL(file);
     },
@@ -1689,7 +1767,7 @@ const OS = {
     _projectFileHandle: null,
     async saveProject() {
         const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-        json._openShop = { version:'0.18.10', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+        json._openShop = { version:'0.18.11', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
         const data = JSON.stringify(json);
         if (this._projectFileHandle) {
             try {
@@ -1720,22 +1798,9 @@ const OS = {
         this._clearAutoSave();
     },
     openProject() { document.getElementById('project-input').click(); },
-    _sanitizeProjectJSON(obj) {
-        if (Array.isArray(obj)) { obj.forEach(o => this._sanitizeProjectJSON(o)); return; }
-        if (obj && typeof obj === 'object') {
-            for (const key of Object.keys(obj)) {
-                if (typeof obj[key] === 'string') {
-                    obj[key] = obj[key].replace(/javascript:/gi, '').replace(/on\w+\s*=/gi, '');
-                }
-                if (key === 'id' && typeof obj[key] === 'string') {
-                    obj[key] = obj[key].replace(/[<>"'&]/g, '');
-                }
-                this._sanitizeProjectJSON(obj[key]);
-            }
-        }
-    },
     handleProjectOpen(e) {
         const file = e.target.files[0]; if (!file) return;
+        try { this._assertJsonFileBudget(file, 'Project'); } catch(err) { this.toast(err.message, 'error'); e.target.value=''; return; }
         const r = new FileReader(); r.onload = ev => {
             try {
                 const json = JSON.parse(ev.target.result);
@@ -1745,7 +1810,7 @@ const OS = {
                     this.canvas.renderAll(); this.rebuildLayersFromCanvas();
                     this.zoomFit(); this.saveHistory('Open Project'); this.toast('Project loaded','success');
                 });
-            } catch(err) { this.toast('Invalid project','error'); }
+            } catch(err) { this.toast('Invalid project: ' + err.message,'error'); }
         }; r.readAsText(file); e.target.value='';
     },
 
@@ -4064,7 +4129,7 @@ self.onmessage = async function(e) {
         if (!navigator.storage || !navigator.storage.getDirectory) return;
         try {
             const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-            json._openShop = { version:'0.18.10', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+            json._openShop = { version:'0.18.11', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
             const data = JSON.stringify(json);
             try {
                 const root = await navigator.storage.getDirectory();
@@ -6187,14 +6252,13 @@ self.onmessage = async function(e) {
             // Canvas area drop is handled by existing handler, but this handles full-window drops
             if (e.target.closest('#canvas-area')) return; // already handled
             const file = e.dataTransfer.files[0];
-            if (file && file.type.startsWith('image/')) {
+            if (file) {
+                try { this._validateImageFile(file); } catch(err) { this.toast(err.message, 'error'); return; }
                 const reader = new FileReader();
                 reader.onload = ev => {
                     fabric.Image.fromURL(ev.target.result, img => {
-                        img.scaleToWidth(Math.min(this.canvasW, img.width));
-                        this.canvas.add(img); this.canvas.setActiveObject(img);
-                        this.layers[this.activeLayerIdx].objects.push(img);
-                        this.saveHistory('Drop Image'); this.updateLayersPanel();
+                        try { this._addDecodedImageToCanvas(img, { name:file.name, mode:'drop' }); }
+                        catch(err) { this.toast(err.message, 'error'); }
                     });
                 }; reader.readAsDataURL(file);
             }
@@ -6210,14 +6274,12 @@ self.onmessage = async function(e) {
                 if (item.type.startsWith('image/')) {
                     e.preventDefault();
                     const blob = item.getAsFile();
+                    try { this._validateImageFile(blob); } catch(err) { this.toast(err.message, 'error'); return; }
                     const reader = new FileReader();
                     reader.onload = ev => {
                         fabric.Image.fromURL(ev.target.result, img => {
-                            img.scaleToWidth(Math.min(this.canvasW, img.width));
-                            this.canvas.add(img); this.canvas.setActiveObject(img);
-                            this.layers[this.activeLayerIdx].objects.push(img);
-                            this.saveHistory('Paste Image'); this.updateLayersPanel();
-                            this.toast('Image pasted from clipboard', 'success');
+                            try { this._addDecodedImageToCanvas(img, { name:blob.name || 'Pasted Image', mode:'paste' }); }
+                            catch(err) { this.toast(err.message, 'error'); }
                         });
                     }; reader.readAsDataURL(blob);
                     return;
@@ -6342,7 +6404,7 @@ self.onmessage = async function(e) {
     loadSavedPalette() {
         try {
             const saved = JSON.parse(localStorage.getItem('os_palette') || '[]');
-            this._savedPalette = Array.isArray(saved) ? saved.map(c => this._validHexColor(c)).filter(Boolean).slice(0, 256) : [];
+            this._savedPalette = Array.isArray(saved) ? this._sanitizePaletteColors(saved) : [];
         } catch(e) { this._savedPalette = []; }
         this._renderSavedPalette();
     },
@@ -6382,13 +6444,14 @@ self.onmessage = async function(e) {
         const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,.gpl,.ase';
         input.onchange = e => {
             const file = e.target.files[0]; if (!file) return;
+            try { this._assertJsonFileBudget(file, 'Palette'); } catch(err) { this.toast(err.message, 'error'); return; }
             const reader = new FileReader();
             reader.onload = ev => {
                 try {
                     const data = JSON.parse(ev.target.result);
                     if (data.colors && Array.isArray(data.colors)) {
-                        const safeColors = data.colors.map(c => this._validHexColor(c)).filter(Boolean);
-                        this._savedPalette = [...this._savedPalette, ...safeColors].slice(0, 256);
+                        const safeColors = this._sanitizePaletteColors(data.colors);
+                        this._savedPalette = [...this._savedPalette, ...safeColors].slice(0, this._importLimits.maxPaletteColors);
                         try { localStorage.setItem('os_palette', JSON.stringify(this._savedPalette)); } catch(e) { console.warn('Palette save failed:', e.message); }
                         this._renderSavedPalette();
                         this.toast(`Imported ${safeColors.length} colors`, 'success');
@@ -8009,7 +8072,7 @@ self.onmessage = async function(e) {
     showPresets() {
         try {
             const saved = JSON.parse(localStorage.getItem('os_presets') || '[]');
-            this._presets = Array.isArray(saved) ? saved.map(p => this._safePreset(p)).filter(Boolean).slice(0, 200) : [];
+            this._presets = Array.isArray(saved) ? this._sanitizePresetList(saved) : [];
         } catch(e) { console.warn('Preset load:', e.message); }
         const all = [...this._builtinPresets, ...this._presets];
         const o = document.createElement('div'); o.className = 'modal-overlay';
@@ -8122,12 +8185,12 @@ self.onmessage = async function(e) {
         const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
         input.onchange = e => {
             const f = e.target.files[0]; if (!f) return;
+            try { this._assertJsonFileBudget(f, 'Preset'); } catch(err) { this.toast(err.message, 'error'); return; }
             const r = new FileReader(); r.onload = ev => {
                 try {
                     const data = JSON.parse(ev.target.result);
-                    const presets = Array.isArray(data) ? data : [data];
-                    const safePresets = presets.map(p => this._safePreset(p)).filter(Boolean);
-                    this._presets = [...this._presets, ...safePresets].slice(0, 200);
+                    const safePresets = this._sanitizePresetList(data);
+                    this._presets = [...this._presets, ...safePresets].slice(0, this._importLimits.maxPresets);
                     try { localStorage.setItem('os_presets', JSON.stringify(this._presets)); } catch(e2) { console.warn('Preset save:', e2.message); }
                     this.toast(`Imported ${safePresets.length} preset(s)`, 'success');
                 } catch(e2) { this.toast('Invalid preset file', 'error'); }

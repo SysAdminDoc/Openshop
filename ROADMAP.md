@@ -117,13 +117,6 @@ Single-file browser image editor with layers, PSD import, and client-side AI. Ro
   Acceptance: No user- or localStorage-derived value reaches `innerHTML` or inline event attributes; CSP no longer needs `unsafe-inline`; malicious recent-file/palette/preset fixtures render as inert text.
   Complexity: L
 
-- [ ] P1 - Add central import schema and resource budgets for project, palette, preset, and image files
-  Why: Each importer validates differently, so corrupt or hostile JSON/images can reach rendering, storage, or pixel loops with inconsistent limits.
-  Evidence: `index.html:1726`, `index.html:3597`, `index.html:5903`, `index.html:7553`
-  Touches: `index.html` import helpers, project JSON sanitizer, palette/preset import, image open/drop/paste paths, unit fixtures
-  Acceptance: Shared validators clamp dimensions, string lengths, color formats, adjustment ranges, project versions, and array counts; invalid imports show a toast and leave current work unchanged.
-  Complexity: M
-
 - [ ] P1 - Build recovery and storage management UI
   Why: OPFS autosave exists, but users cannot inspect quota, export recovery data, clear stale saves, or distinguish corrupt recovery from no recovery.
   Evidence: `index.html:3759`, `index.html:3774`, JS Paint storage-management precedent

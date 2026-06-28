@@ -440,4 +440,32 @@ describe('OpenShop core object', () => {
       children: [{ left: 0, top: 0, right: 100000, bottom: 2 }]
     })).toThrow(/layer 1 exceeds/);
   });
+
+  it('centralizes import schemas and resource budgets', () => {
+    const OS = loadOpenShop();
+    OS.toast = vi.fn();
+    const image = { type: 'image/png', size: 1024, name: 'safe.png' };
+    expect(() => OS._validateImageFile(image)).not.toThrow();
+    expect(() => OS._validateImageFile({ type: 'text/html', size: 1 })).toThrow(/Unsupported image/);
+    expect(() => OS._validateDecodedImage({ width: 40000, height: 10 })).toThrow(/dimensions exceed/);
+    expect(() => OS._assertJsonFileBudget({ size: OS._importLimits.maxJsonBytes + 1 }, 'Project')).toThrow(/Project file exceeds/);
+
+    const project = {
+      _openShop: { w: '1200', h: '800' },
+      objects: [{ id: '<bad>', name: 'javascript:alert(1) onerror=x' }]
+    };
+    OS._sanitizeProjectJSON(project);
+    expect(project._openShop).toEqual({ w: 1200, h: 800 });
+    expect(project.objects[0].id).toBe('bad');
+    expect(project.objects[0].name).not.toContain('javascript:');
+
+    expect(() => OS._sanitizeProjectJSON({ _openShop: { w: 100000, h: 100000 } })).toThrow(/Project dimensions/);
+    expect(OS._sanitizePaletteColors(['#ABCDEF', 'javascript:alert(1)', '#112233']).map(c => c)).toEqual(['#abcdef', '#112233']);
+    expect(OS._sanitizePresetList([
+      { name: '<img src=x onerror=alert(1)>', adjustments: { brightness: '9999', contrast: 'bad' } },
+      { name: '', adjustments: {} }
+    ])).toEqual([
+      { name: '<img src=x onerror=alert(1)>', adjustments: { brightness: 300, contrast: 0, saturation: 0, hue: 0, vibrance: 0 }, custom: false }
+    ]);
+  });
 });

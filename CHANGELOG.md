@@ -2,6 +2,13 @@
 
 All notable changes to Openshop will be documented in this file.
 
+## [v0.18.11] - 2026-06-28
+
+### Security
+- Add central import schema and resource-budget helpers for project JSON, palettes, presets, and images
+- Clamp project dimensions/object counts, image dimensions/file sizes, palette colors, preset counts, and adjustment ranges through shared validators
+- Add unit coverage for hostile project, palette, preset, and image import fixtures
+
 ## [v0.18.10] - 2026-06-28
 
 ### Security
