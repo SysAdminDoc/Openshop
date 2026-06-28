@@ -75,7 +75,7 @@ All notable changes to Openshop will be documented in this file.
 
 ### Fixed
 - Version string mismatch: saveProject() now writes v0.18.0 (was hardcoded to v0.16.0)
-- Sync version references across README.md, CLAUDE.md, and CHANGELOG.md
+- Sync version references across README.md and CHANGELOG.md
 - PWA service worker: removed broken blob-URL registration (browsers reject it)
 - Replace all 15 empty catch blocks with appropriate console.warn/debug logging
 
