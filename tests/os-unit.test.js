@@ -468,4 +468,55 @@ describe('OpenShop core object', () => {
       { name: '<img src=x onerror=alert(1)>', adjustments: { brightness: 300, contrast: 0, saturation: 0, hue: 0, vibrance: 0 }, custom: false }
     ]);
   });
+
+  it('shows recovery storage status and restores sanitized recovery data', async () => {
+    const OS = loadOpenShop();
+    const canvas = createCanvasMock();
+    OS.canvas = canvas;
+    quietUiMethods(OS);
+    OS.rebuildLayersFromCanvas = vi.fn();
+    OS.zoomFit = vi.fn();
+    const recovery = JSON.stringify({ _openShop: { w: 640, h: 480 }, objects: [{ name: 'javascript:alert(1)' }] });
+    OS._getRecoveryInfo = vi.fn().mockResolvedValue({
+      supported: true,
+      exists: true,
+      corrupt: false,
+      ageMs: 120000,
+      size: recovery.length,
+      usage: 2048,
+      quota: 4096,
+      text: recovery
+    });
+
+    await OS.showRecoveryManager();
+    const modal = document.querySelector('.modal-overlay .modal');
+    expect(modal.textContent).toContain('Recovery Storage');
+    expect(modal.textContent).toContain('Available');
+    expect(modal.textContent).toContain('2 min ago');
+    expect(modal.querySelector('[onclick]')).toBeNull();
+
+    modal.querySelector('.btn-primary').click();
+    expect(canvas.loadFromJSON).toHaveBeenCalledWith(
+      expect.objectContaining({ _openShop: { w: 640, h: 480 } }),
+      expect.any(Function)
+    );
+    expect(OS.toast).toHaveBeenCalledWith('Project restored from auto-save', 'success');
+
+    OS._getRecoveryInfo = vi.fn().mockResolvedValue({
+      supported: true,
+      exists: true,
+      corrupt: true,
+      error: '<img src=x onerror=alert(1)>',
+      ageMs: 0,
+      size: 4,
+      usage: 4,
+      quota: 10,
+      text: '{bad'
+    });
+    await OS.showRecoveryManager();
+    const corruptModal = document.querySelector('.modal-overlay .modal');
+    expect(corruptModal.querySelector('img')).toBeNull();
+    expect(corruptModal.textContent).toContain('Corrupt');
+    expect(corruptModal.querySelector('.btn-primary').disabled).toBe(true);
+  });
 });

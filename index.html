@@ -10,7 +10,7 @@
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src blob:;">
-<title>OpenShop v0.18.11 — Online Image Editor</title>
+<title>OpenShop v0.18.12 — Online Image Editor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js" integrity="sha384-sLpuECXYCB5TUyTbC06pftm/rgurDambREZmV4eRHwEqJzCQtU6lxI2Ve00z4XW5" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/ag-psd@22.0.2/dist/bundle.js" integrity="sha384-kla4KJzEnshZnuWyJ8+AF8KEX0YZ2rpxTaQpDtDUmDdUv7jK94knsRx/lcRZ/HF4" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js" integrity="sha384-qovJwSBbRDPP5cEjCp8S0UP66wrvnjaa60XMOGzTNanrThcrGfXfnZkvgY8N1KT3" crossorigin="anonymous"></script>
@@ -561,7 +561,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <!-- ===== TOP MENU ===== -->
 <div id="topbar" role="menubar" aria-label="Main menu">
-    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.11</span></div>
+    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.12</span></div>
     <div class="menu-item" role="menuitem" aria-haspopup="true">File
         <div class="menu-dropdown">
             <div class="dd-item" onclick="OS.newImage()">New</div>
@@ -1396,7 +1396,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <script>
 // ================================================================
-//  OpenShop v0.18.11 — Core Engine (Phase 10: Pro Toolbar)
+//  OpenShop v0.18.12 — Core Engine (Phase 10: Pro Toolbar)
 // ================================================================
 const OS = {
     _esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
@@ -1767,7 +1767,7 @@ const OS = {
     _projectFileHandle: null,
     async saveProject() {
         const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-        json._openShop = { version:'0.18.11', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+        json._openShop = { version:'0.18.12', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
         const data = JSON.stringify(json);
         if (this._projectFileHandle) {
             try {
@@ -4048,16 +4048,107 @@ self.onmessage = function(e) {
     async _initAutoSave() {
         if (!navigator.storage || !navigator.storage.getDirectory) return;
         try {
-            const root = await navigator.storage.getDirectory();
-            const file = await root.getFileHandle('openshop-autosave.json', { create: false }).catch(() => null);
-            if (file) {
-                const f = await file.getFile();
-                if (f.size > 0 && Date.now() - f.lastModified < 86400000) {
-                    this._offerRecovery(await f.text());
-                }
+            const info = await this._getRecoveryInfo();
+            if (info.exists && info.text && info.ageMs < 86400000 && !info.corrupt) {
+                this._offerRecovery(info.text);
+            } else if (info.corrupt) {
+                this.toast('Corrupt recovery data found. Open Recovery Storage to export or discard it.', 'error');
             }
         } catch(e) { console.warn('Auto-save check failed:', e); }
         this._autoSaveTimer = setInterval(() => this._autoSave(), 30000);
+    },
+    _formatBytes(bytes) {
+        const n = Number(bytes || 0);
+        if (n >= 1024 * 1024 * 1024) return (n / 1024 / 1024 / 1024).toFixed(1) + ' GB';
+        if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
+        if (n >= 1024) return (n / 1024).toFixed(1) + ' KB';
+        return n + ' B';
+    },
+    _formatAge(ms) {
+        if (!Number.isFinite(ms)) return 'Unknown';
+        const minutes = Math.max(0, Math.round(ms / 60000));
+        if (minutes < 1) return 'Just now';
+        if (minutes < 60) return `${minutes} min ago`;
+        const hours = Math.round(minutes / 60);
+        if (hours < 48) return `${hours} hr ago`;
+        return `${Math.round(hours / 24)} days ago`;
+    },
+    async _getRecoveryInfo() {
+        const estimate = navigator.storage?.estimate ? await navigator.storage.estimate().catch(() => ({})) : {};
+        const info = { supported: !!navigator.storage?.getDirectory, exists:false, size:0, lastModified:0, ageMs:Infinity, text:'', corrupt:false, usage:estimate.usage || 0, quota:estimate.quota || 0 };
+        if (!info.supported) return info;
+        const root = await navigator.storage.getDirectory();
+        const handle = await root.getFileHandle('openshop-autosave.json', { create: false }).catch(() => null);
+        if (!handle) return info;
+        const file = await handle.getFile();
+        const text = await file.text();
+        info.exists = file.size > 0;
+        info.size = file.size;
+        info.lastModified = file.lastModified;
+        info.ageMs = Date.now() - file.lastModified;
+        info.text = text;
+        if (info.exists) {
+            try {
+                const json = JSON.parse(text);
+                this._sanitizeProjectJSON(json);
+            } catch(e) {
+                info.corrupt = true;
+                info.error = e.message;
+            }
+        }
+        return info;
+    },
+    async showRecoveryManager() {
+        const info = await this._getRecoveryInfo().catch(err => ({ supported:false, exists:false, error:err.message, usage:0, quota:0 }));
+        const o = document.createElement('div'); o.className = 'modal-overlay';
+        const modal = document.createElement('div'); modal.className = 'modal'; modal.style.minWidth = '430px';
+        const title = document.createElement('h3'); title.textContent = 'Recovery Storage';
+        const summary = document.createElement('dl');
+        summary.className = 'info-grid';
+        [
+            ['Storage', info.supported ? 'Available' : 'Unavailable'],
+            ['Autosave', info.exists ? (info.corrupt ? 'Corrupt' : 'Available') : 'None'],
+            ['Age', info.exists ? this._formatAge(info.ageMs) : 'None'],
+            ['Autosave Size', this._formatBytes(info.size)],
+            ['Storage Used', `${this._formatBytes(info.usage)} / ${info.quota ? this._formatBytes(info.quota) : 'Unknown'}`]
+        ].forEach(([k, v]) => {
+            const dt = document.createElement('dt'); dt.textContent = k;
+            const dd = document.createElement('dd'); dd.textContent = v;
+            summary.append(dt, dd);
+        });
+        if (info.error) {
+            const err = document.createElement('p');
+            err.style.cssText = 'font-size:12px;color:var(--danger);margin:10px 0';
+            err.textContent = `Recovery issue: ${this._safeText(info.error, 160)}`;
+            modal.append(title, summary, err);
+        } else {
+            modal.append(title, summary);
+        }
+        const btns = document.createElement('div'); btns.className = 'modal-btns';
+        const addBtn = (label, cls, fn, disabled = false) => {
+            const btn = document.createElement('button');
+            btn.className = cls;
+            btn.textContent = label;
+            btn.disabled = disabled;
+            btn.addEventListener('click', fn);
+            btns.appendChild(btn);
+        };
+        addBtn('Export', 'btn', () => this._exportRecovery(info), !info.exists);
+        addBtn(info.corrupt ? 'Discard Corrupt' : 'Discard', 'btn btn-danger', async () => { await this._discardRecovery(); o.remove(); this.toast('Recovery data discarded', 'info'); }, !info.exists);
+        addBtn('Restore', 'btn btn-primary', () => this._restoreRecoveryText(info.text, o), !info.exists || info.corrupt);
+        addBtn('Close', 'btn', () => o.remove());
+        modal.appendChild(btns);
+        o.appendChild(modal);
+        document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('show'));
+    },
+    _exportRecovery(info) {
+        if (!info?.text) { this.toast('No recovery data to export', 'info'); return; }
+        const blob = new Blob([info.text], { type:'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = info.corrupt ? 'openshop-corrupt-recovery.json' : 'openshop-recovery.json';
+        a.click();
+        this.toast('Recovery data exported', 'success');
     },
 
     _offerRecovery(jsonText) {
@@ -4075,8 +4166,12 @@ self.onmessage = function(e) {
 
     _restoreRecovery(overlay) {
         if (!this._recoveryData) { overlay.remove(); return; }
+        this._restoreRecoveryText(this._recoveryData, overlay);
+    },
+    _restoreRecoveryText(jsonText, overlay) {
         try {
-            const json = JSON.parse(this._recoveryData);
+            const json = JSON.parse(jsonText);
+            this._sanitizeProjectJSON(json);
             if (json._openShop) { this.canvasW = json._openShop.w; this.canvasH = json._openShop.h; }
             this.canvas.loadFromJSON(json, () => {
                 this.canvas.renderAll(); this.rebuildLayersFromCanvas();
@@ -4085,7 +4180,7 @@ self.onmessage = function(e) {
             });
         } catch(e) { this.toast('Recovery failed: ' + e.message, 'error'); }
         this._recoveryData = null;
-        overlay.remove();
+        if (overlay) overlay.remove();
     },
 
     async _discardRecovery() {
@@ -4129,7 +4224,7 @@ self.onmessage = async function(e) {
         if (!navigator.storage || !navigator.storage.getDirectory) return;
         try {
             const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-            json._openShop = { version:'0.18.11', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+            json._openShop = { version:'0.18.12', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
             const data = JSON.stringify(json);
             try {
                 const root = await navigator.storage.getDirectory();
@@ -5884,6 +5979,7 @@ self.onmessage = async function(e) {
             {label:'Export Settings',cat:'File',fn:()=>this.showExportSettings()},
             {label:'Save Project',cat:'File',fn:()=>this.saveProject()},
             {label:'Open Project',cat:'File',fn:()=>this.openProject()},
+            {label:'Recovery Storage',cat:'File',fn:()=>this.showRecoveryManager()},
             {label:'Templates',cat:'File',fn:()=>this.showTemplates()},
             {label:'Undo',cat:'Edit',fn:()=>this.undo(),key:'Ctrl+Z'},
             {label:'Redo',cat:'Edit',fn:()=>this.redo(),key:'Ctrl+Shift+Z'},

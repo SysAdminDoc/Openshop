@@ -2,6 +2,13 @@
 
 All notable changes to Openshop will be documented in this file.
 
+## [v0.18.12] - 2026-06-28
+
+### Added
+- Add Recovery Storage UI with autosave age, size, quota, restore, export, and discard actions
+- Detect corrupt autosave data and block restore while preserving export/discard options
+- Add unit coverage for recovery status rendering and sanitized restore flow
+
 ## [v0.18.11] - 2026-06-28
 
 ### Security

@@ -117,13 +117,6 @@ Single-file browser image editor with layers, PSD import, and client-side AI. Ro
   Acceptance: No user- or localStorage-derived value reaches `innerHTML` or inline event attributes; CSP no longer needs `unsafe-inline`; malicious recent-file/palette/preset fixtures render as inert text.
   Complexity: L
 
-- [ ] P1 - Build recovery and storage management UI
-  Why: OPFS autosave exists, but users cannot inspect quota, export recovery data, clear stale saves, or distinguish corrupt recovery from no recovery.
-  Evidence: `index.html:3759`, `index.html:3774`, JS Paint storage-management precedent
-  Touches: `index.html` autosave/recovery methods, Preferences or File menu, OPFS/localStorage helpers, Playwright recovery test
-  Acceptance: UI shows autosave age/size/quota estimate; users can restore, export, discard, or clear stale recovery state; corrupt recovery is quarantined with a clear error.
-  Complexity: M
-
 - [ ] P1 - Expand regression coverage for shipped file and recovery workflows
   Why: Current tests cover core object behavior, one direct filter, screenshot smoke, and Segment Select, but not PSD round-trip, project migration, autosave, import sanitization, or export dimensions.
   Evidence: `tests/os-unit.test.js`, `tests/openshop.e2e.spec.js`, README testing section

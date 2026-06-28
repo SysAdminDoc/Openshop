@@ -1,6 +1,6 @@
 # OpenShop
 
-![Version](https://img.shields.io/badge/version-0.18.11-blue)
+![Version](https://img.shields.io/badge/version-0.18.12-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Browser-orange)
 ![Zero Install](https://img.shields.io/badge/install-none_required-brightgreen)
@@ -154,6 +154,7 @@ Heavy filters (Oil Paint, Tilt Shift, Unsharp Mask, Posterize, Threshold, Vignet
 - Command palette, context menu, sticky notes, animation frames, macro list, AI progress titles, and save-preset modals render through DOM APIs instead of runtime `innerHTML`
 - PSD import preflights file size, header fields, canvas dimensions, layer count, and layer bounds before bitmap decode; structure parsing is isolated in a worker when available
 - Project, palette, preset, and image imports share central schema/resource budgets for dimensions, file sizes, object counts, color formats, and adjustment ranges
+- Recovery Storage in the command palette shows autosave age, size, quota usage, corruption state, and restore/export/discard actions
 - Content Security Policy restricts script/style/connect sources
 - AI model revisions pinned to immutable commit SHAs (not mutable branch refs)
 - PSD layer names and project JSON are sanitized to prevent XSS injection
