@@ -171,6 +171,9 @@ export function mountEditorDom() {
     <div id="history-list"></div>
     <div id="object-count"></div>
     <div id="toast-container"></div>
+    <div id="recent-files-area"></div>
+    <div id="palette-default"></div>
+    <div id="palette-saved"></div>
     <span id="brush-size-val"></span>
     <span id="zoom-display"></span>
     <div id="panels"></div>

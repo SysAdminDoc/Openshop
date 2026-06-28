@@ -10,7 +10,7 @@
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src blob:;">
-<title>OpenShop v0.18.6 — Online Image Editor</title>
+<title>OpenShop v0.18.7 — Online Image Editor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js" integrity="sha384-sLpuECXYCB5TUyTbC06pftm/rgurDambREZmV4eRHwEqJzCQtU6lxI2Ve00z4XW5" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/ag-psd@22.0.2/dist/bundle.js" integrity="sha384-kla4KJzEnshZnuWyJ8+AF8KEX0YZ2rpxTaQpDtDUmDdUv7jK94knsRx/lcRZ/HF4" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js" integrity="sha384-qovJwSBbRDPP5cEjCp8S0UP66wrvnjaa60XMOGzTNanrThcrGfXfnZkvgY8N1KT3" crossorigin="anonymous"></script>
@@ -561,7 +561,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <!-- ===== TOP MENU ===== -->
 <div id="topbar" role="menubar" aria-label="Main menu">
-    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.6</span></div>
+    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.7</span></div>
     <div class="menu-item" role="menuitem" aria-haspopup="true">File
         <div class="menu-dropdown">
             <div class="dd-item" onclick="OS.newImage()">New</div>
@@ -1396,7 +1396,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <script>
 // ================================================================
-//  OpenShop v0.18.6 — Core Engine (Phase 10: Pro Toolbar)
+//  OpenShop v0.18.7 — Core Engine (Phase 10: Pro Toolbar)
 // ================================================================
 const OS = {
     _esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
@@ -1689,7 +1689,7 @@ const OS = {
     _projectFileHandle: null,
     async saveProject() {
         const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-        json._openShop = { version:'0.18.6', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+        json._openShop = { version:'0.18.7', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
         const data = JSON.stringify(json);
         if (this._projectFileHandle) {
             try {
@@ -3552,6 +3552,50 @@ const OS = {
     },
 
     // ====================== WELCOME SCREEN ======================
+    _clearNode(el) {
+        if (el) el.replaceChildren();
+    },
+    _safeText(value, max = 120) {
+        return String(value ?? '').replace(/[\u0000-\u001F\u007F]/g, '').slice(0, max);
+    },
+    _validHexColor(value) {
+        const color = String(value || '').trim();
+        return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : null;
+    },
+    _safeAdjustmentMap(adjustments) {
+        const source = adjustments && typeof adjustments === 'object' ? adjustments : {};
+        const out = {};
+        ['brightness','contrast','saturation','hue','vibrance'].forEach(key => {
+            const n = Number(source[key] || 0);
+            out[key] = Number.isFinite(n) ? Math.max(-300, Math.min(300, n)) : 0;
+        });
+        return out;
+    },
+    _safePreset(preset) {
+        if (!preset || typeof preset !== 'object' || !preset.name || !preset.adjustments) return null;
+        return {
+            name: this._safeText(preset.name, 80) || 'Preset',
+            adjustments: this._safeAdjustmentMap(preset.adjustments),
+            custom: !!preset.custom
+        };
+    },
+    _createTemplateCard(t, onSelect) {
+        const card = document.createElement('div');
+        card.className = 'template-card';
+        const preview = document.createElement('div');
+        preview.className = 'tpl-preview';
+        preview.style.background = 'linear-gradient(135deg,var(--bg-depth-3),var(--bg-depth-4))';
+        preview.textContent = this._safeText(t.icon, 12);
+        const name = document.createElement('div');
+        name.className = 'tpl-name';
+        name.textContent = this._safeText(t.name, 80);
+        const dims = document.createElement('div');
+        dims.className = 'tpl-dims';
+        dims.textContent = `${t.w} x ${t.h}`;
+        card.append(preview, name, dims);
+        card.addEventListener('click', onSelect);
+        return card;
+    },
     dismissWelcome() {
         const el = document.getElementById('welcome-overlay');
         el.classList.add('hidden');
@@ -3574,32 +3618,49 @@ const OS = {
     populateTemplates() {
         const grid = document.getElementById('template-grid');
         if (!grid) return;
-        grid.innerHTML = '';
+        this._clearNode(grid);
         this.templates.forEach(t => {
-            const card = document.createElement('div');
-            card.className = 'template-card';
-            card.innerHTML = `<div class="tpl-preview" style="background:linear-gradient(135deg,var(--bg-depth-3),var(--bg-depth-4))">${t.icon}</div><div class="tpl-name">${t.name}</div><div class="tpl-dims">${t.w} x ${t.h}</div>`;
-            card.addEventListener('click', () => {
+            grid.appendChild(this._createTemplateCard(t, () => {
                 this.dismissWelcome();
                 this.createNewDocument(t.w, t.h);
                 this.toast(`Created: ${t.name}`, 'success');
-            });
-            grid.appendChild(card);
+            }));
         });
     },
     showTemplates() {
         const o = document.createElement('div'); o.className = 'modal-overlay';
         let cats = {}; this.templates.forEach(t => { if(!cats[t.cat]) cats[t.cat]=[]; cats[t.cat].push(t); });
-        let html = '<div class="modal" style="min-width:500px;max-width:620px"><h3>Templates</h3>';
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.style.minWidth = '500px';
+        modal.style.maxWidth = '620px';
+        const title = document.createElement('h3');
+        title.textContent = 'Templates';
+        modal.appendChild(title);
         for (const [cat, tpls] of Object.entries(cats)) {
-            html += `<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">${cat}</div><div class="template-grid">`;
-            tpls.forEach((t,i) => {
-                html += `<div class="template-card" onclick="OS.createNewDocument(${t.w},${t.h});this.closest('.modal-overlay').remove();OS.toast('Created: ${t.name}','success')"><div class="tpl-preview">${t.icon}</div><div class="tpl-name">${t.name}</div><div class="tpl-dims">${t.w}x${t.h}</div></div>`;
+            const heading = document.createElement('div');
+            heading.style.cssText = 'font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px';
+            heading.textContent = this._safeText(cat, 40);
+            const grid = document.createElement('div');
+            grid.className = 'template-grid';
+            tpls.forEach(t => {
+                grid.appendChild(this._createTemplateCard(t, () => {
+                    this.createNewDocument(t.w, t.h);
+                    o.remove();
+                    this.toast(`Created: ${t.name}`, 'success');
+                }));
             });
-            html += '</div>';
+            modal.append(heading, grid);
         }
-        html += '<div class="modal-btns"><button class="btn" onclick="this.closest(\'.modal-overlay\').remove()">Close</button></div></div>';
-        o.innerHTML = html;
+        const btns = document.createElement('div');
+        btns.className = 'modal-btns';
+        const close = document.createElement('button');
+        close.className = 'btn';
+        close.textContent = 'Close';
+        close.addEventListener('click', () => o.remove());
+        btns.appendChild(close);
+        modal.appendChild(btns);
+        o.appendChild(modal);
         document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('show'));
     },
 
@@ -3609,10 +3670,22 @@ const OS = {
         if (!area) return;
         let recent = [];
         try { recent = JSON.parse(localStorage.getItem('openshop_recent') || '[]'); } catch(e) { console.warn('localStorage read failed:', e.message); }
-        if (!recent.length) { area.innerHTML = ''; return; }
-        area.innerHTML = '<h3>Recent</h3>' + recent.slice(0, 5).map(r =>
-            `<div class="recent-item"><span>${r.name}</span><span class="ri-date">${r.dims} &middot; ${r.date}</span></div>`
-        ).join('');
+        this._clearNode(area);
+        if (!Array.isArray(recent) || !recent.length) return;
+        const title = document.createElement('h3');
+        title.textContent = 'Recent';
+        area.appendChild(title);
+        recent.slice(0, 5).forEach(r => {
+            const item = document.createElement('div');
+            item.className = 'recent-item';
+            const name = document.createElement('span');
+            name.textContent = this._safeText(r?.name, 100) || 'Untitled';
+            const meta = document.createElement('span');
+            meta.className = 'ri-date';
+            meta.textContent = `${this._safeText(r?.dims, 30)} · ${this._safeText(r?.date, 30)}`;
+            item.append(name, meta);
+            area.appendChild(item);
+        });
     },
     trackRecentFile(name, w, h) {
         let recent = [];
@@ -3856,7 +3929,7 @@ self.onmessage = async function(e) {
         if (!navigator.storage || !navigator.storage.getDirectory) return;
         try {
             const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-            json._openShop = { version:'0.18.6', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+            json._openShop = { version:'0.18.7', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
             const data = JSON.stringify(json);
             try {
                 const root = await navigator.storage.getDirectory();
@@ -5901,22 +5974,43 @@ self.onmessage = async function(e) {
     },
 
     // ====================== COLOR PALETTES ======================
+    _createPaletteSwatch(color) {
+        const safeColor = this._validHexColor(color);
+        if (!safeColor) return null;
+        const swatch = document.createElement('div');
+        swatch.className = 'palette-swatch';
+        swatch.style.backgroundColor = safeColor;
+        swatch.title = safeColor;
+        swatch.addEventListener('click', () => this.setFgColor(safeColor));
+        return swatch;
+    },
     initDefaultPalette() {
         const defaults = ['#ffffff','#000000','#ff0000','#00ff00','#0000ff','#ffff00','#ff00ff','#00ffff',
             '#ff6b6b','#ffa500','#48bb78','#4299e1','#9f7aea','#ed64a6','#667eea','#38b2ac',
             '#e53e3e','#dd6b20','#2f855a','#2b6cb0','#6b46c1','#d53f8c','#434190','#285e61'];
         const row = document.getElementById('palette-default');
         if (!row) return;
-        row.innerHTML = defaults.map(c => `<div class="palette-swatch" style="background:${c}" onclick="OS.setFgColor('${c}')" title="${c}"></div>`).join('');
+        this._clearNode(row);
+        defaults.forEach(c => {
+            const swatch = this._createPaletteSwatch(c);
+            if (swatch) row.appendChild(swatch);
+        });
     },
     loadSavedPalette() {
-        try { this._savedPalette = JSON.parse(localStorage.getItem('os_palette') || '[]'); } catch(e) { this._savedPalette = []; }
+        try {
+            const saved = JSON.parse(localStorage.getItem('os_palette') || '[]');
+            this._savedPalette = Array.isArray(saved) ? saved.map(c => this._validHexColor(c)).filter(Boolean).slice(0, 256) : [];
+        } catch(e) { this._savedPalette = []; }
         this._renderSavedPalette();
     },
     _renderSavedPalette() {
         const row = document.getElementById('palette-saved');
         if (!row) return;
-        row.innerHTML = this._savedPalette.map(c => `<div class="palette-swatch" style="background:${c}" onclick="OS.setFgColor('${c}')" title="${c}"></div>`).join('');
+        this._clearNode(row);
+        this._savedPalette.forEach(c => {
+            const swatch = this._createPaletteSwatch(c);
+            if (swatch) row.appendChild(swatch);
+        });
     },
     savePaletteColor() {
         const color = this.state.fgColor;
@@ -5950,10 +6044,11 @@ self.onmessage = async function(e) {
                 try {
                     const data = JSON.parse(ev.target.result);
                     if (data.colors && Array.isArray(data.colors)) {
-                        this._savedPalette = [...this._savedPalette, ...data.colors];
+                        const safeColors = data.colors.map(c => this._validHexColor(c)).filter(Boolean);
+                        this._savedPalette = [...this._savedPalette, ...safeColors].slice(0, 256);
                         try { localStorage.setItem('os_palette', JSON.stringify(this._savedPalette)); } catch(e) { console.warn('Palette save failed:', e.message); }
                         this._renderSavedPalette();
-                        this.toast(`Imported ${data.colors.length} colors`, 'success');
+                        this.toast(`Imported ${safeColors.length} colors`, 'success');
                     }
                 } catch(e) { this.toast('Invalid palette file', 'error'); }
             }; reader.readAsText(file);
@@ -7551,19 +7646,49 @@ self.onmessage = async function(e) {
         { name:'Golden Hour', adjustments:{brightness:10,contrast:5,saturation:20,hue:15,vibrance:25} },
     ],
     showPresets() {
-        try { this._presets = JSON.parse(localStorage.getItem('os_presets') || '[]'); } catch(e) { console.warn('Preset load:', e.message); }
+        try {
+            const saved = JSON.parse(localStorage.getItem('os_presets') || '[]');
+            this._presets = Array.isArray(saved) ? saved.map(p => this._safePreset(p)).filter(Boolean).slice(0, 200) : [];
+        } catch(e) { console.warn('Preset load:', e.message); }
         const all = [...this._builtinPresets, ...this._presets];
         const o = document.createElement('div'); o.className = 'modal-overlay';
-        o.innerHTML = `<div class="modal" style="min-width:420px"><h3>Photo Presets</h3>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
-                ${all.map((p,i) => `<button class="btn" onclick="OS.applyPreset(${i})" style="font-size:11px">${this._esc(p.name)}</button>`).join('')}
-            </div>
-            <div style="display:flex;gap:6px;margin-bottom:12px">
-                <button class="btn" onclick="OS.saveCurrentAsPreset(this.closest('.modal-overlay'))">Save Current</button>
-                <button class="btn" onclick="OS.importPreset()">Import JSON</button>
-                <button class="btn" onclick="OS.exportPresets()">Export All</button>
-            </div>
-            <div class="modal-btns"><button class="btn" onclick="this.closest('.modal-overlay').remove()">Close</button></div></div>`;
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.style.minWidth = '420px';
+        const title = document.createElement('h3');
+        title.textContent = 'Photo Presets';
+        const grid = document.createElement('div');
+        grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px';
+        all.forEach((p, i) => {
+            const btn = document.createElement('button');
+            btn.className = 'btn';
+            btn.style.fontSize = '11px';
+            btn.textContent = this._safeText(p.name, 80);
+            btn.addEventListener('click', () => this.applyPreset(i));
+            grid.appendChild(btn);
+        });
+        const actions = document.createElement('div');
+        actions.style.cssText = 'display:flex;gap:6px;margin-bottom:12px';
+        [
+            ['Save Current', () => this.saveCurrentAsPreset(o)],
+            ['Import JSON', () => this.importPreset()],
+            ['Export All', () => this.exportPresets()]
+        ].forEach(([label, fn]) => {
+            const btn = document.createElement('button');
+            btn.className = 'btn';
+            btn.textContent = label;
+            btn.addEventListener('click', fn);
+            actions.appendChild(btn);
+        });
+        const btns = document.createElement('div');
+        btns.className = 'modal-btns';
+        const close = document.createElement('button');
+        close.className = 'btn';
+        close.textContent = 'Close';
+        close.addEventListener('click', () => o.remove());
+        btns.appendChild(close);
+        modal.append(title, grid, actions, btns);
+        o.appendChild(modal);
         document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('show'));
     },
     applyPreset(idx) {
@@ -7604,7 +7729,7 @@ self.onmessage = async function(e) {
     _doSavePreset(overlay) {
         const name = overlay.querySelector('#preset-name-input').value.trim();
         if (!name) { this.toast('Enter a preset name', 'info'); return; }
-        this._presets.push({ name, adjustments:{brightness:0,contrast:0,saturation:0,hue:0,vibrance:0}, custom:true });
+        this._presets.push({ name: this._safeText(name, 80), adjustments:{brightness:0,contrast:0,saturation:0,hue:0,vibrance:0}, custom:true });
         try { localStorage.setItem('os_presets', JSON.stringify(this._presets)); } catch(e) { console.warn('Preset save:', e.message); }
         this.toast(`Saved: ${name}`, 'success');
         overlay.remove(); this.showPresets();
@@ -7617,9 +7742,10 @@ self.onmessage = async function(e) {
                 try {
                     const data = JSON.parse(ev.target.result);
                     const presets = Array.isArray(data) ? data : [data];
-                    presets.forEach(p => { if (p.name && p.adjustments) this._presets.push(p); });
+                    const safePresets = presets.map(p => this._safePreset(p)).filter(Boolean);
+                    this._presets = [...this._presets, ...safePresets].slice(0, 200);
                     try { localStorage.setItem('os_presets', JSON.stringify(this._presets)); } catch(e2) { console.warn('Preset save:', e2.message); }
-                    this.toast(`Imported ${presets.length} preset(s)`, 'success');
+                    this.toast(`Imported ${safePresets.length} preset(s)`, 'success');
                 } catch(e2) { this.toast('Invalid preset file', 'error'); }
             }; r.readAsText(f);
         }; input.click();

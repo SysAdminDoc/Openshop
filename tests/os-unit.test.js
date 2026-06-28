@@ -9,6 +9,7 @@ import {
 
 describe('OpenShop core object', () => {
   beforeEach(() => {
+    localStorage.clear();
     installFabricMock();
     mountEditorDom();
   });
@@ -177,6 +178,39 @@ describe('OpenShop core object', () => {
     expect(document.getElementById('canvas-a11y-live').textContent).toBe('Filter applied');
     expect(document.getElementById('canvas-area').getAttribute('aria-label')).toContain('Tool: AI Segment');
     expect(document.querySelectorAll('#canvas-a11y-layers li')).toHaveLength(2);
+  });
+
+  it('renders persisted recent files, palettes, and presets as inert DOM', () => {
+    const OS = loadOpenShop();
+    OS.canvas = createCanvasMock();
+    OS.cancelCrop = vi.fn();
+    const payload = '<img src=x onerror=alert(1)>';
+    localStorage.setItem('openshop_recent', JSON.stringify([
+      { name: payload, dims: '<svg onload=alert(2)>', date: '<script>alert(3)</script>' }
+    ]));
+    localStorage.setItem('os_palette', JSON.stringify([
+      '#112233',
+      'url(javascript:alert(1))',
+      '#AABBCC',
+      '<img src=x onerror=alert(1)>'
+    ]));
+    localStorage.setItem('os_presets', JSON.stringify([
+      { name: payload, adjustments: { brightness: '20', contrast: 'bad' }, custom: true }
+    ]));
+
+    OS.populateRecentFiles();
+    OS.loadSavedPalette();
+    OS.showPresets();
+
+    expect(document.querySelector('#recent-files-area img')).toBeNull();
+    expect(document.querySelector('#recent-files-area script')).toBeNull();
+    expect(document.getElementById('recent-files-area').textContent).toContain(payload);
+    expect(document.querySelectorAll('#palette-saved .palette-swatch')).toHaveLength(2);
+    expect([...document.querySelectorAll('#palette-saved .palette-swatch')].map(el => el.title)).toEqual(['#112233', '#aabbcc']);
+    const presetModal = document.querySelector('.modal-overlay .modal');
+    expect(presetModal.querySelector('img')).toBeNull();
+    expect(presetModal.querySelector('script')).toBeNull();
+    expect(presetModal.textContent).toContain(payload);
   });
 
   it('converts a clicked segmentation result into a pixel selection mask', async () => {

@@ -2,6 +2,13 @@
 
 All notable changes to Openshop will be documented in this file.
 
+## [v0.18.7] - 2026-06-28
+
+### Security
+- Render recent files, templates, saved palettes, and photo presets through DOM APIs instead of persisted-data `innerHTML`
+- Validate saved/imported palette colors as hex colors and normalize imported preset names/adjustment values
+- Add unit and Playwright malicious fixture coverage for recent, palette, and preset rendering
+
 ## [v0.18.6] - 2026-06-28
 
 ### Added

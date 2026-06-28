@@ -1,6 +1,6 @@
 # OpenShop
 
-![Version](https://img.shields.io/badge/version-0.18.6-blue)
+![Version](https://img.shields.io/badge/version-0.18.7-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Browser-orange)
 ![Zero Install](https://img.shields.io/badge/install-none_required-brightgreen)
@@ -149,6 +149,7 @@ Heavy filters (Oil Paint, Tilt Shift, Unsharp Mask, Posterize, Threshold, Vignet
 
 - Core startup CDN scripts are loaded with [Subresource Integrity (SRI)](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity) hashes
 - On-demand AI/filter modules are version-pinned and run client-side
+- Recent files, saved palettes, templates, and photo presets render through DOM APIs so persisted values remain inert text
 - Content Security Policy restricts script/style/connect sources
 - AI model revisions pinned to immutable commit SHAs (not mutable branch refs)
 - PSD layer names and project JSON are sanitized to prevent XSS injection

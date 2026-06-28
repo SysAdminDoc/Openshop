@@ -181,3 +181,28 @@ test('mirrors tool, layer, selection, and actions for assistive tech', async ({ 
   expect(result.canvasLabel).toContain('Tool: Brush');
   expect(result.layerItems).toBeGreaterThan(0);
 });
+
+test('renders persisted UI data without activating markup', async ({ page }) => {
+  await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => {
+    const payload = '<img src=x onerror=alert(1)>';
+    localStorage.setItem('openshop_recent', JSON.stringify([
+      { name: payload, dims: '<svg onload=alert(2)>', date: '<script>alert(3)</script>' }
+    ]));
+    localStorage.setItem('os_palette', JSON.stringify(['#112233', 'javascript:alert(1)', '#AABBCC']));
+    localStorage.setItem('os_presets', JSON.stringify([
+      { name: payload, adjustments: { brightness: 20 }, custom: true }
+    ]));
+    OS.populateRecentFiles();
+    OS.loadSavedPalette();
+    OS.showPresets();
+  });
+
+  await expect(page.locator('#recent-files-area img')).toHaveCount(0);
+  await expect(page.locator('#recent-files-area script')).toHaveCount(0);
+  await expect(page.locator('#recent-files-area')).toContainText('<img src=x onerror=alert(1)>');
+  await expect(page.locator('#palette-saved .palette-swatch')).toHaveCount(2);
+  await expect(page.locator('.modal-overlay .modal img')).toHaveCount(0);
+  await expect(page.locator('.modal-overlay .modal script')).toHaveCount(0);
+  await expect(page.locator('.modal-overlay .modal')).toContainText('<img src=x onerror=alert(1)>');
+});
