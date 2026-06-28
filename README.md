@@ -1,6 +1,6 @@
 # OpenShop
 
-![Version](https://img.shields.io/badge/version-0.18.5-blue)
+![Version](https://img.shields.io/badge/version-0.18.6-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Browser-orange)
 ![Zero Install](https://img.shields.io/badge/install-none_required-brightgreen)
@@ -85,7 +85,7 @@ Heavy filters (Oil Paint, Tilt Shift, Unsharp Mask, Posterize, Threshold, Vignet
 | **Welcome Screen** | Template presets for common canvas sizes |
 | **Tab Toggle** | `Tab` hides all panels for distraction-free editing |
 | **PWA Support** | Installable as a standalone desktop app with offline CDN caching |
-| **Accessibility** | ARIA roles, keyboard navigation, focus indicators, reduced-motion support |
+| **Accessibility** | ARIA roles, keyboard navigation, focus indicators, reduced-motion support, hidden canvas-state mirror, and live status announcements |
 
 ## Keyboard Shortcuts
 

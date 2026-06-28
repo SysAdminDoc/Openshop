@@ -153,6 +153,16 @@ export function mountEditorDom() {
     <div id="pen-overlay" style="display:none"></div>
     <div id="measure-overlay" style="display:none"></div>
     <div id="selection-overlay" style="display:none"></div>
+    <div id="canvas-area" role="application" aria-describedby="canvas-a11y-summary"></div>
+    <section id="canvas-a11y-tree">
+      <p id="canvas-a11y-summary"></p>
+      <p id="canvas-a11y-tool"></p>
+      <p id="canvas-a11y-layer"></p>
+      <p id="canvas-a11y-selection"></p>
+      <p id="canvas-a11y-objects"></p>
+      <ul id="canvas-a11y-layers"></ul>
+    </section>
+    <div id="canvas-a11y-live"></div>
     <div id="tool-display"></div>
     <div id="layers-list"></div>
     <input id="layer-opacity" value="100">

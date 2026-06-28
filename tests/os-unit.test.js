@@ -144,6 +144,41 @@ describe('OpenShop core object', () => {
     expect(OS.setTool).toHaveBeenCalledWith('brush');
   });
 
+  it('mirrors canvas state into hidden accessibility nodes', () => {
+    const OS = loadOpenShop();
+    const canvasObject = { name: 'Subject', type: 'image' };
+    OS.canvas = createCanvasMock([canvasObject]);
+    OS.cancelCrop = vi.fn();
+    OS.updateInfoPanel = vi.fn();
+    OS.updateMinimap = vi.fn();
+    OS.updateHistogram = vi.fn();
+    OS.updateHistoryPanel = vi.fn();
+    OS.recordMacroStep = vi.fn();
+    OS.layers = [
+      { name: 'Background', visible: true, locked: true, opacity: 100, blend: 'source-over', objects: [] },
+      { name: 'Subject Layer', visible: true, locked: false, opacity: 80, blend: 'multiply', objects: [canvasObject] }
+    ];
+    OS.activeLayerIdx = 1;
+    OS._selectionBounds = { x: 4, y: 6, w: 10, h: 12 };
+    OS._selectionMask = { w: 20, h: 20, mask: new Uint8Array(400) };
+    OS._selectionMask.mask[0] = 1;
+    OS._selectionMask.mask[1] = 1;
+
+    OS.setTool('ai-segment');
+    OS._lastAction = 'Filter: Sharpen';
+    OS._renderAccessibilityTree();
+    OS.toast('Filter applied', 'success');
+
+    expect(document.getElementById('canvas-a11y-tool').textContent).toBe('Tool: AI Segment');
+    expect(document.getElementById('canvas-a11y-layer').textContent).toContain('Subject Layer');
+    expect(document.getElementById('canvas-a11y-layer').textContent).toContain('multiply');
+    expect(document.getElementById('canvas-a11y-selection').textContent).toContain('2 pixels selected');
+    expect(document.getElementById('canvas-a11y-summary').textContent).toContain('Last action: Filter: Sharpen');
+    expect(document.getElementById('canvas-a11y-live').textContent).toBe('Filter applied');
+    expect(document.getElementById('canvas-area').getAttribute('aria-label')).toContain('Tool: AI Segment');
+    expect(document.querySelectorAll('#canvas-a11y-layers li')).toHaveLength(2);
+  });
+
   it('converts a clicked segmentation result into a pixel selection mask', async () => {
     const OS = loadOpenShop();
     const target = {

@@ -2,6 +2,13 @@
 
 All notable changes to Openshop will be documented in this file.
 
+## [v0.18.6] - 2026-06-28
+
+### Added
+- Hidden canvas accessibility tree mirroring current tool, active layer, object count, selection state, and layer list for screen readers
+- Polite canvas live region for status/action announcements, plus `aria-roledescription` and state-rich canvas labels
+- Unit and Playwright coverage for assistive-technology state mirroring
+
 ## [v0.18.5] - 2026-06-27
 
 ### Added

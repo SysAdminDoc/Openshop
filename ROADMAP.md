@@ -77,13 +77,6 @@ Single-file browser image editor with layers, PSD import, and client-side AI. Ro
 ### P2 — Later (features and UX)
 
 
-- [ ] P2 — Accessibility: parallel hidden DOM for screen readers
-  Why: Current ARIA attributes cover static UI but canvas content is invisible to screen readers; Figma's approach of parallel hidden DOM is the gold standard
-  Evidence: https://www.figma.com/blog/introducing-screenreader-and-accessibility-features/; WCAG canvas guidance
-  Touches: Maintain hidden div tree mirroring layers, selections, and active tool state; aria-live region for state changes; role="application" with aria-roledescription
-  Acceptance: VoiceOver/NVDA can announce current tool, active layer name, selection state, and filter application results
-  Complexity: L
-
 - [ ] P2 — Wide-gamut color picker with Color.js and oklch()
   Why: Current color picker is sRGB-only; modern displays (all Apple devices since 2016) support Display P3; oklch() has ~90.5% browser support
   Evidence: CSS Color Level 4 spec; Color.js library (v0.6.1, tree-shakeable, by CSS spec editors)

@@ -10,7 +10,7 @@
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src blob:;">
-<title>OpenShop v0.18.5 — Online Image Editor</title>
+<title>OpenShop v0.18.6 — Online Image Editor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js" integrity="sha384-sLpuECXYCB5TUyTbC06pftm/rgurDambREZmV4eRHwEqJzCQtU6lxI2Ve00z4XW5" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/ag-psd@22.0.2/dist/bundle.js" integrity="sha384-kla4KJzEnshZnuWyJ8+AF8KEX0YZ2rpxTaQpDtDUmDdUv7jK94knsRx/lcRZ/HF4" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js" integrity="sha384-qovJwSBbRDPP5cEjCp8S0UP66wrvnjaa60XMOGzTNanrThcrGfXfnZkvgY8N1KT3" crossorigin="anonymous"></script>
@@ -124,6 +124,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg-depth-0);co
 .panel-action{width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:4px;cursor:pointer;color:var(--text-muted);transition:all .15s;border:none;background:transparent}
 .panel-action:hover{background:var(--bg-depth-3);color:var(--text-primary)}
 .panel-action svg{width:14px;height:14px}
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 
 /* Layers */
 #layers-list{max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
@@ -560,7 +561,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <!-- ===== TOP MENU ===== -->
 <div id="topbar" role="menubar" aria-label="Main menu">
-    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.5</span></div>
+    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.6</span></div>
     <div class="menu-item" role="menuitem" aria-haspopup="true">File
         <div class="menu-dropdown">
             <div class="dd-item" onclick="OS.newImage()">New</div>
@@ -1050,7 +1051,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 <div class="ruler-v" id="ruler-v"><canvas id="ruler-v-canvas" width="20"></canvas></div>
 
 <!-- ===== CANVAS ===== -->
-<div id="canvas-area" role="application" aria-label="Image canvas">
+<div id="canvas-area" role="application" aria-roledescription="image editor canvas" aria-label="Image canvas" aria-describedby="canvas-a11y-summary">
     <canvas id="editor-canvas" aria-label="Drawing surface"></canvas>
     <canvas class="canvas-grid" id="grid-overlay"></canvas>
     <div id="guides-container"></div>
@@ -1060,6 +1061,16 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
     <div id="selection-overlay" class="selection-rect" style="display:none"></div>
     <div id="crop-container" class="crop-overlay" style="display:none"></div>
 </div>
+<section id="canvas-a11y-tree" class="sr-only" aria-label="Canvas state">
+    <h2>Canvas state</h2>
+    <p id="canvas-a11y-summary">OpenShop canvas ready.</p>
+    <p id="canvas-a11y-tool">Tool: Select</p>
+    <p id="canvas-a11y-layer">Active layer: none</p>
+    <p id="canvas-a11y-selection">Selection: none</p>
+    <p id="canvas-a11y-objects">Objects: 0</p>
+    <ul id="canvas-a11y-layers"></ul>
+</section>
+<div id="canvas-a11y-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 
 <!-- ===== WELCOME SCREEN ===== -->
 <div id="welcome-overlay" role="dialog" aria-label="Welcome to OpenShop">
@@ -1385,7 +1396,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <script>
 // ================================================================
-//  OpenShop v0.18.5 — Core Engine (Phase 10: Pro Toolbar)
+//  OpenShop v0.18.6 — Core Engine (Phase 10: Pro Toolbar)
 // ================================================================
 const OS = {
     _esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
@@ -1678,7 +1689,7 @@ const OS = {
     _projectFileHandle: null,
     async saveProject() {
         const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-        json._openShop = { version:'0.18.5', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+        json._openShop = { version:'0.18.6', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
         const data = JSON.stringify(json);
         if (this._projectFileHandle) {
             try {
@@ -1894,6 +1905,7 @@ const OS = {
             document.getElementById('layer-blend').value = al.blend;
         }
         this.updateInfoPanel();
+        this._renderAccessibilityTree();
     },
     toggleLayerLock(idx) {
         this.layers[idx].locked = !this.layers[idx].locked;
@@ -2077,6 +2089,7 @@ const OS = {
         }
         const toolNames = {'marquee-rect':'Rect Marquee','marquee-ellipse':'Ellipse Marquee','magic-wand':'Magic Wand','ai-segment':'AI Segment'};
         document.getElementById('tool-display').textContent = toolNames[tool] || tool.charAt(0).toUpperCase()+tool.replace(/-/g,' ').slice(1);
+        this._renderAccessibilityTree();
     },
     setBrushSize(v) { this.state.brushSize=+v; document.getElementById('brush-size-val').textContent=v; if(this.canvas.freeDrawingBrush) this.canvas.freeDrawingBrush.width=+v; },
     setBrushOpacity(v) {
@@ -2439,6 +2452,7 @@ const OS = {
         if (lassoPoly) lassoPoly.setAttribute('points', '');
         this.canvas.getObjects().filter(o=>o._wandOverlay).forEach(o=>this.canvas.remove(o));
         this.canvas.renderAll();
+        this._renderAccessibilityTree();
     },
 
     // ====================== SELECTION OPERATIONS ======================
@@ -2697,6 +2711,7 @@ const OS = {
             el.style.width = (maxX - minX + 1) + 'px'; el.style.height = (maxY - minY + 1) + 'px';
             el.style.borderRadius = '0';
         } else { el.style.display = 'none'; }
+        this._renderAccessibilityTree();
     },
 
     // Show blue tint overlay for pixel mask
@@ -3353,6 +3368,7 @@ const OS = {
         const snap=JSON.stringify(this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']));
         this.history.push({action,snapshot:snap});
         if(this.history.length>this.maxHistory) this.history.shift();
+        this._lastAction = action;
         this.historyIdx=this.history.length-1; this._autoSaveDirty=true; this.updateHistoryPanel(); this.updateStatus(); this.updateMinimap();
         this.recordMacroStep(action);
         this.updateHistogram();
@@ -3840,7 +3856,7 @@ self.onmessage = async function(e) {
         if (!navigator.storage || !navigator.storage.getDirectory) return;
         try {
             const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-            json._openShop = { version:'0.18.5', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+            json._openShop = { version:'0.18.6', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
             const data = JSON.stringify(json);
             try {
                 const root = await navigator.storage.getDirectory();
@@ -7623,15 +7639,83 @@ self.onmessage = async function(e) {
     },
 
     // ====================== STATUS / TOAST ======================
+    _toolLabel(tool) {
+        const names = {
+            'marquee-rect':'Rect Marquee', 'marquee-ellipse':'Ellipse Marquee',
+            'magic-wand':'Magic Wand', 'ai-segment':'AI Segment',
+            'clone':'Clone Stamp', 'healing':'Healing Brush'
+        };
+        const value = tool || this.state.tool || 'select';
+        return names[value] || value.charAt(0).toUpperCase() + value.replace(/-/g, ' ').slice(1);
+    },
+    _activeLayerSummary() {
+        const layer = this.layers[this.activeLayerIdx];
+        if (!layer) return 'none';
+        const objectCount = layer.objects.filter(o => o.name !== '__boundary__').length;
+        const state = [
+            layer.visible === false ? 'hidden' : 'visible',
+            layer.locked ? 'locked' : 'unlocked',
+            `${layer.opacity}% opacity`,
+            layer.blend && layer.blend !== 'source-over' ? layer.blend : 'normal blend',
+            `${objectCount} object${objectCount !== 1 ? 's' : ''}`
+        ];
+        return `${layer.name}, ${state.join(', ')}`;
+    },
+    _selectionSummary() {
+        if (!this._selectionBounds) return 'none';
+        const b = this._selectionBounds;
+        const count = this._selectionMask ? this._selectionMask.mask.reduce((sum, v) => sum + (v ? 1 : 0), 0) : null;
+        const size = `${Math.round(b.w)} by ${Math.round(b.h)} pixels at ${Math.round(b.x)}, ${Math.round(b.y)}`;
+        return count ? `${count.toLocaleString()} pixels selected, ${size}` : `selection bounds ${size}`;
+    },
+    _objectSummary() {
+        const objs = this.canvas ? this.canvas.getObjects().filter(o => o.name !== '__boundary__' && !o._wandOverlay) : [];
+        return `${objs.length} object${objs.length !== 1 ? 's' : ''}`;
+    },
+    _renderAccessibilityTree() {
+        const root = document.getElementById('canvas-a11y-tree');
+        if (!root || !this.canvas) return;
+        const tool = this._toolLabel(this.state.tool);
+        const layer = this._activeLayerSummary();
+        const selection = this._selectionSummary();
+        const objects = this._objectSummary();
+        const action = this._lastAction ? ` Last action: ${this._lastAction}.` : '';
+        const summary = `Tool: ${tool}. Active layer: ${layer}. Selection: ${selection}. ${objects}.${action}`;
+        const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+        setText('canvas-a11y-summary', summary);
+        setText('canvas-a11y-tool', `Tool: ${tool}`);
+        setText('canvas-a11y-layer', `Active layer: ${layer}`);
+        setText('canvas-a11y-selection', `Selection: ${selection}`);
+        setText('canvas-a11y-objects', `Objects: ${objects}`);
+        const canvasArea = document.getElementById('canvas-area');
+        if (canvasArea) canvasArea.setAttribute('aria-label', summary);
+        const list = document.getElementById('canvas-a11y-layers');
+        if (list) {
+            list.innerHTML = '';
+            this.layers.forEach((l, i) => {
+                const item = document.createElement('li');
+                const objectCount = l.objects.filter(o => o.name !== '__boundary__').length;
+                item.textContent = `${i === this.activeLayerIdx ? 'Active layer' : 'Layer'} ${i}: ${l.name}, ${l.visible === false ? 'hidden' : 'visible'}, ${l.locked ? 'locked' : 'unlocked'}, ${objectCount} object${objectCount !== 1 ? 's' : ''}`;
+                list.appendChild(item);
+            });
+        }
+    },
+    _announceAccessibility(msg) {
+        const live = document.getElementById('canvas-a11y-live');
+        if (live) live.textContent = msg || '';
+        this._renderAccessibilityTree();
+    },
     updateStatus() {
         const objs=this.canvas.getObjects().filter(o=>o.name!=='__boundary__');
         document.getElementById('object-count').textContent=`${objs.length} object${objs.length!==1?'s':''}`;
         this.updateInfoPanel();
+        this._renderAccessibilityTree();
     },
     toast(msg, type='info') {
         const el=document.getElementById('toast-container');
         const t=document.createElement('div'); t.className=`toast ${type}`; t.textContent=msg;
         el.appendChild(t); requestAnimationFrame(()=>t.classList.add('show'));
+        this._announceAccessibility(msg);
         setTimeout(()=>{t.classList.remove('show');setTimeout(()=>t.remove(),300);},2500);
     },
 };

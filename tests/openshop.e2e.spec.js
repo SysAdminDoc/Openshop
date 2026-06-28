@@ -145,3 +145,39 @@ test('creates a pixel selection from a mocked AI segment mask', async ({ page })
   expect(result.bounds.w).toBeGreaterThan(0);
   expect(result.bounds.h).toBeGreaterThan(0);
 });
+
+test('mirrors tool, layer, selection, and actions for assistive tech', async ({ page }) => {
+  await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Skip' }).click();
+
+  await page.locator('button[title="New Layer"]').click();
+
+  const result = await page.evaluate(() => {
+    OS.setTool('brush');
+    OS._selectionBounds = { x: 3, y: 4, w: 12, h: 14 };
+    OS._selectionMask = { w: 32, h: 32, mask: new Uint8Array(32 * 32) };
+    OS._selectionMask.mask[0] = 1;
+    OS._selectionMask.mask[1] = 1;
+    OS.saveHistory('Accessibility Smoke');
+    OS.toast('Accessibility status');
+    return {
+      summary: document.getElementById('canvas-a11y-summary').textContent,
+      tool: document.getElementById('canvas-a11y-tool').textContent,
+      layer: document.getElementById('canvas-a11y-layer').textContent,
+      selection: document.getElementById('canvas-a11y-selection').textContent,
+      live: document.getElementById('canvas-a11y-live').textContent,
+      canvasLabel: document.getElementById('canvas-area').getAttribute('aria-label'),
+      roleDescription: document.getElementById('canvas-area').getAttribute('aria-roledescription'),
+      layerItems: document.querySelectorAll('#canvas-a11y-layers li').length
+    };
+  });
+
+  expect(result.roleDescription).toBe('image editor canvas');
+  expect(result.tool).toBe('Tool: Brush');
+  expect(result.layer).toContain('Layer');
+  expect(result.selection).toContain('2 pixels selected');
+  expect(result.summary).toContain('Last action: Accessibility Smoke');
+  expect(result.live).toBe('Accessibility status');
+  expect(result.canvasLabel).toContain('Tool: Brush');
+  expect(result.layerItems).toBeGreaterThan(0);
+});
