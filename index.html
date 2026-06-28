@@ -9,8 +9,8 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src blob:;">
-<title>OpenShop v0.18.7 — Online Image Editor</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src blob:;">
+<title>OpenShop v0.18.8 — Online Image Editor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js" integrity="sha384-sLpuECXYCB5TUyTbC06pftm/rgurDambREZmV4eRHwEqJzCQtU6lxI2Ve00z4XW5" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/ag-psd@22.0.2/dist/bundle.js" integrity="sha384-kla4KJzEnshZnuWyJ8+AF8KEX0YZ2rpxTaQpDtDUmDdUv7jK94knsRx/lcRZ/HF4" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js" integrity="sha384-qovJwSBbRDPP5cEjCp8S0UP66wrvnjaa60XMOGzTNanrThcrGfXfnZkvgY8N1KT3" crossorigin="anonymous"></script>
@@ -561,7 +561,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <!-- ===== TOP MENU ===== -->
 <div id="topbar" role="menubar" aria-label="Main menu">
-    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.7</span></div>
+    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.8</span></div>
     <div class="menu-item" role="menuitem" aria-haspopup="true">File
         <div class="menu-dropdown">
             <div class="dd-item" onclick="OS.newImage()">New</div>
@@ -1396,7 +1396,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <script>
 // ================================================================
-//  OpenShop v0.18.7 — Core Engine (Phase 10: Pro Toolbar)
+//  OpenShop v0.18.8 — Core Engine (Phase 10: Pro Toolbar)
 // ================================================================
 const OS = {
     _esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
@@ -1689,7 +1689,7 @@ const OS = {
     _projectFileHandle: null,
     async saveProject() {
         const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-        json._openShop = { version:'0.18.7', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+        json._openShop = { version:'0.18.8', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
         const data = JSON.stringify(json);
         if (this._projectFileHandle) {
             try {
@@ -3309,20 +3309,19 @@ const OS = {
         this._filterBackup = null; this._filterBackupRaw = null; this._filterTarget = null;
     },
     _getDirectPhotonFilter(name) {
-        const convolution = (matrix) => `const src=new Uint8ClampedArray(d),m=${JSON.stringify(matrix)};for(let y=1;y<h-1;y++){for(let x=1;x<w-1;x++){const idx=(y*w+x)*4;for(let c=0;c<3;c++){let sum=0,k=0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){sum+=src[((y+dy)*w+x+dx)*4+c]*m[k++];}d[idx+c]=Math.max(0,Math.min(255,sum));}}}`;
         switch(name) {
             case 'Grayscale':
-                return {op:'grayscale', fn:`for(let i=0;i<d.length;i+=4){const l=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];d[i]=d[i+1]=d[i+2]=l;}`};
+                return {op:'grayscale'};
             case 'Invert':
-                return {op:'invert', fn:`for(let i=0;i<d.length;i+=4){d[i]=255-d[i];d[i+1]=255-d[i+1];d[i+2]=255-d[i+2];}`};
+                return {op:'invert'};
             case 'Sepia':
-                return {op:'sepia', fn:`for(let i=0;i<d.length;i+=4){const r=d[i],g=d[i+1],b=d[i+2];d[i]=Math.min(255,0.393*r+0.769*g+0.189*b);d[i+1]=Math.min(255,0.349*r+0.686*g+0.168*b);d[i+2]=Math.min(255,0.272*r+0.534*g+0.131*b);}`};
+                return {op:'sepia'};
             case 'BlackWhite':
-                return {op:'threshold', fn:`for(let i=0;i<d.length;i+=4){const l=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];const v=l>=128?255:0;d[i]=d[i+1]=d[i+2]=v;}`, params:{thr:128}};
+                return {op:'threshold', params:{thr:128}};
             case 'Sharpen':
-                return {op:'sharpen', fn:convolution([0,-1,0,-1,5,-1,0,-1,0])};
+                return {op:'sharpen'};
             case 'Emboss':
-                return {op:'emboss', fn:convolution([-2,-1,0,-1,1,1,0,1,2])};
+                return {op:'emboss'};
             default:
                 return null;
         }
@@ -3330,7 +3329,7 @@ const OS = {
     async _applyImageDataFilterDirect(name, spec) {
         const info = this._getActiveImageData(); if (!info) return false;
         this.toast('Applying ' + name.replace('BlackWhite', 'Black & White') + '...', 'info');
-        info.imgData = await this._runFilterWithPhoton(spec.op, spec.fn, info.imgData, info.canvas.width, info.canvas.height, spec.params || {});
+        info.imgData = await this._runFilterWithPhoton(spec.op, info.imgData, info.canvas.width, info.canvas.height, spec.params || {});
         this._commitImageData(info, 'Filter: ' + name);
         this.toast(`Applied ${name.replace('BlackWhite', 'Black & White')}`, 'success');
         this._lastFilter = name;
@@ -3929,7 +3928,7 @@ self.onmessage = async function(e) {
         if (!navigator.storage || !navigator.storage.getDirectory) return;
         try {
             const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-            json._openShop = { version:'0.18.7', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+            json._openShop = { version:'0.18.8', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
             const data = JSON.stringify(json);
             try {
                 const root = await navigator.storage.getDirectory();
@@ -5019,8 +5018,174 @@ async function runPhotonFilter(op, d, w, h, p) {
         img.free();
     }
 }
+const filterOps = {
+    grayscale(d) {
+        for (let i = 0; i < d.length; i += 4) {
+            const l = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+            d[i] = d[i + 1] = d[i + 2] = l;
+        }
+    },
+    invert(d) {
+        for (let i = 0; i < d.length; i += 4) {
+            d[i] = 255 - d[i]; d[i + 1] = 255 - d[i + 1]; d[i + 2] = 255 - d[i + 2];
+        }
+    },
+    sepia(d) {
+        for (let i = 0; i < d.length; i += 4) {
+            const r = d[i], g = d[i + 1], b = d[i + 2];
+            d[i] = Math.min(255, 0.393 * r + 0.769 * g + 0.189 * b);
+            d[i + 1] = Math.min(255, 0.349 * r + 0.686 * g + 0.168 * b);
+            d[i + 2] = Math.min(255, 0.272 * r + 0.534 * g + 0.131 * b);
+        }
+    },
+    _convolution(d, w, h, matrix) {
+        const src = new Uint8ClampedArray(d);
+        for (let y = 1; y < h - 1; y++) {
+            for (let x = 1; x < w - 1; x++) {
+                const idx = (y * w + x) * 4;
+                for (let c = 0; c < 3; c++) {
+                    let sum = 0, k = 0;
+                    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+                        sum += src[((y + dy) * w + x + dx) * 4 + c] * matrix[k++];
+                    }
+                    d[idx + c] = Math.max(0, Math.min(255, sum));
+                }
+            }
+        }
+    },
+    sharpen(d, w, h) {
+        this._convolution(d, w, h, [0, -1, 0, -1, 5, -1, 0, -1, 0]);
+    },
+    emboss(d, w, h) {
+        this._convolution(d, w, h, [-2, -1, 0, -1, 1, 1, 0, 1, 2]);
+    },
+    posterize(d, w, h, p) {
+        const levels = Math.max(2, Math.min(32, Number(p.levels) || 6));
+        const step = 255 / (levels - 1);
+        for (let i = 0; i < d.length; i += 4) {
+            for (let c = 0; c < 3; c++) d[i + c] = Math.round(Math.round(d[i + c] / step) * step);
+        }
+    },
+    threshold(d, w, h, p) {
+        const thr = Math.max(0, Math.min(255, Number(p.thr ?? p.threshold) || 128));
+        for (let i = 0; i < d.length; i += 4) {
+            const l = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+            const v = l >= thr ? 255 : 0;
+            d[i] = d[i + 1] = d[i + 2] = v;
+        }
+    },
+    edgeDetect(d, w, h) {
+        const src = new Uint8ClampedArray(d);
+        for (let y = 1; y < h - 1; y++) {
+            for (let x = 1; x < w - 1; x++) {
+                const idx = (y * w + x) * 4;
+                for (let c = 0; c < 3; c++) {
+                    const gx = -src[((y - 1) * w + x - 1) * 4 + c] + src[((y - 1) * w + x + 1) * 4 + c] - 2 * src[(y * w + x - 1) * 4 + c] + 2 * src[(y * w + x + 1) * 4 + c] - src[((y + 1) * w + x - 1) * 4 + c] + src[((y + 1) * w + x + 1) * 4 + c];
+                    const gy = -src[((y - 1) * w + x - 1) * 4 + c] - 2 * src[((y - 1) * w + x) * 4 + c] - src[((y - 1) * w + x + 1) * 4 + c] + src[((y + 1) * w + x - 1) * 4 + c] + 2 * src[((y + 1) * w + x) * 4 + c] + src[((y + 1) * w + x + 1) * 4 + c];
+                    d[idx + c] = Math.min(255, Math.sqrt(gx * gx + gy * gy));
+                }
+            }
+        }
+    },
+    vignette(d, w, h, p) {
+        const amt = Math.max(0, Math.min(1, Number(p.amt) || 0.5));
+        const soft = Math.max(0.01, Math.min(1, Number(p.soft) || 0.6));
+        const cx = w / 2, cy = h / 2, maxR = Math.sqrt(cx * cx + cy * cy);
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2) / maxR;
+                const factor = 1 - amt * Math.pow(Math.max(0, dist - (1 - soft)) / soft, 2);
+                const idx = (y * w + x) * 4;
+                d[idx] *= factor; d[idx + 1] *= factor; d[idx + 2] *= factor;
+            }
+        }
+    },
+    unsharpMask(d, w, h, p) {
+        const amount = Math.max(0, Math.min(3, Number(p.amount) || 1));
+        const radius = Math.max(1, Math.min(10, Number(p.radius) || 2));
+        const blurred = new Uint8ClampedArray(d), r = Math.ceil(radius);
+        for (let y = r; y < h - r; y++) {
+            for (let x = r; x < w - r; x++) {
+                let sr = 0, sg = 0, sb = 0, cnt = 0;
+                for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+                    const i = ((y + dy) * w + x + dx) * 4;
+                    sr += d[i]; sg += d[i + 1]; sb += d[i + 2]; cnt++;
+                }
+                const i = (y * w + x) * 4;
+                blurred[i] = sr / cnt; blurred[i + 1] = sg / cnt; blurred[i + 2] = sb / cnt;
+            }
+        }
+        for (let i = 0; i < d.length; i += 4) {
+            for (let c = 0; c < 3; c++) d[i + c] = Math.max(0, Math.min(255, Math.round(d[i + c] + amount * (d[i + c] - blurred[i + c]))));
+        }
+    },
+    oilPaint(d, w, h, p) {
+        const radius = Math.max(1, Math.min(6, Math.round(Number(p.radius) || 3)));
+        const levels = Math.max(4, Math.min(32, Math.round(Number(p.levels) || 16)));
+        const src = new Uint8ClampedArray(d);
+        for (let y = radius; y < h - radius; y++) {
+            for (let x = radius; x < w - radius; x++) {
+                const bins = new Array(levels).fill(0), sr = new Array(levels).fill(0), sg = new Array(levels).fill(0), sb = new Array(levels).fill(0);
+                for (let dy = -radius; dy <= radius; dy++) for (let dx = -radius; dx <= radius; dx++) {
+                    const i = ((y + dy) * w + x + dx) * 4;
+                    const l = Math.round((src[i] + src[i + 1] + src[i + 2]) / 3 / (256 / levels));
+                    const b = Math.min(l, levels - 1);
+                    bins[b]++; sr[b] += src[i]; sg[b] += src[i + 1]; sb[b] += src[i + 2];
+                }
+                let maxBin = 0, maxCount = 0;
+                for (let b = 0; b < levels; b++) if (bins[b] > maxCount) { maxCount = bins[b]; maxBin = b; }
+                const i = (y * w + x) * 4;
+                d[i] = sr[maxBin] / maxCount; d[i + 1] = sg[maxBin] / maxCount; d[i + 2] = sb[maxBin] / maxCount;
+            }
+        }
+    },
+    duotone(d, w, h, p) {
+        const sr = Number(p.sr) || 0, sg = Number(p.sg) || 0, sb = Number(p.sb) || 0;
+        const hr = Number(p.hr) || 255, hg = Number(p.hg) || 255, hb = Number(p.hb) || 255;
+        for (let i = 0; i < d.length; i += 4) {
+            const l = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
+            d[i] = Math.round(sr + (hr - sr) * l);
+            d[i + 1] = Math.round(sg + (hg - sg) * l);
+            d[i + 2] = Math.round(sb + (hb - sb) * l);
+        }
+    },
+    tiltShift(d, w, h, p) {
+        const focusY = Math.max(0, Math.min(1, Number(p.focusY) || 0.5));
+        const focusW = Math.max(0.05, Math.min(0.6, Number(p.focusW) || 0.2));
+        const blurR = Math.max(1, Math.min(10, Number(p.blurR) || 4));
+        const src = new Uint8ClampedArray(d);
+        for (let y = 0; y < h; y++) {
+            const ny = y / h, dist = Math.abs(ny - focusY);
+            const blurAmt = Math.max(0, (dist - focusW / 2) / (0.5 - focusW / 2));
+            const r = Math.round(blurAmt * blurR);
+            if (r < 1) continue;
+            for (let x = 0; x < w; x++) {
+                let sr = 0, sg = 0, sb = 0, cnt = 0;
+                for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+                    const sy = Math.max(0, Math.min(h - 1, y + dy)), sx = Math.max(0, Math.min(w - 1, x + dx));
+                    const i = (sy * w + sx) * 4;
+                    sr += src[i]; sg += src[i + 1]; sb += src[i + 2]; cnt++;
+                }
+                const i = (y * w + x) * 4;
+                d[i] = sr / cnt; d[i + 1] = sg / cnt; d[i + 2] = sb / cnt;
+            }
+        }
+    },
+    chromaticAberration(d, w, h, p) {
+        const off = Math.max(1, Math.min(15, Math.round(Number(p.off) || 4)));
+        const src = new Uint8ClampedArray(d);
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const i = (y * w + x) * 4;
+                const rx = Math.min(w - 1, x + off), bx = Math.max(0, x - off);
+                d[i] = src[(y * w + rx) * 4];
+                d[i + 2] = src[(y * w + bx) * 4 + 2];
+            }
+        }
+    }
+};
 self.onmessage = async function(e) {
-    const { fn, data, width, height, params, backend, op } = e.data;
+    const { data, width, height, params, backend, op } = e.data;
     const d = new Uint8ClampedArray(data);
     const w = width, h = height, p = params || {};
     try {
@@ -5029,8 +5194,9 @@ self.onmessage = async function(e) {
             self.postMessage({ data: out.buffer, width, height, backend: 'photon' }, [out.buffer]);
             return;
         }
-        const F = new Function('d', 'w', 'h', 'p', fn);
-        F(d, w, h, p);
+        const filter = filterOps[op];
+        if (!filter) throw new Error('Unsupported worker filter: ' + op);
+        filter.call(filterOps, d, w, h, p);
         self.postMessage({ data: d.buffer, width, height, backend: 'worker' }, [d.buffer]);
     } catch (err) {
         const message = err && err.message ? err.message : String(err);
@@ -5059,13 +5225,13 @@ self.onmessage = async function(e) {
             worker.postMessage({...payload, data: buf, width, height, params: params||{}}, [buf]);
         });
     },
-    _runFilterInWorker(fn, imgData, width, height, params) {
-        return this._runFilterJob({backend:'worker', fn}, imgData, width, height, params);
+    _runFilterInWorker(op, imgData, width, height, params) {
+        return this._runFilterJob({backend:'worker', op}, imgData, width, height, params);
     },
     _runPhotonFilterInWorker(op, imgData, width, height, params) {
         return this._runFilterJob({backend:'photon', op}, imgData, width, height, params);
     },
-    async _runFilterWithPhoton(op, fallbackFn, imgData, width, height, params) {
+    async _runFilterWithPhoton(op, imgData, width, height, params) {
         if (!this._photonFilterDisabled) {
             try {
                 return await this._runPhotonFilterInWorker(op, imgData, width, height, params);
@@ -5074,7 +5240,7 @@ self.onmessage = async function(e) {
                 console.warn('Photon filter backend unavailable; falling back to JS worker:', err);
             }
         }
-        return this._runFilterInWorker(fallbackFn, imgData, width, height, params);
+        return this._runFilterInWorker(op, imgData, width, height, params);
     },
 
     // ====================== PHASE 7: ADVANCED FILTERS ======================
@@ -5100,7 +5266,7 @@ self.onmessage = async function(e) {
         const info = this._getActiveImageData(); if (!info) { this._removeFilterPanel('posterize-overlay'); return; }
         const levels = +(panel.querySelector('#fp-lvl')?.value||6);
         this.toast('Applying posterize...', 'info');
-        info.imgData = await this._runFilterInWorker(`const step=255/(p.levels-1);for(let i=0;i<d.length;i+=4){for(let c=0;c<3;c++)d[i+c]=Math.round(Math.round(d[i+c]/step)*step);}`, info.imgData, info.canvas.width, info.canvas.height, {levels});
+        info.imgData = await this._runFilterInWorker('posterize', info.imgData, info.canvas.width, info.canvas.height, {levels});
         this._commitImageData(info, 'Posterize'); this._removeFilterPanel('posterize-overlay'); this.toast('Posterize applied', 'success');
     },
     filterThreshold() {
@@ -5112,8 +5278,7 @@ self.onmessage = async function(e) {
         const panel = document.getElementById('threshold-overlay');
         const info = this._getActiveImageData(); if (!info) { this._removeFilterPanel('threshold-overlay'); return; }
         const thr = +(panel.querySelector('#ft-thr')?.value||128);
-        const fallbackFn = `const thr=p.thr;for(let i=0;i<d.length;i+=4){const l=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];const v=l>=thr?255:0;d[i]=d[i+1]=d[i+2]=v;}`;
-        info.imgData = await this._runFilterWithPhoton('threshold', fallbackFn, info.imgData, info.canvas.width, info.canvas.height, {thr});
+        info.imgData = await this._runFilterWithPhoton('threshold', info.imgData, info.canvas.width, info.canvas.height, {thr});
         this._commitImageData(info, 'Threshold'); this._removeFilterPanel('threshold-overlay'); this.toast('Threshold applied', 'success');
     },
     filterSolarize() {
@@ -5125,8 +5290,7 @@ self.onmessage = async function(e) {
     async filterEdgeDetect() {
         const info = this._getActiveImageData(); if (!info) return;
         this.toast('Detecting edges...', 'info');
-        const fallbackFn = `const src=new Uint8ClampedArray(d);for(let y=1;y<h-1;y++){for(let x=1;x<w-1;x++){const idx=(y*w+x)*4;for(let c=0;c<3;c++){const gx=-src[((y-1)*w+x-1)*4+c]+src[((y-1)*w+x+1)*4+c]-2*src[(y*w+x-1)*4+c]+2*src[(y*w+x+1)*4+c]-src[((y+1)*w+x-1)*4+c]+src[((y+1)*w+x+1)*4+c];const gy=-src[((y-1)*w+x-1)*4+c]-2*src[((y-1)*w+x)*4+c]-src[((y-1)*w+x+1)*4+c]+src[((y+1)*w+x-1)*4+c]+2*src[((y+1)*w+x)*4+c]+src[((y+1)*w+x+1)*4+c];d[idx+c]=Math.min(255,Math.sqrt(gx*gx+gy*gy));}}}`;
-        info.imgData = await this._runFilterWithPhoton('edgeDetect', fallbackFn, info.imgData, info.canvas.width, info.canvas.height);
+        info.imgData = await this._runFilterWithPhoton('edgeDetect', info.imgData, info.canvas.width, info.canvas.height);
         this._commitImageData(info, 'Edge Detect'); this.toast('Edge detect applied', 'success');
     },
     filterVignette() {
@@ -5139,7 +5303,7 @@ self.onmessage = async function(e) {
         const info = this._getActiveImageData(); if (!info) { this._removeFilterPanel('vignette-overlay'); return; }
         const amt = +(panel.querySelector('#fv-amt')?.value||50) / 100, soft = +(panel.querySelector('#fv-soft')?.value||60) / 100;
         this.toast('Applying vignette...', 'info');
-        info.imgData = await this._runFilterInWorker(`const amt=p.amt,soft=p.soft;const cx=w/2,cy=h/2,maxR=Math.sqrt(cx*cx+cy*cy);for(let y=0;y<h;y++){for(let x=0;x<w;x++){const dist=Math.sqrt((x-cx)**2+(y-cy)**2)/maxR;const factor=1-amt*Math.pow(Math.max(0,dist-(1-soft))/soft,2);const idx=(y*w+x)*4;d[idx]*=factor;d[idx+1]*=factor;d[idx+2]*=factor;}}`, info.imgData, info.canvas.width, info.canvas.height, {amt, soft});
+        info.imgData = await this._runFilterInWorker('vignette', info.imgData, info.canvas.width, info.canvas.height, {amt, soft});
         this._commitImageData(info, 'Vignette'); this._removeFilterPanel('vignette-overlay'); this.toast('Vignette applied', 'success');
     },
     filterUnsharpMask() {
@@ -5152,7 +5316,7 @@ self.onmessage = async function(e) {
         const info = this._getActiveImageData(); if (!info) { this._removeFilterPanel('unsharpmask-overlay'); return; }
         const amount = +(panel.querySelector('#fu-amt')?.value||100) / 100, radius = +(panel.querySelector('#fu-rad')?.value||2);
         this.toast('Applying unsharp mask...', 'info');
-        const result = await this._runFilterInWorker(`const amount=p.amount,radius=p.radius;const blurred=new Uint8ClampedArray(d),r=Math.ceil(radius);for(let y=r;y<h-r;y++){for(let x=r;x<w-r;x++){let sr=0,sg=0,sb=0,cnt=0;for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const i=((y+dy)*w+x+dx)*4;sr+=d[i];sg+=d[i+1];sb+=d[i+2];cnt++;}const i=(y*w+x)*4;blurred[i]=sr/cnt;blurred[i+1]=sg/cnt;blurred[i+2]=sb/cnt;}}for(let i=0;i<d.length;i+=4){for(let c=0;c<3;c++)d[i+c]=Math.max(0,Math.min(255,Math.round(d[i+c]+amount*(d[i+c]-blurred[i+c]))));}`, info.imgData, info.canvas.width, info.canvas.height, {amount, radius});
+        const result = await this._runFilterInWorker('unsharpMask', info.imgData, info.canvas.width, info.canvas.height, {amount, radius});
         info.imgData = result;
         this._commitImageData(info, 'Unsharp Mask'); this._removeFilterPanel('unsharpmask-overlay'); this.toast('Unsharp mask applied', 'success');
     },
@@ -5166,7 +5330,7 @@ self.onmessage = async function(e) {
         const info = this._getActiveImageData(); if (!info) { this._removeFilterPanel('oilpaint-overlay'); return; }
         const radius = +(panel.querySelector('#fo-rad')?.value||3), levels = +(panel.querySelector('#fo-lvl')?.value||16);
         this.toast('Applying oil paint...', 'info');
-        const result = await this._runFilterInWorker(`const radius=p.radius,levels=p.levels;const src=new Uint8ClampedArray(d);for(let y=radius;y<h-radius;y++){for(let x=radius;x<w-radius;x++){const bins=new Array(levels).fill(0),sr=new Array(levels).fill(0),sg=new Array(levels).fill(0),sb=new Array(levels).fill(0);for(let dy=-radius;dy<=radius;dy++)for(let dx=-radius;dx<=radius;dx++){const i=((y+dy)*w+x+dx)*4;const l=Math.round((src[i]+src[i+1]+src[i+2])/3/(256/levels));const b=Math.min(l,levels-1);bins[b]++;sr[b]+=src[i];sg[b]+=src[i+1];sb[b]+=src[i+2];}let maxBin=0,maxCount=0;for(let b=0;b<levels;b++){if(bins[b]>maxCount){maxCount=bins[b];maxBin=b;}}const i=(y*w+x)*4;d[i]=sr[maxBin]/maxCount;d[i+1]=sg[maxBin]/maxCount;d[i+2]=sb[maxBin]/maxCount;}}`, info.imgData, info.canvas.width, info.canvas.height, {radius, levels});
+        const result = await this._runFilterInWorker('oilPaint', info.imgData, info.canvas.width, info.canvas.height, {radius, levels});
         info.imgData = result;
         this._commitImageData(info, 'Oil Paint'); this._removeFilterPanel('oilpaint-overlay'); this.toast('Oil paint applied', 'success');
     },
@@ -5208,7 +5372,7 @@ self.onmessage = async function(e) {
         const sc = panel.querySelector('#fd-shadow')?.value||'#1a1a2e', hc = panel.querySelector('#fd-high')?.value||'#e94560';
         const sr=parseInt(sc.slice(1,3),16),sg=parseInt(sc.slice(3,5),16),sb=parseInt(sc.slice(5,7),16);
         const hr=parseInt(hc.slice(1,3),16),hg=parseInt(hc.slice(3,5),16),hb=parseInt(hc.slice(5,7),16);
-        info.imgData = await this._runFilterInWorker(`const sr=p.sr,sg=p.sg,sb=p.sb,hr=p.hr,hg=p.hg,hb=p.hb;for(let i=0;i<d.length;i+=4){const l=(0.299*d[i]+0.587*d[i+1]+0.114*d[i+2])/255;d[i]=Math.round(sr+(hr-sr)*l);d[i+1]=Math.round(sg+(hg-sg)*l);d[i+2]=Math.round(sb+(hb-sb)*l);}`, info.imgData, info.canvas.width, info.canvas.height, {sr,sg,sb,hr,hg,hb});
+        info.imgData = await this._runFilterInWorker('duotone', info.imgData, info.canvas.width, info.canvas.height, {sr,sg,sb,hr,hg,hb});
         this._commitImageData(info, 'Duotone'); this._removeFilterPanel('duotone-overlay'); this.toast('Duotone applied', 'success');
     },
     filterTiltShift() {
@@ -5221,7 +5385,7 @@ self.onmessage = async function(e) {
         const info = this._getActiveImageData(); if (!info) { this._removeFilterPanel('tiltshift-overlay'); return; }
         const focusY = +(panel.querySelector('#fts-y')?.value||50)/100, focusW = +(panel.querySelector('#fts-w')?.value||20)/100, blurR = +(panel.querySelector('#fts-blur')?.value||4);
         this.toast('Applying tilt shift...', 'info');
-        const result = await this._runFilterInWorker(`const focusY=p.focusY,focusW=p.focusW,blurR=p.blurR;const src=new Uint8ClampedArray(d);for(let y=0;y<h;y++){const ny=y/h,dist=Math.abs(ny-focusY);const blurAmt=Math.max(0,(dist-focusW/2)/(0.5-focusW/2));const r=Math.round(blurAmt*blurR);if(r<1)continue;for(let x=0;x<w;x++){let sr=0,sg=0,sb=0,cnt=0;for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const sy=Math.max(0,Math.min(h-1,y+dy)),sx=Math.max(0,Math.min(w-1,x+dx));const i=(sy*w+sx)*4;sr+=src[i];sg+=src[i+1];sb+=src[i+2];cnt++;}const i=(y*w+x)*4;d[i]=sr/cnt;d[i+1]=sg/cnt;d[i+2]=sb/cnt;}}`, info.imgData, info.canvas.width, info.canvas.height, {focusY, focusW, blurR});
+        const result = await this._runFilterInWorker('tiltShift', info.imgData, info.canvas.width, info.canvas.height, {focusY, focusW, blurR});
         info.imgData = result;
         this._commitImageData(info, 'Tilt Shift'); this._removeFilterPanel('tiltshift-overlay'); this.toast('Tilt shift applied', 'success');
     },
@@ -5234,7 +5398,7 @@ self.onmessage = async function(e) {
         const panel = document.getElementById('chromab-overlay');
         const info = this._getActiveImageData(); if (!info) { this._removeFilterPanel('chromab-overlay'); return; }
         const off = +(panel.querySelector('#fca-off')?.value||4);
-        info.imgData = await this._runFilterInWorker(`const off=p.off;const src=new Uint8ClampedArray(d);for(let y=0;y<h;y++){for(let x=0;x<w;x++){const i=(y*w+x)*4;const rx=Math.min(w-1,x+off),bx=Math.max(0,x-off);d[i]=src[(y*w+rx)*4];d[i+2]=src[(y*w+bx)*4+2];}}`, info.imgData, info.canvas.width, info.canvas.height, {off});
+        info.imgData = await this._runFilterInWorker('chromaticAberration', info.imgData, info.canvas.width, info.canvas.height, {off});
         this._commitImageData(info, 'Chromatic Aberration'); this._removeFilterPanel('chromab-overlay'); this.toast('Chromatic aberration applied', 'success');
     },
     filterNoiseGen() {

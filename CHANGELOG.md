@@ -2,6 +2,13 @@
 
 All notable changes to Openshop will be documented in this file.
 
+## [v0.18.8] - 2026-06-28
+
+### Security
+- Replace worker filter source-string execution with a named operation registry
+- Remove `unsafe-eval` from the document CSP while preserving Photon fallback behavior
+- Add regression coverage for op-based worker payloads and CSP string-execution guards
+
 ## [v0.18.7] - 2026-06-28
 
 ### Security

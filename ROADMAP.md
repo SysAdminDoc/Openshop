@@ -117,13 +117,6 @@ Single-file browser image editor with layers, PSD import, and client-side AI. Ro
   Acceptance: No user- or localStorage-derived value reaches `innerHTML` or inline event attributes; CSP no longer needs `unsafe-inline`; malicious recent-file/palette/preset fixtures render as inert text.
   Complexity: L
 
-- [ ] P0 - Replace filter worker string execution with a named operation registry
-  Why: Worker filters currently execute generated strings with `new Function()`, forcing `unsafe-eval` and making future plugin/filter work harder to sandbox.
-  Evidence: `index.html:4943`, MDN Web Workers, Photon operation API
-  Touches: `index.html` `_getFilterWorker()`, `_runFilterInWorker()`, all `_do*` pixel filters, filter unit tests
-  Acceptance: Worker accepts `{op, params}` only; no `new Function`, `eval`, or function source strings remain; all current worker-backed filters still pass unit and Playwright smoke tests.
-  Complexity: L
-
 - [ ] P0 - Add PSD import preflight, limits, and worker isolation
   Why: ag-psd warns that untrusted PSDs can declare huge canvases/layers and should be parsed with raw-data limits and off-main-thread processing.
   Evidence: ag-psd production guidance, `index.html:1744`

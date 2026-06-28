@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   createCanvasMock,
   installFabricMock,
@@ -213,6 +214,30 @@ describe('OpenShop core object', () => {
     expect(presetModal.textContent).toContain(payload);
   });
 
+  it('keeps the filter worker on named operations instead of string execution', async () => {
+    const source = readFileSync('index.html', 'utf8');
+    expect(source).not.toContain("'unsafe-eval'");
+    expect(source).not.toContain('new Function');
+    expect(source).not.toMatch(/_runFilterInWorker\s*\(\s*`/);
+    expect(source).not.toMatch(/\bfn:`/);
+
+    const OS = loadOpenShop();
+    OS._photonFilterDisabled = true;
+    OS._runFilterJob = vi.fn().mockResolvedValue('filtered');
+    const imageData = new ImageData(new Uint8ClampedArray(4), 1, 1);
+
+    await expect(OS._runFilterWithPhoton('threshold', imageData, 1, 1, { thr: 128 })).resolves.toBe('filtered');
+    expect(OS._runFilterJob).toHaveBeenCalledWith(
+      { backend: 'worker', op: 'threshold' },
+      imageData,
+      1,
+      1,
+      { thr: 128 }
+    );
+    expect(OS._getDirectPhotonFilter('Sharpen')).toEqual({ op: 'sharpen' });
+    expect(OS._getDirectPhotonFilter('BlackWhite')).toEqual({ op: 'threshold', params: { thr: 128 } });
+  });
+
   it('converts a clicked segmentation result into a pixel selection mask', async () => {
     const OS = loadOpenShop();
     const target = {
@@ -276,7 +301,7 @@ describe('OpenShop core object', () => {
     OS._runPhotonFilterInWorker = vi.fn().mockResolvedValueOnce(photonResult);
     OS._runFilterInWorker = vi.fn();
 
-    await expect(OS._runFilterWithPhoton('edgeDetect', 'fallback()', input, 1, 1)).resolves.toBe(photonResult);
+    await expect(OS._runFilterWithPhoton('edgeDetect', input, 1, 1)).resolves.toBe(photonResult);
     expect(OS._runPhotonFilterInWorker).toHaveBeenCalledWith('edgeDetect', input, 1, 1, undefined);
     expect(OS._runFilterInWorker).not.toHaveBeenCalled();
 
@@ -284,9 +309,9 @@ describe('OpenShop core object', () => {
     OS._runPhotonFilterInWorker = vi.fn().mockRejectedValueOnce(new Error('WASM blocked'));
     OS._runFilterInWorker = vi.fn().mockResolvedValueOnce(fallbackResult);
 
-    await expect(OS._runFilterWithPhoton('threshold', 'fallback()', input, 1, 1, { thr: 128 })).resolves.toBe(fallbackResult);
+    await expect(OS._runFilterWithPhoton('threshold', input, 1, 1, { thr: 128 })).resolves.toBe(fallbackResult);
     expect(OS._photonFilterDisabled).toBe(true);
-    expect(OS._runFilterInWorker).toHaveBeenCalledWith('fallback()', input, 1, 1, { thr: 128 });
+    expect(OS._runFilterInWorker).toHaveBeenCalledWith('threshold', input, 1, 1, { thr: 128 });
     warn.mockRestore();
   });
 
@@ -309,7 +334,6 @@ describe('OpenShop core object', () => {
 
     expect(OS._runFilterWithPhoton).toHaveBeenCalledWith(
       'sharpen',
-      expect.stringContaining('const src=new Uint8ClampedArray'),
       input,
       1,
       1,
