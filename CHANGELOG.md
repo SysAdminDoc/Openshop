@@ -2,6 +2,13 @@
 
 All notable changes to Openshop will be documented in this file.
 
+## [v0.18.10] - 2026-06-28
+
+### Security
+- Add PSD header and structure preflight before bitmap decode
+- Enforce PSD file size, dimension, pixel, layer count, bit-depth, and color-mode budgets
+- Parse PSD structure in a worker when available, with main-thread fallback and unit coverage for oversized fixtures
+
 ## [v0.18.9] - 2026-06-28
 
 ### Security

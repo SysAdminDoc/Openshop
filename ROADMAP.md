@@ -117,13 +117,6 @@ Single-file browser image editor with layers, PSD import, and client-side AI. Ro
   Acceptance: No user- or localStorage-derived value reaches `innerHTML` or inline event attributes; CSP no longer needs `unsafe-inline`; malicious recent-file/palette/preset fixtures render as inert text.
   Complexity: L
 
-- [ ] P0 - Add PSD import preflight, limits, and worker isolation
-  Why: ag-psd warns that untrusted PSDs can declare huge canvases/layers and should be parsed with raw-data limits and off-main-thread processing.
-  Evidence: ag-psd production guidance, `index.html:1744`
-  Touches: `index.html` PSD open path, ag-psd initialization, toast/error flow, tests with oversized synthetic PSD metadata
-  Acceptance: Oversized dimensions, layer counts, unsupported bit depth/color modes, and memory budgets fail before bitmap decode; valid PSDs still import; UI remains responsive during parse.
-  Complexity: L
-
 - [ ] P1 - Add central import schema and resource budgets for project, palette, preset, and image files
   Why: Each importer validates differently, so corrupt or hostile JSON/images can reach rendering, storage, or pixel loops with inconsistent limits.
   Evidence: `index.html:1726`, `index.html:3597`, `index.html:5903`, `index.html:7553`

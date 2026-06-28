@@ -397,4 +397,47 @@ describe('OpenShop core object', () => {
     expect(OS._lastFilter).toBe('Sharpen');
     expect(OS.toast).toHaveBeenCalledWith('Applied Sharpen', 'success');
   });
+
+  it('preflights PSD headers, dimensions, layers, and metadata before bitmap decode', async () => {
+    const OS = loadOpenShop();
+    const makeHeader = ({ width = 100, height = 80, channels = 4, depth = 8, colorMode = 3 } = {}) => {
+      const bytes = new Uint8Array(26);
+      bytes.set([0x38, 0x42, 0x50, 0x53], 0);
+      const view = new DataView(bytes.buffer);
+      view.setUint16(4, 1, false);
+      view.setUint16(12, channels, false);
+      view.setUint32(14, height, false);
+      view.setUint32(18, width, false);
+      view.setUint16(22, depth, false);
+      view.setUint16(24, colorMode, false);
+      return bytes;
+    };
+    const lib = {
+      readPsd: vi.fn(() => ({
+        width: 100,
+        height: 80,
+        children: [{ name: '<img src=x onerror=alert(1)>', left: 0, top: 0, right: 10, bottom: 10 }]
+      }))
+    };
+
+    await expect(OS._preflightPSD(lib, makeHeader(), 1024)).resolves.toMatchObject({ width: 100, height: 80 });
+    expect(lib.readPsd).toHaveBeenCalledWith(expect.any(Uint8Array), expect.objectContaining({
+      skipCompositeImageData: true,
+      skipLayerImageData: true
+    }));
+
+    expect(() => OS._validatePSDHeader(OS._readPSDHeader(makeHeader({ width: 90000 })), 1024)).toThrow(/dimensions exceed/);
+    expect(() => OS._validatePSDHeader(OS._readPSDHeader(makeHeader({ depth: 32 })), 1024)).toThrow(/bit depth/);
+    expect(() => OS._validatePSDHeader(OS._readPSDHeader(makeHeader({ colorMode: 4 })), 1024)).toThrow(/RGB/);
+    expect(() => OS._validatePSDStructure({
+      width: 100,
+      height: 80,
+      children: Array.from({ length: OS._psdLimits.maxLayers + 1 }, (_, i) => ({ name: `Layer ${i}` }))
+    })).toThrow(/layers/);
+    expect(() => OS._validatePSDStructure({
+      width: 100,
+      height: 80,
+      children: [{ left: 0, top: 0, right: 100000, bottom: 2 }]
+    })).toThrow(/layer 1 exceeds/);
+  });
 });

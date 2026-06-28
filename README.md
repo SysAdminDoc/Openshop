@@ -1,6 +1,6 @@
 # OpenShop
 
-![Version](https://img.shields.io/badge/version-0.18.9-blue)
+![Version](https://img.shields.io/badge/version-0.18.10-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Browser-orange)
 ![Zero Install](https://img.shields.io/badge/install-none_required-brightgreen)
@@ -152,6 +152,7 @@ Heavy filters (Oil Paint, Tilt Shift, Unsharp Mask, Posterize, Threshold, Vignet
 - Recent files, saved palettes, templates, and photo presets render through DOM APIs so persisted values remain inert text
 - Worker-backed filters use a named operation registry, so filter jobs no longer pass executable source strings or require `unsafe-eval`
 - Command palette, context menu, sticky notes, animation frames, macro list, AI progress titles, and save-preset modals render through DOM APIs instead of runtime `innerHTML`
+- PSD import preflights file size, header fields, canvas dimensions, layer count, and layer bounds before bitmap decode; structure parsing is isolated in a worker when available
 - Content Security Policy restricts script/style/connect sources
 - AI model revisions pinned to immutable commit SHAs (not mutable branch refs)
 - PSD layer names and project JSON are sanitized to prevent XSS injection

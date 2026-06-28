@@ -10,7 +10,7 @@
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src blob:;">
-<title>OpenShop v0.18.9 — Online Image Editor</title>
+<title>OpenShop v0.18.10 — Online Image Editor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js" integrity="sha384-sLpuECXYCB5TUyTbC06pftm/rgurDambREZmV4eRHwEqJzCQtU6lxI2Ve00z4XW5" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/ag-psd@22.0.2/dist/bundle.js" integrity="sha384-kla4KJzEnshZnuWyJ8+AF8KEX0YZ2rpxTaQpDtDUmDdUv7jK94knsRx/lcRZ/HF4" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js" integrity="sha384-qovJwSBbRDPP5cEjCp8S0UP66wrvnjaa60XMOGzTNanrThcrGfXfnZkvgY8N1KT3" crossorigin="anonymous"></script>
@@ -561,7 +561,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <!-- ===== TOP MENU ===== -->
 <div id="topbar" role="menubar" aria-label="Main menu">
-    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.9</span></div>
+    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.10</span></div>
     <div class="menu-item" role="menuitem" aria-haspopup="true">File
         <div class="menu-dropdown">
             <div class="dd-item" onclick="OS.newImage()">New</div>
@@ -1396,7 +1396,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <script>
 // ================================================================
-//  OpenShop v0.18.9 — Core Engine (Phase 10: Pro Toolbar)
+//  OpenShop v0.18.10 — Core Engine (Phase 10: Pro Toolbar)
 // ================================================================
 const OS = {
     _esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
@@ -1689,7 +1689,7 @@ const OS = {
     _projectFileHandle: null,
     async saveProject() {
         const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-        json._openShop = { version:'0.18.9', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+        json._openShop = { version:'0.18.10', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
         const data = JSON.stringify(json);
         if (this._projectFileHandle) {
             try {
@@ -1750,8 +1750,138 @@ const OS = {
     },
 
     // ====================== PSD IMPORT ======================
+    _psdLimits: {
+        maxFileBytes: 256 * 1024 * 1024,
+        maxPixels: 80 * 1000 * 1000,
+        maxDimension: 30000,
+        maxLayers: 256,
+        maxLayerPixels: 80 * 1000 * 1000,
+        supportedDepths: [8, 16],
+        supportedColorModes: [3]
+    },
+    _psdLibUrl: 'https://cdn.jsdelivr.net/npm/ag-psd@22.0.2/dist/bundle.js',
     openPSD() { document.getElementById('psd-input').click(); },
     handlePSDOpen(e) { const file = e.target.files[0]; if (file) this._loadPSDFile(file); e.target.value=''; },
+    _readPSDHeader(bytes) {
+        if (!bytes || bytes.byteLength < 26) throw new Error('PSD header is truncated');
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        const signature = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
+        return {
+            signature,
+            version: view.getUint16(4, false),
+            channels: view.getUint16(12, false),
+            height: view.getUint32(14, false),
+            width: view.getUint32(18, false),
+            depth: view.getUint16(22, false),
+            colorMode: view.getUint16(24, false)
+        };
+    },
+    _validatePSDHeader(header, fileSize) {
+        const limits = this._psdLimits;
+        if (!header || header.signature !== '8BPS' || header.version !== 1) throw new Error('Not a supported PSD file');
+        if (fileSize > limits.maxFileBytes) throw new Error('PSD exceeds 256 MB import limit');
+        if (header.channels < 1 || header.channels > 8) throw new Error('PSD channel count is unsupported');
+        if (!limits.supportedDepths.includes(header.depth)) throw new Error(`PSD bit depth ${header.depth} is unsupported`);
+        if (!limits.supportedColorModes.includes(header.colorMode)) throw new Error('Only RGB PSD files are currently supported');
+        if (header.width < 1 || header.height < 1) throw new Error('PSD dimensions are invalid');
+        if (header.width > limits.maxDimension || header.height > limits.maxDimension) throw new Error('PSD dimensions exceed import limits');
+        if (header.width * header.height > limits.maxPixels) throw new Error('PSD pixel count exceeds import limits');
+    },
+    _flattenPSDChildren(children = [], out = []) {
+        children.forEach(child => {
+            out.push(child);
+            if (child.children && child.children.length) this._flattenPSDChildren(child.children, out);
+        });
+        return out;
+    },
+    _validatePSDStructure(psd) {
+        const limits = this._psdLimits;
+        if (!psd || !Number.isFinite(psd.width) || !Number.isFinite(psd.height)) throw new Error('PSD structure is invalid');
+        this._validatePSDHeader({ signature:'8BPS', version:1, channels:4, width:psd.width, height:psd.height, depth:8, colorMode:3 }, 0);
+        const layers = this._flattenPSDChildren(psd.children || []);
+        if (layers.length > limits.maxLayers) throw new Error(`PSD has ${layers.length} layers; limit is ${limits.maxLayers}`);
+        layers.forEach((layer, idx) => {
+            const left = Number(layer.left || 0), top = Number(layer.top || 0);
+            const right = Number(layer.right ?? left), bottom = Number(layer.bottom ?? top);
+            const width = Math.max(0, right - left), height = Math.max(0, bottom - top);
+            if (width > limits.maxDimension || height > limits.maxDimension || width * height > limits.maxLayerPixels) {
+                throw new Error(`PSD layer ${idx + 1} exceeds import limits`);
+            }
+        });
+        return layers;
+    },
+    _readPSDStructureOnMainThread(lib, bytes) {
+        return lib.readPsd(bytes, {
+            skipCompositeImageData: true,
+            skipLayerImageData: true,
+            skipThumbnail: true,
+            useRawData: true,
+            useRawThumbnail: true
+        });
+    },
+    _readPSDStructureInWorker(bytes) {
+        if (typeof Worker === 'undefined') return Promise.reject(new Error('Workers unavailable'));
+        const code = `
+self.onmessage = function(e) {
+    try {
+        importScripts(${JSON.stringify(this._psdLibUrl)});
+        const lib = self.agPsd || agPsd;
+        const psd = lib.readPsd(new Uint8Array(e.data), {
+            skipCompositeImageData: true,
+            skipLayerImageData: true,
+            skipThumbnail: true,
+            useRawData: true,
+            useRawThumbnail: true
+        });
+        const simplify = node => ({
+            name: node.name || '',
+            left: node.left || 0,
+            top: node.top || 0,
+            right: node.right || node.left || 0,
+            bottom: node.bottom || node.top || 0,
+            children: Array.isArray(node.children) ? node.children.map(simplify) : []
+        });
+        self.postMessage({ ok: true, psd: {
+            width: psd.width,
+            height: psd.height,
+            children: Array.isArray(psd.children) ? psd.children.map(simplify) : []
+        }});
+    } catch (err) {
+        self.postMessage({ ok: false, error: err && err.message ? err.message : String(err) });
+    }
+};`;
+        const worker = new Worker(URL.createObjectURL(new Blob([code], {type:'application/javascript'})));
+        return new Promise((resolve, reject) => {
+            worker.onmessage = e => {
+                worker.terminate();
+                e.data && e.data.ok ? resolve(e.data.psd) : reject(new Error(e.data?.error || 'PSD worker preflight failed'));
+            };
+            worker.onerror = err => {
+                worker.terminate();
+                reject(err);
+            };
+            const copy = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+            worker.postMessage(copy, [copy]);
+        });
+    },
+    async _preflightPSD(lib, bytes, fileSize) {
+        const header = this._readPSDHeader(bytes);
+        this._validatePSDHeader(header, fileSize);
+        let structure;
+        try {
+            structure = await this._readPSDStructureInWorker(bytes);
+        } catch (err) {
+            console.warn('PSD worker preflight unavailable; falling back to main thread:', err.message || err);
+            structure = this._readPSDStructureOnMainThread(lib, bytes);
+        }
+        this._validatePSDStructure(structure);
+        return header;
+    },
+    _dataUrlFromPSDCanvas(canvas) {
+        if (!canvas) return null;
+        if (typeof canvas.toDataURL === 'function') return canvas.toDataURL();
+        return null;
+    },
     _loadPSDFile(file) {
         this.toast('Parsing PSD...', 'info');
         const reader = new FileReader();
@@ -1762,11 +1892,16 @@ const OS = {
                 }
                 const lib = window.agPsd || agPsd;
                 const buffer = ev.target.result;
-                const psd = lib.readPsd(new Uint8Array(buffer));
+                const bytes = new Uint8Array(buffer);
+                const header = await this._preflightPSD(lib, bytes, file.size || bytes.byteLength);
+                this.toast(`PSD preflight passed: ${header.width} x ${header.height}`, 'info');
+                const psd = lib.readPsd(bytes);
+                this._validatePSDStructure(psd);
                 this.createNewDocument(psd.width, psd.height);
                 // Add composite image as base
                 if (psd.canvas) {
-                    const dataUrl = psd.canvas.toDataURL();
+                    const dataUrl = this._dataUrlFromPSDCanvas(psd.canvas);
+                    if (!dataUrl) throw new Error('PSD composite image could not be decoded');
                     await new Promise(resolve => {
                         fabric.Image.fromURL(dataUrl, img => {
                             img.set({ left:0, top:0, selectable:true, name:'PSD Composite' });
@@ -1777,16 +1912,17 @@ const OS = {
                 }
                 // Import individual layers
                 if (psd.children && psd.children.length) {
-                    for (const child of psd.children) {
+                    for (const child of this._flattenPSDChildren(psd.children)) {
                         if (child.canvas) {
-                            const layerDataUrl = child.canvas.toDataURL();
+                            const layerDataUrl = this._dataUrlFromPSDCanvas(child.canvas);
+                            if (!layerDataUrl) continue;
                             this.addLayer();
-                            this.layers[this.activeLayerIdx].name = child.name || 'PSD Layer';
+                            this.layers[this.activeLayerIdx].name = this._safeText(child.name || 'PSD Layer', 80);
                             if (typeof child.opacity === 'number') this.layers[this.activeLayerIdx].opacity = Math.round(child.opacity * 100 / 255);
                             this.layers[this.activeLayerIdx].visible = !child.hidden;
                             await new Promise(resolve => {
                                 fabric.Image.fromURL(layerDataUrl, img => {
-                                    img.set({ left: child.left||0, top: child.top||0, selectable:true, name: child.name||'Layer', visible: !child.hidden });
+                                    img.set({ left: child.left||0, top: child.top||0, selectable:true, name: this._safeText(child.name||'Layer', 80), visible: !child.hidden });
                                     if (typeof child.opacity === 'number') img.opacity = child.opacity / 255;
                                     this.canvas.add(img); this.layers[this.activeLayerIdx].objects.push(img);
                                     resolve();
@@ -3928,7 +4064,7 @@ self.onmessage = async function(e) {
         if (!navigator.storage || !navigator.storage.getDirectory) return;
         try {
             const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-            json._openShop = { version:'0.18.9', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+            json._openShop = { version:'0.18.10', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
             const data = JSON.stringify(json);
             try {
                 const root = await navigator.storage.getDirectory();
