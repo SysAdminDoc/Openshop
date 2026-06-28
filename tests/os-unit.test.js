@@ -214,6 +214,60 @@ describe('OpenShop core object', () => {
     expect(presetModal.textContent).toContain(payload);
   });
 
+  it('renders dynamic command, context, note, timeline, macro, and AI UI as inert DOM', () => {
+    const OS = loadOpenShop();
+    const payload = '<img src=x onerror=alert(1)>';
+    const active = {
+      name: 'Photo',
+      type: 'image',
+      bringToFront: vi.fn(),
+      bringForward: vi.fn(),
+      sendBackwards: vi.fn(),
+      sendToBack: vi.fn()
+    };
+    const canvas = createCanvasMock([active]);
+    canvas.setActiveObject(active);
+    OS.canvas = canvas;
+    quietUiMethods(OS);
+
+    OS._getCommands = () => [{ label: payload, cat: '<script>alert(2)</script>', key: '<svg onload=alert(3)>', fn: vi.fn() }];
+    OS.filterCommands('');
+    expect(document.querySelector('#cmd-results img')).toBeNull();
+    expect(document.getElementById('cmd-results').textContent).toContain(payload);
+
+    OS._lastFilter = payload;
+    OS.initContextMenu();
+    document.getElementById('canvas-area').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 4, clientY: 6 }));
+    expect(document.querySelector('#context-menu img')).toBeNull();
+    expect(document.getElementById('context-menu').textContent).toContain(payload);
+
+    OS.addStickyNote({ clientX: 10, clientY: 20 });
+    expect(document.querySelector('#sticky-container [onclick]')).toBeNull();
+    expect(document.querySelector('#sticky-container textarea').placeholder).toBe('Type a note...');
+
+    OS.canvasW = 2;
+    OS.canvasH = 2;
+    OS._animFrames = ['data:image/png;base64,TEST'];
+    OS._renderFrames();
+    expect(document.querySelector('#timeline-frames [onclick]')).toBeNull();
+    expect(document.getElementById('timeline-frames').textContent).toContain('#1');
+
+    OS._macroSteps = [{ action: payload }];
+    OS._renderMacroList();
+    expect(document.querySelector('#macro-list img')).toBeNull();
+    expect(document.getElementById('macro-list').textContent).toContain(payload);
+
+    OS._showAIProgress(payload, '<script>alert(4)</script>');
+    expect(document.querySelector('#ai-title img')).toBeNull();
+    expect(document.getElementById('ai-title').textContent).toContain(payload);
+    expect(document.getElementById('ai-msg').textContent).toBe('<script>alert(4)</script>');
+
+    OS.saveCurrentAsPreset();
+    const presetOverlay = document.querySelector('.modal-overlay');
+    expect(presetOverlay.querySelector('[onclick]')).toBeNull();
+    expect(presetOverlay.textContent).toContain('Save Preset');
+  });
+
   it('keeps the filter worker on named operations instead of string execution', async () => {
     const source = readFileSync('index.html', 'utf8');
     expect(source).not.toContain("'unsafe-eval'");

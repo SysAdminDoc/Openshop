@@ -111,8 +111,8 @@ Single-file browser image editor with layers, PSD import, and client-side AI. Ro
 ## Research-Driven Additions
 
 - [ ] P0 - Harden CSP and DOM rendering
-  Why: `index.html` still requires `unsafe-inline`/`unsafe-eval` and renders persisted data through `innerHTML`, leaving avoidable injection paths.
-  Evidence: `index.html:12`, `index.html:3597`, `index.html:5903`, MDN CSP guidance
+  Why: `index.html` still requires `unsafe-inline` and several static/generated UI paths use inline event attributes or `innerHTML`, leaving avoidable injection paths.
+  Evidence: `index.html:12`, static `onclick`/`oninput` attributes, remaining modal `innerHTML` builders, MDN CSP guidance
   Touches: `index.html` CSP meta, menu/modal/palette/recent rendering, `tests/os-unit.test.js`, `tests/openshop.e2e.spec.js`
   Acceptance: No user- or localStorage-derived value reaches `innerHTML` or inline event attributes; CSP no longer needs `unsafe-inline`; malicious recent-file/palette/preset fixtures render as inert text.
   Complexity: L

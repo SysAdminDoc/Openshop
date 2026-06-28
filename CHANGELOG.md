@@ -2,6 +2,13 @@
 
 All notable changes to Openshop will be documented in this file.
 
+## [v0.18.9] - 2026-06-28
+
+### Security
+- Render command palette, context menu, sticky notes, animation frame labels, macro steps, AI progress titles, and save-preset modals through DOM APIs
+- Remove runtime inline handlers from those generated UI surfaces
+- Add malicious fixture coverage for dynamic UI renderers
+
 ## [v0.18.8] - 2026-06-28
 
 ### Security

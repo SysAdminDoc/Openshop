@@ -174,6 +174,12 @@ export function mountEditorDom() {
     <div id="recent-files-area"></div>
     <div id="palette-default"></div>
     <div id="palette-saved"></div>
+    <div id="cmd-results"></div>
+    <div id="context-menu"></div>
+    <div id="sticky-container"></div>
+    <div id="timeline-frames"></div>
+    <div id="macro-list"></div>
+    <div id="ai-progress"><div id="ai-title"></div><div id="ai-msg"></div><div id="ai-bar"></div><div id="ai-pct"></div></div>
     <span id="brush-size-val"></span>
     <span id="zoom-display"></span>
     <div id="panels"></div>

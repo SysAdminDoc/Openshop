@@ -10,7 +10,7 @@
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src blob:;">
-<title>OpenShop v0.18.8 — Online Image Editor</title>
+<title>OpenShop v0.18.9 — Online Image Editor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js" integrity="sha384-sLpuECXYCB5TUyTbC06pftm/rgurDambREZmV4eRHwEqJzCQtU6lxI2Ve00z4XW5" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/ag-psd@22.0.2/dist/bundle.js" integrity="sha384-kla4KJzEnshZnuWyJ8+AF8KEX0YZ2rpxTaQpDtDUmDdUv7jK94knsRx/lcRZ/HF4" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js" integrity="sha384-qovJwSBbRDPP5cEjCp8S0UP66wrvnjaa60XMOGzTNanrThcrGfXfnZkvgY8N1KT3" crossorigin="anonymous"></script>
@@ -561,7 +561,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <!-- ===== TOP MENU ===== -->
 <div id="topbar" role="menubar" aria-label="Main menu">
-    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.8</span></div>
+    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.9</span></div>
     <div class="menu-item" role="menuitem" aria-haspopup="true">File
         <div class="menu-dropdown">
             <div class="dd-item" onclick="OS.newImage()">New</div>
@@ -1396,7 +1396,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <script>
 // ================================================================
-//  OpenShop v0.18.8 — Core Engine (Phase 10: Pro Toolbar)
+//  OpenShop v0.18.9 — Core Engine (Phase 10: Pro Toolbar)
 // ================================================================
 const OS = {
     _esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
@@ -1689,7 +1689,7 @@ const OS = {
     _projectFileHandle: null,
     async saveProject() {
         const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-        json._openShop = { version:'0.18.8', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+        json._openShop = { version:'0.18.9', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
         const data = JSON.stringify(json);
         if (this._projectFileHandle) {
             try {
@@ -3928,7 +3928,7 @@ self.onmessage = async function(e) {
         if (!navigator.storage || !navigator.storage.getDirectory) return;
         try {
             const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-            json._openShop = { version:'0.18.8', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+            json._openShop = { version:'0.18.9', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
             const data = JSON.stringify(json);
             try {
                 const root = await navigator.storage.getDirectory();
@@ -5812,14 +5812,29 @@ self.onmessage = async function(e) {
         const lower = q.toLowerCase();
         const filtered = lower ? cmds.filter(c => c.label.toLowerCase().includes(lower) || c.cat.toLowerCase().includes(lower)) : cmds.slice(0, 20);
         this._cmdIdx = 0;
-        results.innerHTML = filtered.slice(0, 20).map((c, i) =>
-            `<div class="cmd-item${i===0?' active':''}" onmouseenter="OS._cmdHover(${i})" onclick="OS._cmdExec(${i})">
-                <span class="cmd-label">${c.label}</span>
-                ${c.key ? `<span class="cmd-shortcut">${c.key}</span>` : ''}
-                <span class="cmd-cat">${c.cat}</span>
-            </div>`
-        ).join('');
         this._cmdFiltered = filtered.slice(0, 20);
+        this._clearNode(results);
+        this._cmdFiltered.forEach((c, i) => {
+            const item = document.createElement('div');
+            item.className = 'cmd-item' + (i === 0 ? ' active' : '');
+            item.addEventListener('mouseenter', () => this._cmdHover(i));
+            item.addEventListener('click', () => this._cmdExec(i));
+            const label = document.createElement('span');
+            label.className = 'cmd-label';
+            label.textContent = this._safeText(c.label, 80);
+            item.appendChild(label);
+            if (c.key) {
+                const shortcut = document.createElement('span');
+                shortcut.className = 'cmd-shortcut';
+                shortcut.textContent = this._safeText(c.key, 30);
+                item.appendChild(shortcut);
+            }
+            const cat = document.createElement('span');
+            cat.className = 'cmd-cat';
+            cat.textContent = this._safeText(c.cat, 40);
+            item.appendChild(cat);
+            results.appendChild(item);
+        });
     },
     _cmdHover(i) {
         this._cmdIdx = i;
@@ -5927,17 +5942,37 @@ self.onmessage = async function(e) {
             };
             flattenItems(items);
 
-            const renderItems = (arr) => arr.map(it => {
-                if (it.sep) return '<div class="ctx-sep"></div>';
-                if (it.children) {
-                    const childIdx = this._ctxItems.indexOf(it.children[0]);
-                    return `<div class="ctx-item ctx-sub">${it.label}<div class="ctx-submenu">${renderItems(it.children)}</div></div>`;
+            const renderItems = (arr, parent) => arr.forEach(it => {
+                if (it.sep) {
+                    const sep = document.createElement('div');
+                    sep.className = 'ctx-sep';
+                    parent.appendChild(sep);
+                    return;
                 }
-                const idx = this._ctxItems.indexOf(it);
-                return `<div class="ctx-item" data-ctx="${idx}">${it.label}${it.key?`<span class="ctx-shortcut">${it.key}</span>`:''}</div>`;
-            }).join('');
+                const item = document.createElement('div');
+                item.className = 'ctx-item' + (it.children ? ' ctx-sub' : '');
+                const label = document.createElement('span');
+                label.textContent = this._safeText(it.label, 100);
+                item.appendChild(label);
+                if (it.key) {
+                    const shortcut = document.createElement('span');
+                    shortcut.className = 'ctx-shortcut';
+                    shortcut.textContent = this._safeText(it.key, 30);
+                    item.appendChild(shortcut);
+                }
+                if (it.children) {
+                    const submenu = document.createElement('div');
+                    submenu.className = 'ctx-submenu';
+                    renderItems(it.children, submenu);
+                    item.appendChild(submenu);
+                } else {
+                    item.dataset.ctx = String(this._ctxItems.indexOf(it));
+                }
+                parent.appendChild(item);
+            });
 
-            menu.innerHTML = renderItems(items);
+            this._clearNode(menu);
+            renderItems(items, menu);
             menu.querySelectorAll('.ctx-item[data-ctx]').forEach(el => {
                 el.addEventListener('click', (ev) => {
                     ev.stopPropagation();
@@ -6117,8 +6152,16 @@ self.onmessage = async function(e) {
         note.style.left = (e.clientX || 200) + 'px';
         note.style.top = (e.clientY || 200) + 'px';
         note.style.pointerEvents = 'all';
-        note.innerHTML = `<span class="sticky-close" onclick="this.parentElement.remove();OS._stickyNotes=OS._stickyNotes.filter(n=>n!==this.parentElement)">×</span>
-            <textarea placeholder="Type a note..."></textarea>`;
+        const close = document.createElement('span');
+        close.className = 'sticky-close';
+        close.textContent = '×';
+        close.addEventListener('click', () => {
+            note.remove();
+            this._stickyNotes = this._stickyNotes.filter(n => n !== note);
+        });
+        const textarea = document.createElement('textarea');
+        textarea.placeholder = 'Type a note...';
+        note.append(close, textarea);
         // Make draggable
         let dragging = false, offX, offY;
         note.addEventListener('mousedown', ev => {
@@ -7079,7 +7122,7 @@ self.onmessage = async function(e) {
     },
     _renderFrames() {
         const container = document.getElementById('timeline-frames');
-        container.innerHTML = '';
+        this._clearNode(container);
         this._animFrames.forEach((data, i) => {
             const div = document.createElement('div');
             div.className = 'frame-thumb' + (i === this._animIdx ? ' active' : '');
@@ -7087,8 +7130,18 @@ self.onmessage = async function(e) {
             const ctx = cv.getContext('2d');
             const img = new Image(); img.onload = () => ctx.drawImage(img, 0, 0, cv.width, cv.height); img.src = data;
             div.appendChild(cv);
-            div.innerHTML += `<span class="frame-num">#${i+1}</span><span class="frame-del" onclick="event.stopPropagation();OS.removeFrame(${i})">&times;</span>`;
-            div.onclick = () => this.selectFrame(i);
+            const num = document.createElement('span');
+            num.className = 'frame-num';
+            num.textContent = `#${i + 1}`;
+            const del = document.createElement('span');
+            del.className = 'frame-del';
+            del.textContent = '×';
+            del.addEventListener('click', event => {
+                event.stopPropagation();
+                this.removeFrame(i);
+            });
+            div.append(num, del);
+            div.addEventListener('click', () => this.selectFrame(i));
             container.appendChild(div);
         });
     },
@@ -7168,9 +7221,13 @@ self.onmessage = async function(e) {
     },
     _renderMacroList() {
         const list = document.getElementById('macro-list');
-        list.innerHTML = this._macroSteps.map((s, i) =>
-            `<div class="macro-step">${i+1}. ${s.action}</div>`
-        ).join('');
+        this._clearNode(list);
+        this._macroSteps.forEach((s, i) => {
+            const step = document.createElement('div');
+            step.className = 'macro-step';
+            step.textContent = `${i + 1}. ${this._safeText(s.action, 80)}`;
+            list.appendChild(step);
+        });
     },
     playMacro() {
         if (this._macroSteps.length === 0) { this.toast('No actions recorded','info'); return; }
@@ -7219,7 +7276,11 @@ self.onmessage = async function(e) {
 
     _showAIProgress(title, msg) {
         const el = document.getElementById('ai-progress');
-        document.getElementById('ai-title').innerHTML = '<span class="ai-spinner"></span>' + title;
+        const titleEl = document.getElementById('ai-title');
+        this._clearNode(titleEl);
+        const spinner = document.createElement('span');
+        spinner.className = 'ai-spinner';
+        titleEl.append(spinner, document.createTextNode(this._safeText(title, 100)));
         document.getElementById('ai-msg').textContent = msg || '';
         document.getElementById('ai-bar').style.width = '0%';
         document.getElementById('ai-pct').textContent = '0%';
@@ -7884,10 +7945,33 @@ self.onmessage = async function(e) {
     saveCurrentAsPreset(overlay) {
         if (overlay) overlay.remove();
         const o = document.createElement('div'); o.className = 'modal-overlay';
-        o.innerHTML = `<div class="modal"><h3>Save Preset</h3>
-            <div class="modal-row"><label>Name</label><input id="preset-name-input" type="text" placeholder="My Preset" autofocus></div>
-            <div class="modal-btns"><button class="btn" onclick="this.closest('.modal-overlay').remove();OS.showPresets()">Cancel</button>
-            <button class="btn btn-primary" onclick="OS._doSavePreset(this.closest('.modal-overlay'))">Save</button></div></div>`;
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        const title = document.createElement('h3');
+        title.textContent = 'Save Preset';
+        const row = document.createElement('div');
+        row.className = 'modal-row';
+        const label = document.createElement('label');
+        label.textContent = 'Name';
+        const input = document.createElement('input');
+        input.id = 'preset-name-input';
+        input.type = 'text';
+        input.placeholder = 'My Preset';
+        input.autofocus = true;
+        row.append(label, input);
+        const btns = document.createElement('div');
+        btns.className = 'modal-btns';
+        const cancel = document.createElement('button');
+        cancel.className = 'btn';
+        cancel.textContent = 'Cancel';
+        cancel.addEventListener('click', () => { o.remove(); this.showPresets(); });
+        const save = document.createElement('button');
+        save.className = 'btn btn-primary';
+        save.textContent = 'Save';
+        save.addEventListener('click', () => this._doSavePreset(o));
+        btns.append(cancel, save);
+        modal.append(title, row, btns);
+        o.appendChild(modal);
         document.body.appendChild(o); requestAnimationFrame(() => { o.classList.add('show'); o.querySelector('#preset-name-input').focus(); });
     },
     _doSavePreset(overlay) {
