@@ -18,6 +18,9 @@ All notable changes to Openshop will be documented in this file.
 - Responsive mobile layout: toolbar moves to bottom, right panels collapse, modals fit viewport at <768px
 - Tablet breakpoint: right panels narrow to 200px at 768-1023px
 - Two-finger pinch-to-zoom and pan gestures on canvas for touch devices
+- Animated GIF export via on-demand gif.js with spritesheet fallback for unsupported browsers
+- GIF import via WebCodecs ImageDecoder: multi-frame GIFs load into timeline with per-frame editing
+- Static image fallback for single-frame GIFs and browsers without ImageDecoder support
 
 ## [v0.18.12] - 2026-06-28
 

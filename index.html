@@ -1708,12 +1708,66 @@ const OS = {
     _handleFileLoad(file) {
         try { this._validateImageFile(file); } catch(e) { this.toast(e.message, 'error'); return; }
         this._docName = this._safeText(file.name.replace(/\.[^.]+$/, ''), 100);
+        if (file.type === 'image/gif' && typeof ImageDecoder !== 'undefined') {
+            this._importGifFrames(file);
+            return;
+        }
         const r = new FileReader(); r.onload = ev => {
             fabric.Image.fromURL(ev.target.result, img => {
                 try { this._addDecodedImageToCanvas(img, { name:file.name, mode:'open' }); }
                 catch(err) { this.toast(err.message, 'error'); }
             });
         }; r.readAsDataURL(file);
+    },
+    async _importGifFrames(file) {
+        try {
+            const decoder = new ImageDecoder({ data: file.stream(), type: 'image/gif' });
+            await decoder.completed;
+            const count = decoder.tracks.selectedTrack.frameCount;
+            if (count < 2) {
+                const r = new FileReader(); r.onload = ev => {
+                    fabric.Image.fromURL(ev.target.result, img => {
+                        try { this._addDecodedImageToCanvas(img, { name: file.name, mode: 'open' }); }
+                        catch (err) { this.toast(err.message, 'error'); }
+                    });
+                }; r.readAsDataURL(file);
+                return;
+            }
+            this.toast(`Importing ${count} GIF frames...`, 'info');
+            this._animFrames = [];
+            for (let i = 0; i < count; i++) {
+                const result = await decoder.decode({ frameIndex: i });
+                const frame = result.image;
+                const cv = document.createElement('canvas');
+                cv.width = frame.displayWidth;
+                cv.height = frame.displayHeight;
+                const ctx = cv.getContext('2d');
+                ctx.drawImage(frame, 0, 0);
+                frame.close();
+                this._animFrames.push(cv.toDataURL('image/png'));
+            }
+            if (this._animFrames.length > 0) {
+                const first = this._animFrames[0];
+                this.createNewDocument(decoder.tracks.selectedTrack.frameWidth || this.canvasW, decoder.tracks.selectedTrack.frameHeight || this.canvasH);
+                fabric.Image.fromURL(first, img => {
+                    try { this._addDecodedImageToCanvas(img, { name: file.name, mode: 'open' }); }
+                    catch (err) { this.toast(err.message, 'error'); }
+                });
+            }
+            this._animIdx = 0;
+            this._renderFrames();
+            document.getElementById('timeline-panel')?.classList.add('visible');
+            this.toast(`Imported ${this._animFrames.length} frames from GIF`, 'success');
+            decoder.close();
+        } catch (e) {
+            console.warn('GIF frame import failed, loading as static:', e.message);
+            const r = new FileReader(); r.onload = ev => {
+                fabric.Image.fromURL(ev.target.result, img => {
+                    try { this._addDecodedImageToCanvas(img, { name: file.name, mode: 'open' }); }
+                    catch (err) { this.toast(err.message, 'error'); }
+                });
+            }; r.readAsDataURL(file);
+        }
     },
     handleFileOpen(e) {
         const file = e.target.files[0]; if (!file) return;
@@ -7562,12 +7616,58 @@ self.onmessage = async function(e) {
             if (cv) { /* visual highlight is enough for preview */ }
         }, 1000 / fps);
     },
-    exportGIF() {
-        if (this._animFrames.length < 2) { this.toast('Add at least 2 frames','info'); return; }
-        this.toast('Exporting frames as PNG sequence (GIF requires gif.js library)...','info');
-        // Export as individual frames + spritesheet
+    async _loadGifJs() {
+        if (window.GIF) return window.GIF;
+        return new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js';
+            s.onload = () => window.GIF ? resolve(window.GIF) : reject(new Error('gif.js did not expose GIF'));
+            s.onerror = () => reject(new Error('Failed to load gif.js'));
+            document.head.appendChild(s);
+        });
+    },
+    async exportGIF() {
+        if (this._animFrames.length < 2) { this.toast('Add at least 2 frames', 'info'); return; }
         const fps = +document.getElementById('tl-fps').value || 12;
-        // Create spritesheet
+        const delay = Math.round(1000 / fps);
+        this.toast('Loading GIF encoder...', 'info');
+        let GIFConstructor;
+        try { GIFConstructor = await this._loadGifJs(); } catch (e) {
+            console.warn('gif.js load failed, falling back to spritesheet:', e.message);
+            this._exportSpritesheet(fps);
+            return;
+        }
+        this.toast(`Encoding ${this._animFrames.length} frames...`, 'info');
+        const gif = new GIFConstructor({
+            workers: 2,
+            quality: 10,
+            workerScript: 'https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js'
+        });
+        let added = 0;
+        for (const data of this._animFrames) {
+            const img = await this._loadImage(data);
+            gif.addFrame(img, { delay, copy: true });
+            added++;
+            if (added % 5 === 0) this.toast(`Encoding frame ${added}/${this._animFrames.length}...`, 'info');
+        }
+        gif.on('finished', blob => {
+            const a = document.createElement('a');
+            a.download = `${(this._docName || 'openshop-animation').replace(/[^a-zA-Z0-9_-]/g, '_')}.gif`;
+            a.href = URL.createObjectURL(blob);
+            a.click();
+            this.toast(`GIF exported (${this._animFrames.length} frames @ ${fps}fps)`, 'success');
+        });
+        gif.render();
+    },
+    _loadImage(src) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = reject;
+            img.src = src;
+        });
+    },
+    _exportSpritesheet(fps) {
         const first = new Image();
         first.onload = () => {
             const fw = first.width, fh = first.height;
