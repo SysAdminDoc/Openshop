@@ -11,7 +11,7 @@ export function loadOpenShop() {
   const html = readFileSync(indexPath, 'utf8');
   const start = html.indexOf('const OS = {');
   const tail = html.slice(start);
-  const endMatch = tail.search(/\r?\n};\r?\n\r?\nwindow\.addEventListener/);
+  const endMatch = tail.search(/\r?\n};\r?\n\r?\n(?:document|window)\.addEventListener/);
   if (start === -1 || endMatch === -1) {
     throw new Error('Could not locate OS object in index.html');
   }

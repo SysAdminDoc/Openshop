@@ -2,6 +2,15 @@
 
 All notable changes to Openshop will be documented in this file.
 
+## [v0.18.13] - 2026-07-01
+
+### Security
+- Remove all inline event handlers from dynamically generated HTML (modals, layer list, color range, export settings)
+- Convert modal buttons from onclick attributes to addEventListener with data-attribute delegation
+- Convert layer panel visibility/lock/rename handlers from innerHTML onclick to DOM event listeners
+- Convert New Image presets, Color Range controls, and Curved Text sliders to delegated event wiring
+- Add global data-modal-close and data-suffix delegation handlers for modal buttons and range labels
+
 ## [v0.18.12] - 2026-06-28
 
 ### Added

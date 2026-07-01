@@ -10,7 +10,7 @@
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src blob:;">
-<title>OpenShop v0.18.12 — Online Image Editor</title>
+<title>OpenShop v0.18.13 — Online Image Editor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js" integrity="sha384-sLpuECXYCB5TUyTbC06pftm/rgurDambREZmV4eRHwEqJzCQtU6lxI2Ve00z4XW5" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/ag-psd@22.0.2/dist/bundle.js" integrity="sha384-kla4KJzEnshZnuWyJ8+AF8KEX0YZ2rpxTaQpDtDUmDdUv7jK94knsRx/lcRZ/HF4" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js" integrity="sha384-qovJwSBbRDPP5cEjCp8S0UP66wrvnjaa60XMOGzTNanrThcrGfXfnZkvgY8N1KT3" crossorigin="anonymous"></script>
@@ -561,7 +561,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <!-- ===== TOP MENU ===== -->
 <div id="topbar" role="menubar" aria-label="Main menu">
-    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.12</span></div>
+    <div class="logo" aria-hidden="true">OpenShop<span>v0.18.13</span></div>
     <div class="menu-item" role="menuitem" aria-haspopup="true">File
         <div class="menu-dropdown">
             <div class="dd-item" onclick="OS.newImage()">New</div>
@@ -1396,7 +1396,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <script>
 // ================================================================
-//  OpenShop v0.18.12 — Core Engine (Phase 10: Pro Toolbar)
+//  OpenShop v0.18.13 — Core Engine (Phase 10: Pro Toolbar)
 // ================================================================
 const OS = {
     _esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
@@ -1569,18 +1569,23 @@ const OS = {
         const o = document.createElement('div'); o.className = 'modal-overlay';
         o.innerHTML = `<div class="modal"><h3>New Image</h3>
             <div class="preset-grid">
-                <div class="preset-btn" onclick="this.closest('.modal').querySelector('#ni-w').value=1920;this.closest('.modal').querySelector('#ni-h').value=1080">1920x1080</div>
-                <div class="preset-btn" onclick="this.closest('.modal').querySelector('#ni-w').value=1280;this.closest('.modal').querySelector('#ni-h').value=720">1280x720</div>
-                <div class="preset-btn" onclick="this.closest('.modal').querySelector('#ni-w').value=1080;this.closest('.modal').querySelector('#ni-h').value=1080">1080x1080</div>
-                <div class="preset-btn" onclick="this.closest('.modal').querySelector('#ni-w').value=800;this.closest('.modal').querySelector('#ni-h').value=600">800x600</div>
-                <div class="preset-btn" onclick="this.closest('.modal').querySelector('#ni-w').value=3840;this.closest('.modal').querySelector('#ni-h').value=2160">4K</div>
-                <div class="preset-btn" onclick="this.closest('.modal').querySelector('#ni-w').value=2480;this.closest('.modal').querySelector('#ni-h').value=3508">A4 300dpi</div>
+                <div class="preset-btn" data-pw="1920" data-ph="1080">1920x1080</div>
+                <div class="preset-btn" data-pw="1280" data-ph="720">1280x720</div>
+                <div class="preset-btn" data-pw="1080" data-ph="1080">1080x1080</div>
+                <div class="preset-btn" data-pw="800" data-ph="600">800x600</div>
+                <div class="preset-btn" data-pw="3840" data-ph="2160">4K</div>
+                <div class="preset-btn" data-pw="2480" data-ph="3508">A4 300dpi</div>
             </div>
             <div class="modal-row"><label>Width</label><input id="ni-w" type="number" value="1920" min="1" max="8000"></div>
             <div class="modal-row"><label>Height</label><input id="ni-h" type="number" value="1080" min="1" max="8000"></div>
             <div class="modal-row"><label>Background</label><input id="ni-bg" type="color" value="#ffffff"></div>
-            <div class="modal-btns"><button class="btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
-            <button class="btn btn-primary" onclick="OS.doNewImage(this.closest('.modal-overlay'))">Create</button></div></div>`;
+            <div class="modal-btns"><button class="btn" data-modal-close>Cancel</button>
+            <button class="btn btn-primary" data-modal-create>Create</button></div></div>`;
+        o.querySelectorAll('[data-pw]').forEach(btn => btn.addEventListener('click', () => {
+            o.querySelector('#ni-w').value = btn.dataset.pw;
+            o.querySelector('#ni-h').value = btn.dataset.ph;
+        }));
+        o.querySelector('[data-modal-create]').addEventListener('click', () => this.doNewImage(o));
         document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('show'));
     },
     doNewImage(o) { const w=+o.querySelector('#ni-w').value||1920, h=+o.querySelector('#ni-h').value||1080; this.createNewDocument(w,h); o.remove(); this.toast(`Created ${w} × ${h} canvas`, 'success'); },
@@ -1756,8 +1761,9 @@ const OS = {
         o.innerHTML = `<div class="modal"><h3>Batch Export</h3>
             <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">Export canvas to multiple formats at once.</p>
             ${fmts.map(f => `<div class="modal-row"><label style="width:60px">${f.toUpperCase()}</label><label><input type="checkbox" id="batch-${f}" checked> Export</label></div>`).join('')}
-            <div class="modal-btns"><button class="btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
-            <button class="btn btn-primary" onclick="OS.doBatchExport(this.closest('.modal-overlay'))">Export All</button></div></div>`;
+            <div class="modal-btns"><button class="btn" data-modal-close>Cancel</button>
+            <button class="btn btn-primary" data-modal-action>Export All</button></div></div>`;
+        o.querySelector('[data-modal-action]').addEventListener('click', () => this.doBatchExport(o));
         document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('show'));
     },
     doBatchExport(o) {
@@ -1767,7 +1773,7 @@ const OS = {
     _projectFileHandle: null,
     async saveProject() {
         const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-        json._openShop = { version:'0.18.12', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+        json._openShop = { version:'0.18.13', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
         const data = JSON.stringify(json);
         if (this._projectFileHandle) {
             try {
@@ -2091,10 +2097,13 @@ self.onmessage = function(e) {
             const isBg = l.objects.some(o => o.name === '__boundary__');
             const thumbStyle = isBg ? 'layer-thumb-checker' : '';
             d.innerHTML = `<div class="layer-drag-handle" title="Drag to reorder">&#9776;</div>
-                <button class="layer-vis ${l.visible?'':'hidden'}" onclick="event.stopPropagation();OS.toggleLayerVisibility(${i})"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${eyeSvg}</svg></button>
-                <button class="layer-lock ${l.locked?'locked':''}" onclick="event.stopPropagation();OS.toggleLayerLock(${i})" title="${l.locked?'Unlock layer':'Lock layer'}">${lockSvg}</button>
+                <button class="layer-vis ${l.visible?'':'hidden'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${eyeSvg}</svg></button>
+                <button class="layer-lock ${l.locked?'locked':''}" title="${l.locked?'Unlock layer':'Lock layer'}">${lockSvg}</button>
                 <div class="layer-thumb"><div class="${thumbStyle}" style="width:32px;height:32px;${isBg?'':'background:var(--bg-depth-4);'}border-radius:2px"></div></div>
-                <div class="layer-info"><div class="layer-name" ondblclick="OS.startRenameLayer(this,${i})">${this._esc(l.name)}</div><div class="layer-type">${l.locked?'Locked &middot; ':''}${l.blend!=='source-over'?this._esc(l.blend)+' &middot; ':''}${l.objects.filter(o=>o.name!=='__boundary__').length} obj${hasMask?' &middot; M':''}</div></div>`;
+                <div class="layer-info"><div class="layer-name">${this._esc(l.name)}</div><div class="layer-type">${l.locked?'Locked &middot; ':''}${l.blend!=='source-over'?this._esc(l.blend)+' &middot; ':''}${l.objects.filter(o=>o.name!=='__boundary__').length} obj${hasMask?' &middot; M':''}</div></div>`;
+            d.querySelector('.layer-vis').addEventListener('click', e => { e.stopPropagation(); this.toggleLayerVisibility(i); });
+            d.querySelector('.layer-lock').addEventListener('click', e => { e.stopPropagation(); this.toggleLayerLock(i); });
+            d.querySelector('.layer-name').addEventListener('dblclick', function() { OS.startRenameLayer(this, i); });
             d.addEventListener('click', () => this.selectLayer(i));
             this.initLayerDrag(d, i);
             list.appendChild(d);
@@ -2798,8 +2807,12 @@ self.onmessage = function(e) {
         const o = document.createElement('div'); o.className = 'modal-overlay';
         o.innerHTML = `<div class="modal"><h3>${labels[type]} Selection</h3>
             <div class="modal-row"><label>Pixels</label><input id="mod-sel-px" type="number" value="${defaults[type]}" min="1" max="100"></div>
-            <div class="modal-btns"><button class="btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
-            <button class="btn btn-primary" onclick="OS._doModifySelection('${type}',+document.getElementById('mod-sel-px').value);this.closest('.modal-overlay').remove()">OK</button></div></div>`;
+            <div class="modal-btns"><button class="btn" data-modal-close>Cancel</button>
+            <button class="btn btn-primary" data-modal-action>OK</button></div></div>`;
+        o.querySelector('[data-modal-action]').addEventListener('click', () => {
+            this._doModifySelection(type, +o.querySelector('#mod-sel-px').value);
+            o.remove();
+        });
         document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('show'));
     },
     _doModifySelection(type, px) {
@@ -2951,7 +2964,7 @@ self.onmessage = function(e) {
                 <div class="cr-left">
                     <div class="cr-select-row">
                         <label>Select:</label>
-                        <select id="cr-mode-select" onchange="OS._crModeChange(this.value)">
+                        <select id="cr-mode-select">
                             <option value="sampled" selected>Sampled Colors</option>
                             <option value="reds">Reds</option>
                             <option value="yellows">Yellows</option>
@@ -2966,33 +2979,41 @@ self.onmessage = function(e) {
                     </div>
                     <div class="cr-fuzz-row">
                         <label>Fuzziness:</label>
-                        <input type="range" id="cr-fuzz" min="0" max="200" value="80" oninput="document.getElementById('cr-fuzz-num').value=this.value;OS._crUpdate()">
-                        <input type="number" id="cr-fuzz-num" min="0" max="200" value="80" onchange="document.getElementById('cr-fuzz').value=this.value;OS._crUpdate()">
+                        <input type="range" id="cr-fuzz" min="0" max="200" value="80">
+                        <input type="number" id="cr-fuzz-num" min="0" max="200" value="80">
                     </div>
                     <div class="cr-preview" id="cr-preview-box">
                         <canvas id="cr-preview-canvas"></canvas>
                     </div>
                     <div class="cr-preview-mode">
-                        <label><input type="radio" name="cr-prev" value="selection" checked onchange="OS._crUpdate()"> Selection</label>
-                        <label><input type="radio" name="cr-prev" value="image" onchange="OS._crUpdate()"> Image</label>
+                        <label><input type="radio" name="cr-prev" value="selection" checked> Selection</label>
+                        <label><input type="radio" name="cr-prev" value="image"> Image</label>
                     </div>
                 </div>
                 <div class="cr-right">
-                    <button class="btn btn-primary" onclick="OS._crApply()">OK</button>
-                    <button class="btn" onclick="document.getElementById('cr-overlay').remove()">Cancel</button>
+                    <button class="btn btn-primary" id="cr-ok-btn">OK</button>
+                    <button class="btn" data-modal-close>Cancel</button>
                     <div style="height:8px"></div>
                     <div class="cr-eyedroppers">
-                        <button class="cr-eyedrop-btn active" id="cr-eye-add" onclick="OS._crMode='add';document.querySelectorAll('.cr-eyedrop-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')" title="Add to sample">+</button>
-                        <button class="cr-eyedrop-btn" id="cr-eye-sub" onclick="OS._crMode='sub';document.querySelectorAll('.cr-eyedrop-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')" title="Subtract from sample">-</button>
+                        <button class="cr-eyedrop-btn active" id="cr-eye-add" title="Add to sample">+</button>
+                        <button class="cr-eyedrop-btn" id="cr-eye-sub" title="Subtract from sample">-</button>
                     </div>
                     <div style="height:4px"></div>
                     <div class="cr-invert-row">
-                        <input type="checkbox" id="cr-invert" onchange="OS._crInvert=this.checked;OS._crUpdate()">
+                        <input type="checkbox" id="cr-invert">
                         <label for="cr-invert">Invert</label>
                     </div>
                 </div>
             </div>
         </div>`;
+        o.querySelector('#cr-mode-select').addEventListener('change', e => this._crModeChange(e.target.value));
+        o.querySelector('#cr-fuzz').addEventListener('input', e => { document.getElementById('cr-fuzz-num').value = e.target.value; this._crUpdate(); });
+        o.querySelector('#cr-fuzz-num').addEventListener('change', e => { document.getElementById('cr-fuzz').value = e.target.value; this._crUpdate(); });
+        o.querySelectorAll('[name="cr-prev"]').forEach(r => r.addEventListener('change', () => this._crUpdate()));
+        o.querySelector('#cr-ok-btn').addEventListener('click', () => this._crApply());
+        o.querySelector('#cr-eye-add').addEventListener('click', function() { OS._crMode = 'add'; o.querySelectorAll('.cr-eyedrop-btn').forEach(b => b.classList.remove('active')); this.classList.add('active'); });
+        o.querySelector('#cr-eye-sub').addEventListener('click', function() { OS._crMode = 'sub'; o.querySelectorAll('.cr-eyedrop-btn').forEach(b => b.classList.remove('active')); this.classList.add('active'); });
+        o.querySelector('#cr-invert').addEventListener('change', e => { this._crInvert = e.target.checked; this._crUpdate(); });
         document.body.appendChild(o);
         requestAnimationFrame(() => o.classList.add('show'));
 
@@ -3665,7 +3686,8 @@ self.onmessage = function(e) {
     rotateObj(deg) { const a=this.canvas.getActiveObject(); if(a){a.rotate((a.angle||0)+deg);this.canvas.renderAll();this.saveHistory('Rotate '+deg);} else{this.toast('Select an object first','info');} },
     showResize() {
         const o=document.createElement('div'); o.className='modal-overlay';
-        o.innerHTML=`<div class="modal"><h3>Resize Canvas</h3><div class="modal-row"><label>Width</label><input id="rs-w" type="number" value="${this.canvasW}" min="1" max="8000"></div><div class="modal-row"><label>Height</label><input id="rs-h" type="number" value="${this.canvasH}" min="1" max="8000"></div><div class="modal-btns"><button class="btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button><button class="btn btn-primary" onclick="OS.doResize(this.closest('.modal-overlay'))">Apply</button></div></div>`;
+        o.innerHTML=`<div class="modal"><h3>Resize Canvas</h3><div class="modal-row"><label>Width</label><input id="rs-w" type="number" value="${this.canvasW}" min="1" max="8000"></div><div class="modal-row"><label>Height</label><input id="rs-h" type="number" value="${this.canvasH}" min="1" max="8000"></div><div class="modal-btns"><button class="btn" data-modal-close>Cancel</button><button class="btn btn-primary" data-modal-action>Apply</button></div></div>`;
+        o.querySelector('[data-modal-action]').addEventListener('click', () => this.doResize(o));
         document.body.appendChild(o); requestAnimationFrame(()=>o.classList.add('show'));
     },
     doResize(o) {
@@ -4156,9 +4178,11 @@ self.onmessage = function(e) {
         o.innerHTML = `<div class="modal"><h3>Recover Unsaved Work?</h3>
             <p style="font-size:12px;color:var(--text-secondary);margin-bottom:16px">An auto-saved project was found. Would you like to restore it?</p>
             <div class="modal-btns">
-                <button class="btn btn-danger" onclick="OS._discardRecovery();this.closest('.modal-overlay').remove()">Discard</button>
-                <button class="btn btn-primary" onclick="OS._restoreRecovery(this.closest('.modal-overlay'))">Restore</button>
+                <button class="btn btn-danger" data-recovery-discard>Discard</button>
+                <button class="btn btn-primary" data-recovery-restore>Restore</button>
             </div></div>`;
+        o.querySelector('[data-recovery-discard]').addEventListener('click', () => { this._discardRecovery(); o.remove(); });
+        o.querySelector('[data-recovery-restore]').addEventListener('click', () => this._restoreRecovery(o));
         document.body.appendChild(o);
         this._recoveryData = jsonText;
         requestAnimationFrame(() => o.classList.add('show'));
@@ -4224,7 +4248,7 @@ self.onmessage = async function(e) {
         if (!navigator.storage || !navigator.storage.getDirectory) return;
         try {
             const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-            json._openShop = { version:'0.18.12', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+            json._openShop = { version:'0.18.13', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
             const data = JSON.stringify(json);
             try {
                 const root = await navigator.storage.getDirectory();
@@ -4851,13 +4875,14 @@ self.onmessage = async function(e) {
         if (!active) { this.toast('Select an object first', 'info'); return; }
         const o = document.createElement('div'); o.className = 'modal-overlay';
         o.innerHTML = `<div class="modal"><h3>Free Transform</h3>
-            <div class="modal-row"><label>Scale X</label><input id="ft-sx" type="range" min="10" max="300" value="${Math.round((active.scaleX||1)*100)}" oninput="this.nextElementSibling.textContent=this.value+'%'"><span class="opt-val">${Math.round((active.scaleX||1)*100)}%</span></div>
-            <div class="modal-row"><label>Scale Y</label><input id="ft-sy" type="range" min="10" max="300" value="${Math.round((active.scaleY||1)*100)}" oninput="this.nextElementSibling.textContent=this.value+'%'"><span class="opt-val">${Math.round((active.scaleY||1)*100)}%</span></div>
-            <div class="modal-row"><label>Rotation</label><input id="ft-rot" type="range" min="-180" max="180" value="${Math.round(active.angle||0)}" oninput="this.nextElementSibling.textContent=this.value+'&deg;'"><span class="opt-val">${Math.round(active.angle||0)}&deg;</span></div>
-            <div class="modal-row"><label>Skew X</label><input id="ft-skx" type="range" min="-60" max="60" value="${Math.round(active.skewX||0)}" oninput="this.nextElementSibling.textContent=this.value+'&deg;'"><span class="opt-val">${Math.round(active.skewX||0)}&deg;</span></div>
-            <div class="modal-row"><label>Skew Y</label><input id="ft-sky" type="range" min="-60" max="60" value="${Math.round(active.skewY||0)}" oninput="this.nextElementSibling.textContent=this.value+'&deg;'"><span class="opt-val">${Math.round(active.skewY||0)}&deg;</span></div>
-            <div class="modal-btns"><button class="btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
-            <button class="btn btn-primary" onclick="OS._applyFreeTransform(this.closest('.modal-overlay'))">Apply</button></div></div>`;
+            <div class="modal-row"><label>Scale X</label><input id="ft-sx" type="range" min="10" max="300" value="${Math.round((active.scaleX||1)*100)}" data-suffix="%"><span class="opt-val">${Math.round((active.scaleX||1)*100)}%</span></div>
+            <div class="modal-row"><label>Scale Y</label><input id="ft-sy" type="range" min="10" max="300" value="${Math.round((active.scaleY||1)*100)}" data-suffix="%"><span class="opt-val">${Math.round((active.scaleY||1)*100)}%</span></div>
+            <div class="modal-row"><label>Rotation</label><input id="ft-rot" type="range" min="-180" max="180" value="${Math.round(active.angle||0)}" data-suffix="°"><span class="opt-val">${Math.round(active.angle||0)}°</span></div>
+            <div class="modal-row"><label>Skew X</label><input id="ft-skx" type="range" min="-60" max="60" value="${Math.round(active.skewX||0)}" data-suffix="°"><span class="opt-val">${Math.round(active.skewX||0)}°</span></div>
+            <div class="modal-row"><label>Skew Y</label><input id="ft-sky" type="range" min="-60" max="60" value="${Math.round(active.skewY||0)}" data-suffix="°"><span class="opt-val">${Math.round(active.skewY||0)}°</span></div>
+            <div class="modal-btns"><button class="btn" data-modal-close>Cancel</button>
+            <button class="btn btn-primary" data-modal-action>Apply</button></div></div>`;
+        o.querySelector('[data-modal-action]').addEventListener('click', () => this._applyFreeTransform(o));
         document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('show'));
     },
     _applyFreeTransform(overlay) {
@@ -4877,10 +4902,11 @@ self.onmessage = async function(e) {
         if (!active) { this.toast('Select an object first', 'info'); return; }
         const o = document.createElement('div'); o.className = 'modal-overlay';
         o.innerHTML = `<div class="modal"><h3>Skew</h3>
-            <div class="modal-row"><label>Skew X</label><input id="sk-x" type="range" min="-60" max="60" value="${Math.round(active.skewX||0)}" oninput="this.nextElementSibling.textContent=this.value+'&deg;'"><span class="opt-val">${Math.round(active.skewX||0)}&deg;</span></div>
-            <div class="modal-row"><label>Skew Y</label><input id="sk-y" type="range" min="-60" max="60" value="${Math.round(active.skewY||0)}" oninput="this.nextElementSibling.textContent=this.value+'&deg;'"><span class="opt-val">${Math.round(active.skewY||0)}&deg;</span></div>
-            <div class="modal-btns"><button class="btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
-            <button class="btn btn-primary" onclick="OS._applySkew(this.closest('.modal-overlay'))">Apply</button></div></div>`;
+            <div class="modal-row"><label>Skew X</label><input id="sk-x" type="range" min="-60" max="60" value="${Math.round(active.skewX||0)}" data-suffix="°"><span class="opt-val">${Math.round(active.skewX||0)}°</span></div>
+            <div class="modal-row"><label>Skew Y</label><input id="sk-y" type="range" min="-60" max="60" value="${Math.round(active.skewY||0)}" data-suffix="°"><span class="opt-val">${Math.round(active.skewY||0)}°</span></div>
+            <div class="modal-btns"><button class="btn" data-modal-close>Cancel</button>
+            <button class="btn btn-primary" data-modal-action>Apply</button></div></div>`;
+        o.querySelector('[data-modal-action]').addEventListener('click', () => this._applySkew(o));
         document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('show'));
     },
     _applySkew(overlay) {
@@ -5131,13 +5157,14 @@ self.onmessage = async function(e) {
         const o = document.createElement('div'); o.className = 'modal-overlay';
         o.innerHTML = `<div class="modal"><h3>Add Watermark</h3>
             <div class="modal-row"><label>Text</label><input id="wm-text" type="text" value="WATERMARK" style="flex:1;background:var(--bg-depth-3);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:4px 8px;font-size:12px"></div>
-            <div class="modal-row"><label>Size</label><input id="wm-size" type="range" min="12" max="200" value="48" oninput="this.nextElementSibling.textContent=this.value+'px'"><span class="opt-val">48px</span></div>
-            <div class="modal-row"><label>Opacity</label><input id="wm-opacity" type="range" min="5" max="100" value="30" oninput="this.nextElementSibling.textContent=this.value+'%'"><span class="opt-val">30%</span></div>
+            <div class="modal-row"><label>Size</label><input id="wm-size" type="range" min="12" max="200" value="48" data-suffix="px"><span class="opt-val">48px</span></div>
+            <div class="modal-row"><label>Opacity</label><input id="wm-opacity" type="range" min="5" max="100" value="30" data-suffix="%"><span class="opt-val">30%</span></div>
             <div class="modal-row"><label>Color</label><input id="wm-color" type="color" value="#ffffff"></div>
-            <div class="modal-row"><label>Rotation</label><input id="wm-angle" type="range" min="-90" max="90" value="-30" oninput="this.nextElementSibling.textContent=this.value+'&deg;'"><span class="opt-val">-30&deg;</span></div>
+            <div class="modal-row"><label>Rotation</label><input id="wm-angle" type="range" min="-90" max="90" value="-30" data-suffix="°"><span class="opt-val">-30°</span></div>
             <div class="modal-row"><label><input type="checkbox" id="wm-tiled"> Tiled / Repeat</label></div>
-            <div class="modal-btns"><button class="btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
-            <button class="btn btn-primary" onclick="OS._applyWatermark(this.closest('.modal-overlay'))">Apply</button></div></div>`;
+            <div class="modal-btns"><button class="btn" data-modal-close>Cancel</button>
+            <button class="btn btn-primary" data-modal-action>Apply</button></div></div>`;
+        o.querySelector('[data-modal-action]').addEventListener('click', () => this._applyWatermark(o));
         document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('show'));
     },
     _applyWatermark(overlay) {
@@ -5192,7 +5219,7 @@ self.onmessage = async function(e) {
                 <dt>Color Mode</dt><dd>RGB 8-bit</dd>
                 <dt>Est. Memory</dt><dd>~${Math.round(this.canvasW * this.canvasH * 4 / 1024 / 1024)} MB (uncompressed)</dd>
             </dl>
-            <div class="modal-btns"><button class="btn" onclick="this.closest('.modal-overlay').remove()">Close</button></div></div>`;
+            <div class="modal-btns"><button class="btn" data-modal-close>Close</button></div></div>`;
         document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('show'));
     },
 
@@ -5218,8 +5245,9 @@ self.onmessage = async function(e) {
                 <h4>Interface</h4>
                 <div class="pref-row"><label>Accent Color</label><input id="pref-accent" type="color" value="#6c8cff"></div>
             </div>
-            <div class="modal-btns"><button class="btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
-            <button class="btn btn-primary" onclick="OS._applyPreferences(this.closest('.modal-overlay'))">Apply</button></div></div>`;
+            <div class="modal-btns"><button class="btn" data-modal-close>Cancel</button>
+            <button class="btn btn-primary" data-modal-action>Apply</button></div></div>`;
+        o.querySelector('[data-modal-action]').addEventListener('click', () => this._applyPreferences(o));
         document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('show'));
     },
     _applyPreferences(overlay) {
@@ -5796,17 +5824,20 @@ self.onmessage = async function(e) {
         const o = document.createElement('div'); o.className = 'modal-overlay';
         o.innerHTML = `<div class="modal" style="min-width:380px"><h3>Export Settings</h3>
             <div class="export-format-row">
-                <button class="btn active" id="es-png" onclick="OS._esFormat('png',this)">PNG</button>
-                <button class="btn" id="es-jpeg" onclick="OS._esFormat('jpeg',this)">JPEG</button>
-                <button class="btn" id="es-webp" onclick="OS._esFormat('webp',this)">WebP</button>
+                <button class="btn active" id="es-png" data-fmt="png">PNG</button>
+                <button class="btn" id="es-jpeg" data-fmt="jpeg">JPEG</button>
+                <button class="btn" id="es-webp" data-fmt="webp">WebP</button>
             </div>
-            <div class="modal-row" id="es-quality-row" style="display:none"><label>Quality</label><input id="es-quality" type="range" min="1" max="100" value="92" oninput="this.nextElementSibling.textContent=this.value+'%';OS._esUpdateSize()"><span class="opt-val">92%</span></div>
+            <div class="modal-row" id="es-quality-row" style="display:none"><label>Quality</label><input id="es-quality" type="range" min="1" max="100" value="92" data-suffix="%"><span class="opt-val">92%</span></div>
             <div class="modal-row"><label>Scale</label><select id="es-scale"><option value="1">1x (Original)</option><option value="0.5">0.5x (Half)</option><option value="2">2x (Double)</option><option value="0.25">0.25x (Quarter)</option></select></div>
             <div class="modal-row"><label><input type="checkbox" id="es-transparent"> Transparent Background</label></div>
             <div class="export-size-est" id="es-size">Est. size: calculating...</div>
             <div class="export-preview" id="es-preview"></div>
-            <div class="modal-btns"><button class="btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
-            <button class="btn btn-primary" onclick="OS._doExportSettings(this.closest('.modal-overlay'))">Export</button></div></div>`;
+            <div class="modal-btns"><button class="btn" data-modal-close>Cancel</button>
+            <button class="btn btn-primary" data-modal-action>Export</button></div></div>`;
+        o.querySelectorAll('[data-fmt]').forEach(btn => btn.addEventListener('click', () => this._esFormat(btn.dataset.fmt, btn)));
+        o.querySelector('#es-quality').addEventListener('input', () => this._esUpdateSize());
+        o.querySelector('[data-modal-action]').addEventListener('click', () => this._doExportSettings(o));
         document.body.appendChild(o); requestAnimationFrame(() => { o.classList.add('show'); this._esUpdateSize(); });
     },
     _esFormat(fmt, btn) {
@@ -6588,7 +6619,7 @@ self.onmessage = async function(e) {
         const o = document.createElement('div'); o.className = 'modal-overlay';
         o.innerHTML = `<div class="modal" style="min-width:400px"><h3>Keyboard Shortcuts</h3>
             <dl class="shortcut-grid">${shortcuts.map(([k,v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
-            <div class="modal-btns"><button class="btn" onclick="this.closest('.modal-overlay').remove()">Close</button></div></div>`;
+            <div class="modal-btns"><button class="btn" data-modal-close>Close</button></div></div>`;
         document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('show'));
     },
 
@@ -7296,12 +7327,16 @@ self.onmessage = async function(e) {
         const o = document.createElement('div'); o.className = 'modal-overlay';
         o.innerHTML = `<div class="modal"><h3>Curved Text</h3>
             <div class="curved-text-preview"><canvas id="ct-preview" width="280" height="120"></canvas></div>
-            <div class="modal-row"><label>Text</label><input id="ct-text" type="text" value="Curved Text" style="flex:1;background:var(--bg-depth-3);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:4px 8px" oninput="OS._updateCurvedPreview()"></div>
-            <div class="modal-row"><label>Radius</label><input id="ct-radius" type="range" min="50" max="500" value="150" oninput="this.nextElementSibling.textContent=this.value+'px';OS._updateCurvedPreview()"><span class="opt-val">150px</span></div>
-            <div class="modal-row"><label>Start Angle</label><input id="ct-angle" type="range" min="-180" max="180" value="-90" oninput="this.nextElementSibling.textContent=this.value+'&deg;';OS._updateCurvedPreview()"><span class="opt-val">-90&deg;</span></div>
-            <div class="modal-row"><label>Size</label><input id="ct-size" type="range" min="10" max="80" value="24" oninput="this.nextElementSibling.textContent=this.value+'px';OS._updateCurvedPreview()"><span class="opt-val">24px</span></div>
-            <div class="modal-row"><label>Color</label><input id="ct-color" type="color" value="#ffffff" onchange="OS._updateCurvedPreview()"></div>
-            <div class="modal-btns"><button class="btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button><button class="btn btn-primary" onclick="OS._applyCurvedText(this.closest('.modal-overlay'))">Apply</button></div></div>`;
+            <div class="modal-row"><label>Text</label><input id="ct-text" type="text" value="Curved Text" style="flex:1;background:var(--bg-depth-3);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:4px 8px"></div>
+            <div class="modal-row"><label>Radius</label><input id="ct-radius" type="range" min="50" max="500" value="150" data-suffix="px"><span class="opt-val">150px</span></div>
+            <div class="modal-row"><label>Start Angle</label><input id="ct-angle" type="range" min="-180" max="180" value="-90" data-suffix="°"><span class="opt-val">-90°</span></div>
+            <div class="modal-row"><label>Size</label><input id="ct-size" type="range" min="10" max="80" value="24" data-suffix="px"><span class="opt-val">24px</span></div>
+            <div class="modal-row"><label>Color</label><input id="ct-color" type="color" value="#ffffff"></div>
+            <div class="modal-btns"><button class="btn" data-modal-close>Cancel</button><button class="btn btn-primary" data-modal-action>Apply</button></div></div>`;
+        o.querySelector('#ct-text').addEventListener('input', () => this._updateCurvedPreview());
+        o.querySelectorAll('#ct-radius, #ct-angle, #ct-size').forEach(el => el.addEventListener('input', () => this._updateCurvedPreview()));
+        o.querySelector('#ct-color').addEventListener('change', () => this._updateCurvedPreview());
+        o.querySelector('[data-modal-action]').addEventListener('click', () => this._applyCurvedText(o));
         document.body.appendChild(o); requestAnimationFrame(() => { o.classList.add('show'); this._updateCurvedPreview(); });
     },
     _updateCurvedPreview() {
@@ -8388,6 +8423,15 @@ self.onmessage = async function(e) {
         setTimeout(()=>{t.classList.remove('show');setTimeout(()=>t.remove(),300);},2500);
     },
 };
+
+document.addEventListener('click', e => {
+    const c = e.target.closest('[data-modal-close]');
+    if (c) { const o = c.closest('.modal-overlay'); if (o) o.remove(); }
+});
+document.addEventListener('input', e => {
+    if (e.target.type === 'range' && e.target.dataset.suffix && e.target.nextElementSibling)
+        e.target.nextElementSibling.textContent = e.target.value + e.target.dataset.suffix;
+});
 
 window.addEventListener('error', e => { console.error('Unhandled error:', e.error || e.message); if (typeof OS !== 'undefined' && OS.toast) OS.toast('Something went wrong — see console', 'error'); });
 window.addEventListener('unhandledrejection', e => { console.error('Unhandled promise rejection:', e.reason); if (typeof OS !== 'undefined' && OS.toast) OS.toast('Something went wrong — see console', 'error'); });
