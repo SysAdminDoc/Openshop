@@ -15,6 +15,9 @@ All notable changes to Openshop will be documented in this file.
 - Unit tests for project save round-trip, recovery offer/restore/discard, SVG sanitization, and PSD export structure
 - Playwright mobile viewport smoke test verifying toolbar and canvas render on 375x667
 - Test harness modal delegation support via installModalDelegation helper
+- Responsive mobile layout: toolbar moves to bottom, right panels collapse, modals fit viewport at <768px
+- Tablet breakpoint: right panels narrow to 200px at 768-1023px
+- Two-finger pinch-to-zoom and pan gestures on canvas for touch devices
 
 ## [v0.18.12] - 2026-06-28
 
