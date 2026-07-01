@@ -10,7 +10,7 @@
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src blob:;">
-<title>OpenShop v0.19.0 — Online Image Editor</title>
+<title>OpenShop v0.19.1 — Online Image Editor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js" integrity="sha384-sLpuECXYCB5TUyTbC06pftm/rgurDambREZmV4eRHwEqJzCQtU6lxI2Ve00z4XW5" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/ag-psd@22.0.2/dist/bundle.js" integrity="sha384-kla4KJzEnshZnuWyJ8+AF8KEX0YZ2rpxTaQpDtDUmDdUv7jK94knsRx/lcRZ/HF4" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js" integrity="sha384-qovJwSBbRDPP5cEjCp8S0UP66wrvnjaa60XMOGzTNanrThcrGfXfnZkvgY8N1KT3" crossorigin="anonymous"></script>
@@ -593,7 +593,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <!-- ===== TOP MENU ===== -->
 <div id="topbar" role="menubar" aria-label="Main menu">
-    <div class="logo" aria-hidden="true">OpenShop<span>v0.19.0</span></div>
+    <div class="logo" aria-hidden="true">OpenShop<span>v0.19.1</span></div>
     <button class="mobile-panel-toggle" onclick="document.getElementById('panels').classList.toggle('mobile-open')" aria-label="Toggle panels" style="display:none;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid var(--border);border-radius:4px;background:var(--bg-depth-3);color:var(--text-secondary);cursor:pointer;margin-left:auto;font-size:14px">&#9776;</button>
     <div class="menu-item" role="menuitem" aria-haspopup="true">File
         <div class="menu-dropdown">
@@ -1430,7 +1430,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 
 <script>
 // ================================================================
-//  OpenShop v0.19.0 — Core Engine (Phase 10: Pro Toolbar)
+//  OpenShop v0.19.1 — Core Engine (Phase 10: Pro Toolbar)
 // ================================================================
 const OS = {
     _esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
@@ -1912,7 +1912,7 @@ const OS = {
     _projectFileHandle: null,
     async saveProject() {
         const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-        json._openShop = { version:'0.19.0', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+        json._openShop = { version:'0.19.1', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
         const data = JSON.stringify(json);
         if (this._projectFileHandle) {
             try {
@@ -4470,7 +4470,7 @@ self.onmessage = async function(e) {
         if (!navigator.storage || !navigator.storage.getDirectory) return;
         try {
             const json = this.canvas.toJSON(['name','excludeFromExport','globalCompositeOperation']);
-            json._openShop = { version:'0.19.0', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
+            json._openShop = { version:'0.19.1', w:this.canvasW, h:this.canvasH, layers:this.layers.map(l=>({name:l.name,visible:l.visible,opacity:l.opacity,blend:l.blend})) };
             const data = JSON.stringify(json);
             try {
                 const root = await navigator.storage.getDirectory();

@@ -2,6 +2,37 @@
 
 All notable changes to Openshop will be documented in this file.
 
+## [v0.19.1] - 2026-07-01
+
+### Fixed
+- Fix _sanitizeProjectValue truncating base64 data URLs to 500 chars, destroying saved projects on load (P0)
+- Fix deselectSelection undefined method in context menu (should be deselectAll)
+- Fix deleteLayer crash when all layers removed (auto-create empty layer)
+- Fix _applyPreferences overwriting current document dimensions with default preferences
+- Fix _selectionPath undefined reference in context menu (use _selectionBounds)
+- Fix duplicateLayer async clone race: defer saveHistory until all clones complete
+- Fix selectFrame destroying canvas state: rebuild boundary and layers after clear
+- Fix filter worker race condition on concurrent operations via job ID message routing
+- Fix blob URL memory leaks across all export/download paths (revoke after 60s)
+- Fix draggable filter panel document listener leak via AbortController cleanup
+- Fix guide listener leak on clearGuides (store and call cleanup functions)
+- Fix _hexToRgba and _hexToOklch failing on 3-digit hex shorthand (NaN propagation)
+- Fix previewLayerStyle drop shadow silently overwritten by outer glow (prioritize drop shadow)
+
+### Security
+- Fix SVG sanitizer only stripping 4 of 70+ event handler attributes (now strips all on* attributes)
+- Fix macro replay allowing execution of private/internal methods via crafted JSON
+- Fix macro load accepting arbitrary unvalidated JSON arrays
+
+### Changed
+- Timeline and macro panel positions now use CSS variables instead of hardcoded pixel offsets
+- Recording indicator, macro button, AI progress bar, and grid colors now use theme CSS variables
+- Active tool button box-shadow uses glass-border variable instead of hardcoded accent rgba
+- Mobile panels accessible via slide-over drawer with toggle button instead of permanently hidden
+- Color Range dialog wraps to fit mobile viewport
+- Meta charset moved to first child of head per HTML spec
+- Command palette input has aria-label for screen readers
+
 ## [v0.19.0] - 2026-07-01
 
 ### Security
