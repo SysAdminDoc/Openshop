@@ -2,7 +2,7 @@
 
 All notable changes to Openshop will be documented in this file.
 
-## [v0.18.13] - 2026-07-01
+## [v0.19.0] - 2026-07-01
 
 ### Security
 - Remove all inline event handlers from dynamically generated HTML (modals, layer list, color range, export settings)
