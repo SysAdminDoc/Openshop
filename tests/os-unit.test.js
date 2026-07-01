@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import {
   createCanvasMock,
   installFabricMock,
+  installModalDelegation,
   loadOpenShop,
   mountEditorDom,
   quietUiMethods
@@ -12,6 +13,7 @@ describe('OpenShop core object', () => {
   beforeEach(() => {
     localStorage.clear();
     installFabricMock();
+    installModalDelegation();
     mountEditorDom();
   });
 
@@ -518,5 +520,164 @@ describe('OpenShop core object', () => {
     expect(corruptModal.querySelector('img')).toBeNull();
     expect(corruptModal.textContent).toContain('Corrupt');
     expect(corruptModal.querySelector('.btn-primary').disabled).toBe(true);
+  });
+
+  it('round-trips project save and open with sanitization', async () => {
+    const OS = loadOpenShop();
+    const boundary = { name: '__boundary__', type: 'rect', visible: true };
+    const photo = { name: 'Photo', type: 'image', visible: true, opacity: 1 };
+    const canvas = createCanvasMock([boundary, photo]);
+    canvas.toJSON = vi.fn(() => ({
+      objects: [
+        { name: '__boundary__', type: 'rect' },
+        { name: 'Photo', type: 'image' }
+      ]
+    }));
+    OS.canvas = canvas;
+    OS.layers = [{ name: 'Background', visible: true, opacity: 100, blend: 'source-over', objects: [boundary, photo] }];
+    OS.canvasW = 800;
+    OS.canvasH = 600;
+    quietUiMethods(OS);
+    OS.rebuildLayersFromCanvas = vi.fn();
+    OS.zoomFit = vi.fn();
+    OS.saveHistory = vi.fn();
+    OS._clearAutoSave = vi.fn();
+
+    const json = canvas.toJSON();
+    json._openShop = { version: '0.18.13', w: OS.canvasW, h: OS.canvasH, layers: OS.layers.map(l => ({ name: l.name, visible: l.visible, opacity: l.opacity, blend: l.blend })) };
+    expect(json._openShop.version).toBe('0.18.13');
+    expect(json._openShop.w).toBe(800);
+    expect(json._openShop.h).toBe(600);
+    expect(json._openShop.layers).toHaveLength(1);
+
+    const clicks = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function click() {
+      clicks.push({ download: this.download });
+    });
+    await OS.saveProject();
+    expect(clicks).toHaveLength(1);
+    expect(clicks[0].download).toBe('openshop-project.json');
+
+    const hostile = {
+      _openShop: { w: '640', h: '480' },
+      objects: [{ name: '<script>alert(1)</script>', src: 'javascript:alert(2)' }]
+    };
+    OS._sanitizeProjectJSON(hostile);
+    expect(hostile._openShop.w).toBe(640);
+    expect(hostile.objects[0].name).not.toContain('onerror=');
+    expect(hostile.objects[0].src).not.toContain('javascript:');
+  });
+
+  it('offers recovery with event-delegated buttons and restores or discards', () => {
+    const OS = loadOpenShop();
+    const canvas = createCanvasMock();
+    OS.canvas = canvas;
+    quietUiMethods(OS);
+    OS.rebuildLayersFromCanvas = vi.fn();
+    OS.zoomFit = vi.fn();
+    OS.saveHistory = vi.fn();
+    OS._clearAutoSave = vi.fn();
+
+    const project = JSON.stringify({ _openShop: { w: 320, h: 240 }, objects: [] });
+    OS._offerRecovery(project);
+
+    const overlay = document.querySelector('.modal-overlay');
+    expect(overlay).not.toBeNull();
+    expect(overlay.querySelector('[onclick]')).toBeNull();
+    expect(overlay.textContent).toContain('Recover Unsaved Work');
+
+    overlay.querySelector('[data-recovery-restore]').click();
+    expect(canvas.loadFromJSON).toHaveBeenCalled();
+    expect(OS.toast).toHaveBeenCalledWith('Project restored from auto-save', 'success');
+
+    OS._offerRecovery(project);
+    const overlay2 = document.querySelector('.modal-overlay');
+    OS._discardRecovery = vi.fn();
+    overlay2.querySelector('[data-recovery-discard]').click();
+    expect(OS._discardRecovery).toHaveBeenCalled();
+    expect(document.querySelector('.modal-overlay')).toBeNull();
+  });
+
+  it('sanitizes SVG export by stripping scripts and event handlers', () => {
+    const OS = loadOpenShop();
+
+    const malicious = `<svg xmlns="http://www.w3.org/2000/svg">
+      <script>alert(1)</script>
+      <rect width="100" height="100" onclick="alert(2)"/>
+      <circle cx="50" cy="50" r="25" onload="alert(3)"/>
+      <a href="javascript:alert(4)"><text>Click</text></a>
+      <a href="data:text/html,test"><text>Link</text></a>
+      <rect width="50" height="50" fill="blue"/>
+    </svg>`;
+
+    const clean = OS._sanitizeSVG(malicious);
+    expect(clean).not.toContain('<script>');
+    expect(clean).not.toContain('onclick');
+    expect(clean).not.toContain('onload');
+    expect(clean).not.toContain('javascript:');
+    expect(clean).not.toContain('data:text/html');
+    expect(clean).toContain('fill="blue"');
+  });
+
+  it('builds PSD export structure with correct layer metadata', () => {
+    const OS = loadOpenShop();
+    const boundary = { name: '__boundary__', visible: true, toCanvasElement: vi.fn(() => document.createElement('canvas')), left: 0, top: 0, opacity: 1 };
+    const photo = { name: 'Portrait', visible: true, toCanvasElement: vi.fn(() => document.createElement('canvas')), left: 10, top: 20, opacity: 0.8 };
+    const canvas = createCanvasMock([boundary, photo]);
+    OS.canvas = canvas;
+    OS.canvasW = 400;
+    OS.canvasH = 300;
+    OS.layers = [
+      { name: 'BG', visible: true, opacity: 100, blend: 'source-over', objects: [boundary] },
+      { name: 'Subject', visible: true, opacity: 80, blend: 'multiply', objects: [photo] }
+    ];
+    quietUiMethods(OS);
+
+    let writtenPsd = null;
+    const mockLib = {
+      writePsd: vi.fn(psd => { writtenPsd = psd; return new Uint8Array([0x38, 0x42, 0x50, 0x53]); })
+    };
+    globalThis.agPsd = mockLib;
+
+    const clicks = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function click() {
+      clicks.push({ download: this.download });
+    });
+
+    OS.exportPSD();
+
+    expect(mockLib.writePsd).toHaveBeenCalled();
+    expect(writtenPsd.width).toBe(400);
+    expect(writtenPsd.height).toBe(300);
+    expect(writtenPsd.children).toHaveLength(1);
+    expect(writtenPsd.children[0].name).toBe('Subject');
+    expect(writtenPsd.children[0].opacity).toBe(Math.round(0.8 * 255));
+    expect(clicks[0].download).toBe('openshop-export.psd');
+
+    delete globalThis.agPsd;
+  });
+
+  it('wires modal close and action buttons via data attributes', () => {
+    const OS = loadOpenShop();
+    OS.canvas = createCanvasMock();
+    quietUiMethods(OS);
+    OS.saveHistory = vi.fn();
+    OS._clearAutoSave = vi.fn();
+    OS.rebuildLayersFromCanvas = vi.fn();
+    OS.zoomFit = vi.fn();
+
+    OS.newImage();
+    const overlay = document.querySelector('.modal-overlay');
+    expect(overlay).not.toBeNull();
+    expect(overlay.querySelector('[onclick]')).toBeNull();
+
+    const presets = overlay.querySelectorAll('[data-pw]');
+    expect(presets.length).toBeGreaterThanOrEqual(4);
+    presets[0].click();
+    expect(overlay.querySelector('#ni-w').value).toBe(presets[0].dataset.pw);
+    expect(overlay.querySelector('#ni-h').value).toBe(presets[0].dataset.ph);
+
+    overlay.querySelector('[data-modal-close]').click();
+    expect(document.querySelector('.modal-overlay')).toBeNull();
   });
 });

@@ -182,6 +182,39 @@ test('mirrors tool, layer, selection, and actions for assistive tech', async ({ 
   expect(result.layerItems).toBeGreaterThan(0);
 });
 
+test('loads the editor on a mobile viewport without clipped controls', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#editor-canvas')).toBeVisible();
+  await page.evaluate(() => OS.dismissWelcome());
+
+  const toolbar = page.locator('#toolbar');
+  await expect(toolbar).toBeVisible();
+  const toolbarBox = await toolbar.boundingBox();
+  expect(toolbarBox.width).toBeGreaterThan(0);
+  expect(toolbarBox.height).toBeGreaterThan(0);
+
+  const selectTool = page.locator('.tool-btn[data-tool="select"]').first();
+  await expect(selectTool).toBeVisible();
+  const toolBox = await selectTool.boundingBox();
+  expect(toolBox.x).toBeGreaterThanOrEqual(0);
+  expect(toolBox.y).toBeGreaterThanOrEqual(0);
+  expect(toolBox.x + toolBox.width).toBeLessThanOrEqual(375);
+
+  const canvas = page.locator('#editor-canvas');
+  const canvasBox = await canvas.boundingBox();
+  expect(canvasBox.width).toBeGreaterThan(50);
+  expect(canvasBox.height).toBeGreaterThan(50);
+
+  const result = await page.evaluate(() => ({
+    canvasVisible: document.getElementById('editor-canvas')?.offsetWidth > 0,
+    toolbarVisible: document.getElementById('toolbar')?.offsetWidth > 0,
+    noPageErrors: true
+  }));
+  expect(result.canvasVisible).toBe(true);
+  expect(result.toolbarVisible).toBe(true);
+});
+
 test('renders persisted UI data without activating markup', async ({ page }) => {
   await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
   await page.evaluate(() => {

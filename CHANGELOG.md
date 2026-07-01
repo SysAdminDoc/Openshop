@@ -11,6 +11,11 @@ All notable changes to Openshop will be documented in this file.
 - Convert New Image presets, Color Range controls, and Curved Text sliders to delegated event wiring
 - Add global data-modal-close and data-suffix delegation handlers for modal buttons and range labels
 
+### Added
+- Unit tests for project save round-trip, recovery offer/restore/discard, SVG sanitization, and PSD export structure
+- Playwright mobile viewport smoke test verifying toolbar and canvas render on 375x667
+- Test harness modal delegation support via installModalDelegation helper
+
 ## [v0.18.12] - 2026-06-28
 
 ### Added

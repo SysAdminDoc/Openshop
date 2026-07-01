@@ -115,6 +115,17 @@ export function createCanvasMock(initialObjects = []) {
   return canvas;
 }
 
+export function installModalDelegation() {
+  document.addEventListener('click', e => {
+    const c = e.target.closest('[data-modal-close]');
+    if (c) { const o = c.closest('.modal-overlay'); if (o) o.remove(); }
+  });
+  document.addEventListener('input', e => {
+    if (e.target.type === 'range' && e.target.dataset.suffix && e.target.nextElementSibling)
+      e.target.nextElementSibling.textContent = e.target.value + e.target.dataset.suffix;
+  });
+}
+
 export function mountEditorDom() {
   const optionIds = [
     'opt-select',
