@@ -23,6 +23,9 @@ All notable changes to Openshop will be documented in this file.
 - Static image fallback for single-frame GIFs and browsers without ImageDecoder support
 - OKLCh color value display in the foreground color panel alongside hex values
 - sRGB to OKLab/OKLCh conversion computed inline using the Oklab specification matrix transforms
+- i18n infrastructure: automatic DOM text discovery via _initI18n(), locale map with _t() lookup, setLocale() for switching
+- Language selector in Preferences dialog (English default, extensible for community translations)
+- 28 common toast messages converted to _t() locale-aware lookup (project, undo, filters, adjustments)
 
 ## [v0.18.12] - 2026-06-28
 
