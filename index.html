@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta property="og:image" content="https://raw.githubusercontent.com/SysAdminDoc/Openshop/main/banner.png">
 <meta charset="UTF-8">
+    <meta property="og:image" content="https://raw.githubusercontent.com/SysAdminDoc/Openshop/main/banner.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="OpenShop — Free browser-based image editor with layers, AI tools, selections, filters, PSD import, and a Photoshop-inspired workflow. No server, no signup, no install.">
 <meta property="og:title" content="OpenShop — Free Online Image Editor">
@@ -111,7 +111,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg-depth-0);co
 .ai-title{font-size:15px;font-weight:600;color:var(--text-primary);margin-bottom:10px}
 .ai-msg{font-size:11.5px;color:var(--text-muted);margin-bottom:14px;min-height:16px;line-height:1.4}
 .ai-bar-wrap{width:100%;height:5px;background:var(--bg-depth-4);border-radius:3px;overflow:hidden}
-.ai-bar{height:100%;background:linear-gradient(90deg,var(--accent),#a78bfa);border-radius:3px;transition:width .4s var(--ease-out);width:0%}
+.ai-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-hover));border-radius:3px;transition:width .4s var(--ease-out);width:0%}
 .ai-pct{font-size:10.5px;color:var(--text-muted);margin-top:8px;font-family:'JetBrains Mono',monospace}
 .ai-spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--text-muted);border-top-color:var(--accent);border-radius:50%;animation:aispin .8s linear infinite;margin-right:6px;vertical-align:middle}
 @keyframes aispin{to{transform:rotate(360deg)}}
@@ -522,7 +522,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 #liquify-canvas-wrap{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden}
 
 /* === TIMELINE / ANIMATION === */
-#timeline-panel{position:fixed;bottom:24px;left:220px;right:240px;height:140px;background:var(--bg-depth-1);border-top:1px solid var(--border);border-radius:8px 8px 0 0;z-index:20000;display:none;flex-direction:column;box-shadow:0 -4px 16px rgba(0,0,0,.3)}
+#timeline-panel{position:fixed;bottom:var(--statusbar-h);left:var(--toolbar-w);right:var(--panel-width);height:140px;background:var(--bg-depth-1);border-top:1px solid var(--border);border-radius:8px 8px 0 0;z-index:20000;display:none;flex-direction:column;box-shadow:0 -4px 16px rgba(0,0,0,.3)}
 #timeline-panel.visible{display:flex}
 #timeline-header{height:32px;display:flex;align-items:center;padding:0 10px;gap:6px;border-bottom:1px solid var(--border);flex-shrink:0}
 #timeline-header .btn{padding:2px 8px;font-size:11px}
@@ -540,7 +540,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 .frame-thumb:hover .frame-del{opacity:1}
 
 /* === ACTION / MACRO PANEL === */
-#macro-panel{position:fixed;right:240px;bottom:170px;width:260px;background:var(--bg-depth-1);border:1px solid var(--border);border-radius:8px;z-index:20001;display:none;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+#macro-panel{position:fixed;right:var(--panel-width);bottom:170px;width:260px;background:var(--bg-depth-1);border:1px solid var(--border);border-radius:8px;z-index:20001;display:none;box-shadow:0 4px 20px rgba(0,0,0,.4)}
 #macro-panel.visible{display:block}
 #macro-header{height:30px;display:flex;align-items:center;padding:0 10px;gap:6px;border-bottom:1px solid var(--border)}
 #macro-header span{font-size:11px;color:var(--text-secondary);flex:1}
@@ -549,7 +549,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 .macro-step:last-child{border:none}
 .macro-controls{display:flex;gap:4px;padding:6px;border-top:1px solid var(--border)}
 .macro-controls .btn{flex:1;padding:3px 0;font-size:10px}
-.recording-indicator{width:8px;height:8px;border-radius:50%;background:#ff4444;animation:recBlink 1s infinite}
+.recording-indicator{width:8px;height:8px;border-radius:50%;background:var(--danger);animation:recBlink 1s infinite}
 @keyframes recBlink{0%,100%{opacity:1}50%{opacity:.3}}
 
 /* === CURVED TEXT === */
@@ -1341,7 +1341,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 <!-- ===== COMMAND PALETTE ===== -->
 <div id="cmd-palette" role="dialog" aria-label="Command palette" onclick="if(event.target===this)OS.closeCmdPalette()">
     <div id="cmd-box">
-        <input id="cmd-input" type="text" placeholder="Type a command... (Ctrl+K)" oninput="OS.filterCommands(this.value)" onkeydown="OS.cmdKeyDown(event)">
+        <input id="cmd-input" type="text" placeholder="Type a command... (Ctrl+K)" aria-label="Search commands" oninput="OS.filterCommands(this.value)" onkeydown="OS.cmdKeyDown(event)">
         <div id="cmd-results"></div>
     </div>
 </div>
@@ -1428,6 +1428,11 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 // ================================================================
 const OS = {
     _esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
+    _downloadBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.download = filename; a.href = url; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+    },
     _locales: { en: {} },
     _lang: 'en',
     _t(key) { return (this._locales[this._lang] || {})[key] || key; },
@@ -1685,7 +1690,11 @@ const OS = {
                 if (stats.layers > this._importLimits.maxProjectLayers) throw new Error('Project layer count exceeds import limits');
             }
             for (const key of Object.keys(value)) {
-                if (typeof value[key] === 'string') value[key] = this._safeText(value[key].replace(/javascript:/gi, '').replace(/on\w+\s*=/gi, ''), 500);
+                if (typeof value[key] === 'string') {
+                    value[key] = value[key].replace(/javascript:/gi, '').replace(/on\w+\s*=/gi, '');
+                    const isDataField = key === 'src' || key === 'source' || value[key].startsWith('data:');
+                    if (!isDataField) value[key] = this._safeText(value[key], 500);
+                }
                 if (key === 'id' && typeof value[key] === 'string') value[key] = value[key].replace(/[<>"'&]/g, '');
                 this._sanitizeProjectValue(value[key], depth + 1, stats);
             }
@@ -1852,7 +1861,13 @@ const OS = {
     _sanitizeSVG(svg) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(svg, 'image/svg+xml');
-        doc.querySelectorAll('script, [onload], [onerror], [onclick], [onmouseover]').forEach(el => el.remove());
+        doc.querySelectorAll('script').forEach(el => el.remove());
+        const allEls = doc.querySelectorAll('*');
+        allEls.forEach(el => {
+            for (const attr of [...el.attributes]) {
+                if (attr.name.startsWith('on')) el.removeAttribute(attr.name);
+            }
+        });
         doc.querySelectorAll('[xlink\\:href]').forEach(el => {
             const href = el.getAttribute('xlink:href') || '';
             if (href.startsWith('javascript:') || href.startsWith('data:text/html')) el.removeAttribute('xlink:href');
@@ -1870,7 +1885,7 @@ const OS = {
         svg = this._sanitizeSVG(svg);
         this.canvas.viewportTransform = vpt; this.canvas.renderAll();
         const blob = new Blob([svg], { type:'image/svg+xml' });
-        const a = document.createElement('a'); a.download='openshop-export.svg'; a.href=URL.createObjectURL(blob); a.click();
+        this._downloadBlob(blob, 'openshop-export.svg');
         this.toast('Exported as SVG', 'success');
     },
     batchExport() {
@@ -1916,7 +1931,7 @@ const OS = {
             } catch(e) { if (e.name === 'AbortError') return; console.warn('Save picker failed:', e.message); }
         }
         const blob = new Blob([data],{type:'application/json'});
-        const a = document.createElement('a'); a.download='openshop-project.json'; a.href=URL.createObjectURL(blob); a.click();
+        this._downloadBlob(blob, 'openshop-project.json');
         this.toast(this._t('Project saved'),'success');
         this._autoSaveDirty = false;
         this._clearAutoSave();
@@ -2143,6 +2158,7 @@ self.onmessage = function(e) {
         layer.objects.forEach(o => this.canvas.remove(o));
         this.layers.splice(this.activeLayerIdx, 1);
         if (this.layers.length === 0) {
+            this.layers.push({ name:'Layer 0', visible:true, opacity:100, blend:'source-over', objects:[] });
             this.activeLayerIdx = 0;
         } else {
             this.activeLayerIdx = Math.min(this.activeLayerIdx, this.layers.length-1);
@@ -3948,7 +3964,7 @@ self.onmessage = function(e) {
             const buffer = lib.writePsd(psd);
             const blob = new Blob([buffer], { type: 'application/octet-stream' });
             const docName = (this._docName || 'openshop-export').replace(/[^a-zA-Z0-9_-]/g, '_');
-            const a = document.createElement('a'); a.download = `${docName}.psd`; a.href = URL.createObjectURL(blob); a.click();
+            this._downloadBlob(blob, `${docName}.psd`);
             this.toast('Exported as PSD', 'success');
         } catch(e) {
             console.error('PSD export error:', e);
@@ -4350,10 +4366,7 @@ self.onmessage = function(e) {
     _exportRecovery(info) {
         if (!info?.text) { this.toast('No recovery data to export', 'info'); return; }
         const blob = new Blob([info.text], { type:'application/json' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = info.corrupt ? 'openshop-corrupt-recovery.json' : 'openshop-recovery.json';
-        a.click();
+        this._downloadBlob(blob, info.corrupt ? 'openshop-corrupt-recovery.json' : 'openshop-recovery.json');
         this.toast('Recovery data exported', 'success');
     },
 
@@ -5015,10 +5028,9 @@ self.onmessage = async function(e) {
         const onUp = () => { dragging = false; };
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
+        guide._cleanup = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
         el.addEventListener('dblclick', () => {
-            el.remove(); this.guides = this.guides.filter(g => g !== guide);
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
+            el.remove(); guide._cleanup(); this.guides = this.guides.filter(g => g !== guide);
             this.toast('Guide removed', 'info');
         });
         document.getElementById('guides-container').appendChild(el);
@@ -5026,6 +5038,7 @@ self.onmessage = async function(e) {
         this.toast(`${orientation} guide added (double-click to remove)`, 'info');
     },
     clearGuides() {
+        this.guides.forEach(g => { if (g._cleanup) g._cleanup(); });
         document.getElementById('guides-container').innerHTML = '';
         this.guides = [];
         this.toast('All guides cleared', 'info');
@@ -5438,7 +5451,6 @@ self.onmessage = async function(e) {
     _applyPreferences(overlay) {
         this._prefs.defaultW = +overlay.querySelector('#pref-dw').value || 1920;
         this._prefs.defaultH = +overlay.querySelector('#pref-dh').value || 1080;
-        this.canvasW = this._prefs.defaultW; this.canvasH = this._prefs.defaultH;
         this.gridSize = +overlay.querySelector('#pref-grid').value || 20;
         this._prefs.snapTolerance = +overlay.querySelector('#pref-snap').value || 5;
         this.maxHistory = +overlay.querySelector('#pref-hist').value || 60;
@@ -5696,44 +5708,55 @@ const filterOps = {
     }
 };
 self.onmessage = async function(e) {
-    const { data, width, height, params, backend, op } = e.data;
+    const { data, width, height, params, backend, op, _jobId } = e.data;
     const d = new Uint8ClampedArray(data);
     const w = width, h = height, p = params || {};
     try {
         if (backend === 'photon') {
             const out = await runPhotonFilter(op, d, w, h, p);
-            self.postMessage({ data: out.buffer, width, height, backend: 'photon' }, [out.buffer]);
+            self.postMessage({ _jobId, data: out.buffer, width, height, backend: 'photon' }, [out.buffer]);
             return;
         }
         const filter = filterOps[op];
         if (!filter) throw new Error('Unsupported worker filter: ' + op);
         filter.call(filterOps, d, w, h, p);
-        self.postMessage({ data: d.buffer, width, height, backend: 'worker' }, [d.buffer]);
+        self.postMessage({ _jobId, data: d.buffer, width, height, backend: 'worker' }, [d.buffer]);
     } catch (err) {
         const message = err && err.message ? err.message : String(err);
         console.error('Filter worker error:', err);
-        self.postMessage({ data: d.buffer, width, height, backend: backend || 'worker', error: message }, [d.buffer]);
+        self.postMessage({ _jobId, data: d.buffer, width, height, backend: backend || 'worker', error: message }, [d.buffer]);
     }
 };`;
         const blob = new Blob([code], {type:'application/javascript'});
         this._filterWorker = new Worker(URL.createObjectURL(blob));
         return this._filterWorker;
     },
+    _filterJobId: 0,
+    _filterJobCallbacks: {},
     _runFilterJob(payload, imgData, width, height, params) {
         return new Promise((resolve, reject) => {
             const worker = this._getFilterWorker();
+            const id = ++this._filterJobId;
             const buf = imgData.data.buffer.slice(0);
-            worker.onmessage = (e) => {
-                const result = new ImageData(new Uint8ClampedArray(e.data.data), e.data.width, e.data.height);
-                if (e.data.error && e.data.backend === 'photon') {
-                    reject(new Error(e.data.error));
-                    return;
-                }
-                if (e.data.error) console.warn('Filter worker error:', e.data.error);
-                resolve(result);
-            };
-            worker.onerror = (err) => reject(err);
-            worker.postMessage({...payload, data: buf, width, height, params: params||{}}, [buf]);
+            this._filterJobCallbacks[id] = { resolve, reject };
+            if (!worker._osHandlerInstalled) {
+                worker.addEventListener('message', e => {
+                    const cb = this._filterJobCallbacks[e.data._jobId];
+                    if (!cb) return;
+                    delete this._filterJobCallbacks[e.data._jobId];
+                    const result = new ImageData(new Uint8ClampedArray(e.data.data), e.data.width, e.data.height);
+                    if (e.data.error && e.data.backend === 'photon') { cb.reject(new Error(e.data.error)); return; }
+                    if (e.data.error) console.warn('Filter worker error:', e.data.error);
+                    cb.resolve(result);
+                });
+                worker.addEventListener('error', err => {
+                    const entries = Object.entries(this._filterJobCallbacks);
+                    this._filterJobCallbacks = {};
+                    entries.forEach(([, cb]) => cb.reject(err));
+                });
+                worker._osHandlerInstalled = true;
+            }
+            worker.postMessage({...payload, _jobId: id, data: buf, width, height, params: params||{}}, [buf]);
         });
     },
     _runFilterInWorker(op, imgData, width, height, params) {
@@ -6378,7 +6401,7 @@ self.onmessage = async function(e) {
             e.preventDefault();
             const menu = document.getElementById('context-menu');
             const active = this.canvas.getActiveObject();
-            const hasSelection = this._selectionMask || this._selectionPath;
+            const hasSelection = this._selectionMask || this._selectionBounds;
             let items = [];
 
             if (active) {
@@ -6415,7 +6438,7 @@ self.onmessage = async function(e) {
                 }
             } else if (hasSelection) {
                 // Pixel selection active — selection operations
-                items.push({label:'Deselect',fn:()=>this.deselectSelection(),key:'Ctrl+D'});
+                items.push({label:'Deselect',fn:()=>this.deselectAll(),key:'Ctrl+D'});
                 items.push({label:'Select Inverse',fn:()=>this.invertSelection(),key:'Ctrl+Shift+I'});
                 items.push({sep:true});
                 items.push({label:'Modify',children:[
@@ -6750,8 +6773,7 @@ self.onmessage = async function(e) {
         const all = this._savedPalette.length > 0 ? this._savedPalette : ['#ffffff','#000000'];
         const data = JSON.stringify({ name: 'OpenShop Palette', colors: all }, null, 2);
         const blob = new Blob([data], { type: 'application/json' });
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-        a.download = 'openshop-palette.json'; a.click();
+        this._downloadBlob(blob, 'openshop-palette.json');
         this.toast('Palette exported', 'success');
     },
     importPalette() {
@@ -7800,7 +7822,7 @@ self.onmessage = async function(e) {
             if (i >= this._macroSteps.length) { this.toast('Macro complete', 'success'); return; }
             const step = this._macroSteps[i++];
             // Execute by calling named functions
-            if (typeof this[step.action] === 'function') {
+            if (typeof this[step.action] === 'function' && !step.action.startsWith('_')) {
                 try { this[step.action](...(step.params || [])); } catch(e) { console.warn('Macro step failed:', step.action, e.message); }
             }
             setTimeout(playNext, 100);
@@ -7812,8 +7834,7 @@ self.onmessage = async function(e) {
         if (this._macroSteps.length === 0) return;
         const data = JSON.stringify(this._macroSteps, null, 2);
         const blob = new Blob([data], { type: 'application/json' });
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-        a.download = 'openshop-action.json'; a.click();
+        this._downloadBlob(blob, 'openshop-action.json');
         this.toast('Action saved', 'success');
     },
     loadMacro() {
@@ -7822,7 +7843,11 @@ self.onmessage = async function(e) {
             const file = e.target.files[0]; if (!file) return;
             const reader = new FileReader();
             reader.onload = ev => {
-                try { this._macroSteps = JSON.parse(ev.target.result); this._renderMacroList();
+                try {
+                    const parsed = JSON.parse(ev.target.result);
+                    if (!Array.isArray(parsed)) throw new Error('not an array');
+                    this._macroSteps = parsed.filter(s => s && typeof s.action === 'string' && !s.action.startsWith('_') && typeof this[s.action] === 'function');
+                    this._renderMacroList();
                     this.toast(`Loaded ${this._macroSteps.length} actions`, 'success');
                 } catch(e) { this.toast('Invalid action file', 'error'); }
             }; reader.readAsText(file);
@@ -8564,7 +8589,7 @@ self.onmessage = async function(e) {
     exportPresets() {
         const all = [...this._builtinPresets, ...this._presets];
         const blob = new Blob([JSON.stringify(all, null, 2)], {type:'application/json'});
-        const a = document.createElement('a'); a.download = 'openshop-presets.json'; a.href = URL.createObjectURL(blob); a.click();
+        this._downloadBlob(blob, 'openshop-presets.json');
         this.toast('Presets exported', 'success');
     },
 

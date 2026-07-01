@@ -63,7 +63,9 @@ describe('OpenShop core object', () => {
     OS.deleteLayer();
 
     expect(OS.canvas.remove).toHaveBeenCalledWith(canvasObject);
-    expect(OS.layers).toHaveLength(0);
+    expect(OS.layers).toHaveLength(1);
+    expect(OS.layers[0].name).toBe('Layer 0');
+    expect(OS.layers[0].objects).toHaveLength(0);
     expect(OS.saveHistory).toHaveBeenCalledWith('Delete Layer');
   });
 
