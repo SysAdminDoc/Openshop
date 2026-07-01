@@ -21,6 +21,8 @@ All notable changes to Openshop will be documented in this file.
 - Animated GIF export via on-demand gif.js with spritesheet fallback for unsupported browsers
 - GIF import via WebCodecs ImageDecoder: multi-frame GIFs load into timeline with per-frame editing
 - Static image fallback for single-frame GIFs and browsers without ImageDecoder support
+- OKLCh color value display in the foreground color panel alongside hex values
+- sRGB to OKLab/OKLCh conversion computed inline using the Oklab specification matrix transforms
 
 ## [v0.18.12] - 2026-06-28
 
