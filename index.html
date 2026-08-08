@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-1oH5t9zqzhhgSCrt08OtiGKSkSS6dYcy2cwbb/VOlq0=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-M0Ua/I12VF+PllzoDrswCEbyqDc/TeL9jBZESelvztM=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -24192,16 +24192,41 @@ self.onmessage = async function(e) {
         }
     },
     _pluginResolveReady(record, value) {
-        if (record.readySettled) return;
-        record.readySettled = true;
+        if (record.state !== 'pending' || record.disposed) return false;
+        record.state = 'ready';
         clearTimeout(record.readyTimeout);
         record.readyResolve(value);
+        return true;
     },
     _pluginRejectReady(record, error) {
-        if (record.readySettled) return;
-        record.readySettled = true;
+        if (record.state !== 'pending') return false;
+        const reason = error instanceof Error ? error : new Error(String(error || 'Plugin failed'));
+        record.state = 'failed';
+        record.readyError = reason;
         clearTimeout(record.readyTimeout);
-        record.readyReject(error instanceof Error ? error : new Error(String(error || 'Plugin failed')));
+        record.readyReject(reason);
+        this._pluginTearDown(record, reason, { keepRecord:true });
+        return true;
+    },
+    _pluginTearDown(record, reason, { keepRecord = false } = {}) {
+        if (!record) return false;
+        record.disposed = true;
+        clearTimeout(record.readyTimeout);
+        if (record.onMessage) window.removeEventListener('message', record.onMessage);
+        const failure = reason instanceof Error ? reason : new Error(String(reason || 'Plugin disposed'));
+        record.pending.forEach(({ reject, timeout }) => {
+            clearTimeout(timeout);
+            reject(failure);
+        });
+        record.pending.clear();
+        if (this._commands && record.commandObjects.length) {
+            this._commands = this._commands.filter(command => !record.commandObjects.includes(command));
+            record.commandObjects = [];
+        }
+        record.iframe?.remove();
+        this.plugins = this.plugins.filter(handle => handle.id !== record.id);
+        if (!keepRecord) this._pluginRecords.delete(record.id);
+        return true;
     },
     _pluginDocumentSummary() {
         return {
@@ -24251,7 +24276,7 @@ self.onmessage = async function(e) {
             else pending.resolve(data.result);
             return;
         }
-        if (data.type !== 'openshop:plugin-request' || !record.readySettled) return;
+        if (data.type !== 'openshop:plugin-request' || record.state !== 'ready') return;
         const requestId = typeof data.requestId === 'string' ? data.requestId : '';
         if (!requestId) return;
         Promise.resolve().then(async () => {
@@ -24264,6 +24289,9 @@ self.onmessage = async function(e) {
         });
     },
     _handlePluginRequest(record, data) {
+        if (record.state !== 'ready' || record.disposed) {
+            throw record.readyError || new Error('Plugin is not ready');
+        }
         const args = data.args && typeof data.args === 'object' ? data.args : {};
         const method = typeof data.method === 'string' ? data.method : '';
         const requireCapability = capability => {
@@ -24306,7 +24334,9 @@ self.onmessage = async function(e) {
         throw new Error(`Unsupported plugin method: ${this._safeText(method, 80)}`);
     },
     _invokePluginCommand(record, commandId) {
-        if (record.disposed) return Promise.resolve(false);
+        if (record.state !== 'ready' || record.disposed) {
+            return Promise.reject(record.readyError || new Error('Plugin is not ready'));
+        }
         const requestId = `${record.id}:invoke:${++this._pluginRequestSequence}`;
         return new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
@@ -24369,7 +24399,6 @@ self.onmessage = async function(e) {
             });
         }).catch(error => {
             this._pluginRejectReady(record, error);
-            this.disposePlugin(record.id);
         });
     },
     registerPlugin(plugin, { consent = false } = {}) {
@@ -24407,7 +24436,8 @@ self.onmessage = async function(e) {
             commandObjects:[],
             pending:new Map(),
             disposed:false,
-            readySettled:false,
+            state:'pending',
+            readyError:null,
             readyResolve:null,
             readyReject:null,
             readyTimeout:null,
@@ -24454,23 +24484,25 @@ self.onmessage = async function(e) {
             sourceHash:record.manifest.sourceHash,
             capabilities:[...record.capabilities],
             protocolVersion:this._pluginProtocolVersion,
-            ready:record.readySettled && !record.disposed
+            state:record.state,
+            ready:record.state === 'ready' && !record.disposed
         }));
     },
     disposePlugin(pluginOrId) {
         const id = typeof pluginOrId === 'string' ? pluginOrId : pluginOrId?.id;
         const record = this._pluginRecords.get(id);
         if (!record) return false;
-        record.disposed = true;
-        clearTimeout(record.readyTimeout);
-        if (!record.readySettled) this._pluginRejectReady(record, new Error('Plugin disposed'));
-        window.removeEventListener('message', record.onMessage);
-        record.pending.forEach(({ reject, timeout }) => { clearTimeout(timeout); reject(new Error('Plugin disposed')); });
-        record.pending.clear();
-        if (this._commands && record.commandObjects.length) this._commands = this._commands.filter(command => !record.commandObjects.includes(command));
-        record.iframe?.remove();
-        this._pluginRecords.delete(record.id);
-        this.plugins = this.plugins.filter(handle => handle.id !== record.id);
+        const reason = new Error('Plugin disposed');
+        if (record.state === 'pending') {
+            record.state = 'disposed';
+            record.readyError = reason;
+            clearTimeout(record.readyTimeout);
+            record.readyReject(reason);
+        } else if (record.state !== 'disposed') {
+            record.state = 'disposed';
+            record.readyError ||= reason;
+        }
+        this._pluginTearDown(record, reason);
         return true;
     },
 

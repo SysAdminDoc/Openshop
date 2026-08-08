@@ -1,5 +1,10 @@
 'use strict';
 
+// The helper page has an inline fallback for direct file:// launches, where a
+// sandboxed iframe cannot load a local script subresource. Hosted pages still
+// execute this canonical external asset.
+window.__openShopPluginSandboxLoaded = true;
+
 // This file is intentionally tiny and static. The parent sends plugin source
 // over postMessage; this document is always loaded in an allow-scripts-only
 // sandbox, so the source is evaluated here and never in the editor window.

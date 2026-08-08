@@ -428,6 +428,7 @@ describe('OpenShop core object', () => {
     const record = OS._pluginRecords.get(handle.id);
     expect(record.iframe.getAttribute('sandbox')).toBe('allow-scripts');
     expect(record.capabilities).toEqual(['commands', 'document:read']);
+    OS._pluginResolveReady(record, handle);
     expect(() => OS._handlePluginRequest(record, {
       requestId: 'denied', method: 'get-selection', args: {}
     })).toThrow('Capability not granted');
@@ -442,6 +443,73 @@ describe('OpenShop core object', () => {
     expect(OS.registerPlugin({ manifest:{ ...manifest, minApiVersion:2 }, source }, { consent:true })).toBeUndefined();
     expect(OS.removePluginConsent(manifest.id)).toBe(true);
     expect(OS.listPluginConsents()).toEqual([]);
+  });
+
+  it('keeps plugin source failures failed and rejects later capability calls', async () => {
+    const OS = loadOpenShop();
+    quietUiMethods(OS);
+    const source = 'throw new Error("plugin boot failed");';
+    const manifest = {
+      id: 'com.example.failed-plugin', version: '1.0.0', name: 'Failed Plugin',
+      sourceHash: await OS._pluginSourceHash(source), capabilities: ['commands'], minApiVersion: 1
+    };
+    const handle = OS.registerPlugin({ manifest, source }, { consent:true });
+    const record = OS._pluginRecords.get(handle.id);
+    const ready = handle.ready.then(() => null, error => error);
+
+    OS._pluginHandleMessage(record, {
+      source: record.iframe.contentWindow,
+      origin: 'null',
+      data: {
+        type:'openshop:plugin-error', protocolVersion:1, pluginId:record.id, token:record.token,
+        error:'plugin boot failed'
+      }
+    });
+
+    const error = await ready;
+    expect(error).toMatchObject({ message:'plugin boot failed' });
+    expect(record.state).toBe('failed');
+    expect(record.disposed).toBe(true);
+    expect(record.iframe.isConnected).toBe(false);
+    expect(OS.listPlugins()).toEqual([expect.objectContaining({ id:record.id, state:'failed', ready:false })]);
+    expect(() => OS._handlePluginRequest(record, { method:'get-document', args:{} })).toThrow('plugin boot failed');
+    await expect(OS._invokePluginCommand(record, 'late-command')).rejects.toThrow('plugin boot failed');
+
+    OS._pluginHandleMessage(record, {
+      source: record.iframe.contentWindow,
+      origin: 'null',
+      data: { type:'openshop:plugin-ready', protocolVersion:1, pluginId:record.id, token:record.token }
+    });
+    expect(record.state).toBe('failed');
+    expect(handle.dispose()).toBe(true);
+    expect(OS.listPlugins()).toEqual([]);
+  });
+
+  it('turns a handshake timeout into a failed, non-ready plugin record', async () => {
+    const OS = loadOpenShop();
+    quietUiMethods(OS);
+    vi.useFakeTimers();
+    try {
+      const source = 'window.addEventListener("message", () => {});';
+      const manifest = {
+        id: 'com.example.timeout-plugin', version: '1.0.0', name: 'Timeout Plugin',
+        sourceHash: await OS._pluginSourceHash(source), capabilities: [], minApiVersion: 1
+      };
+      const handle = OS.registerPlugin({ manifest, source }, { consent:true });
+      const record = OS._pluginRecords.get(handle.id);
+      const ready = handle.ready.then(() => null, error => error);
+      vi.advanceTimersByTime(10000);
+      const error = await ready;
+
+      expect(error).toMatchObject({ message:'Plugin handshake timed out' });
+      expect(record.state).toBe('failed');
+      expect(record.disposed).toBe(true);
+      expect(OS.listPlugins()).toEqual([expect.objectContaining({ id:record.id, state:'failed', ready:false })]);
+      await expect(OS._invokePluginCommand(record, 'late-command')).rejects.toThrow('Plugin handshake timed out');
+      expect(handle.dispose()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('exports PNG using a sanitized download name', () => {

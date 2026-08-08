@@ -357,13 +357,6 @@ flyout was still nested at that point in boot.
 
 ### P0 — 2026-08-08 trust-state additions
 
-- [ ] P0 — Make plugin readiness an explicit success state
-  Why: a plugin that throws after installing a message handler, or answers after the handshake timeout, remains registered, is reported ready, and can still invoke previously granted capabilities because failure only settles the readiness promise.
-  Evidence: `index.html:24088-24092` (`_pluginRejectReady` sets `readySettled`), `24142` (admission checks only settled state), `24317` (10-second timeout), `24338-24347` (`listPlugins()` reports settled records ready), `plugin-sandbox.js:45-52` (source errors are reported); the existing red plugin-handshake test exposes the same lifecycle boundary.
-  Touches: `index.html` plugin record/handshake/admission/disposal methods, `plugin-sandbox.js`, plugin unit and e2e tests.
-  Acceptance: every record has one authoritative `pending | ready | failed | disposed` state; only `ready` admits requests or reports `ready:true`; a source throw and a handshake timeout both dispose the frame, reject queued/in-flight/later calls with a stable reason, and cannot be resurrected by a late message; the existing handshake regression and new throw/timeout tests pass.
-  Complexity: M
-
 - [ ] P0 — Isolate concurrent exports with request-scoped delivery
   Why: embed export capture temporarily replaces global download methods across an `await`, so two embed requests or an embed request concurrent with user Save can capture each other's output, trigger an unintended download, or restore the wrong sink.
   Evidence: `index.html:14567-14585` (`_captureExportedBlob` replaces `_downloadBlob`/`_downloadDataUrl`), `14529` and `14670-14678` (asynchronous, unserialized message handling).

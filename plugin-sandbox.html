@@ -2,10 +2,46 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; connect-src 'none'; img-src 'none'; style-src 'none'; script-src 'self' 'unsafe-eval'; frame-ancestors 'none';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; connect-src 'none'; img-src 'none'; style-src 'none'; script-src 'self' 'unsafe-eval' 'sha256-khrnJif+Cin/8nBGgc7cXb9GsB2tU9n5+Fn9DNJXrMM='; frame-ancestors 'none';">
 <title>OpenShop Plugin Sandbox</title>
 </head>
 <body>
 <script src="./plugin-sandbox.js"></script>
+<script>
+if (!window.__openShopPluginSandboxLoaded) {
+    (() => {
+        const MAX_SOURCE_BYTES = 512 * 1024;
+        let started = false;
+        window.addEventListener('message', event => {
+            if (event.source !== window.parent || started) return;
+            const message = event.data;
+            if (!message || message.type !== 'openshop:host-init' || message.protocolVersion !== 1 || typeof message.source !== 'string') return;
+            const manifest = message.manifest;
+            if (!manifest || typeof manifest !== 'object' || manifest.id !== message.pluginId || manifest.minApiVersion > message.protocolVersion) return;
+            started = true;
+            if (new Blob([message.source]).size > MAX_SOURCE_BYTES) {
+                window.parent.postMessage({ type:'openshop:plugin-error', protocolVersion:message.protocolVersion, pluginId:message.pluginId, token:message.token, error:'Plugin source exceeds the sandbox limit' }, '*');
+                return;
+            }
+            const host = Object.freeze({
+                protocolVersion:message.protocolVersion,
+                pluginId:message.pluginId,
+                token:message.token,
+                manifest:Object.freeze({ ...manifest }),
+                capabilities:Object.freeze([...(message.capabilities || [])]),
+                api:Object.freeze({ ...(message.api || {}) })
+            });
+            Object.defineProperty(window, '__openShopPluginHost', { value:host, enumerable:false, configurable:false, writable:false });
+            try {
+                const run = new Function(`"use strict";\n${message.source}\n//# sourceURL=openshop-plugin-${message.pluginId}.js`);
+                run();
+                window.parent.postMessage({ type:'openshop:plugin-ready', protocolVersion:message.protocolVersion, pluginId:message.pluginId, token:message.token }, '*');
+            } catch (error) {
+                window.parent.postMessage({ type:'openshop:plugin-error', protocolVersion:message.protocolVersion, pluginId:message.pluginId, token:message.token, error:String(error?.message || 'Plugin source failed') }, '*');
+            }
+        });
+    })();
+}
+</script>
 </body>
 </html>

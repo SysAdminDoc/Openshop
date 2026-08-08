@@ -21,6 +21,11 @@ All notable changes to Openshop will be documented in this file.
   unchanged instead of swallowing gestures as successful no-ops.
 - Removed an unmatched stylesheet brace and added a release-gate parser for every
   inline and tracked stylesheet, with source locations and malformed-fixture coverage.
+- Plugin records now distinguish pending, ready, failed, and disposed states. Source
+  errors and handshake timeouts tear down the sandbox, reject later calls with the
+  original reason, and are never resurrected by late messages. Direct `file://`
+  launches also use the sandbox page's CSP-pinned inline fallback when browsers block
+  local script subresources.
 
 ### Testing
 - Added `tests/issue-3-requests.e2e.spec.js`: one browser test per request in issue
