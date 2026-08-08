@@ -109,13 +109,6 @@ flyout was still nested at that point in boot.
   Acceptance: the checker classifies directives by delivery channel and refuses to count a header-only directive as satisfied by a meta policy; the shipped meta policy no longer declares `frame-ancestors`; the self-hosting recipe documents the header form with a deployment-chosen ancestor list (not `'none'`, which would disable embedding) and says which lane needs which; the `file://`/meta-only lane relies on the existing window-binding handshake as the real guard, documented as such; a test asserts the checker fails when a meta policy claims a header-only directive.
   Complexity: M
 
-- [ ] P0 — Handle storage quota exhaustion instead of reporting success
-  Why: there is no `QuotaExceededError` branch anywhere in the app. Every `localStorage` write swallows the failure into `console.warn`, and the preferences path then toasts `Preferences saved` unconditionally. A user with a full quota is told their settings, palettes, brushes, presets, theme, language and recent files were saved when none of them were.
-  Evidence: zero matches for `QuotaExceeded` in `index.html`; `18110` (unconditional success toast), `18128-18129` (swallowed write), plus `20624`, `20633`, `20638`, `20737`, `20869-20871`, `21630`, `18105`, `14221`, `23929`, `23943`.
-  Touches: `index.html` `_persistPreferences` and every `localStorage.setItem` site; the status pill at `2972`.
-  Acceptance: one `_persistLocal(key, value)` helper is the only writer, returns success, and distinguishes `QuotaExceededError` from other failures; callers report failure through a toast and the persistence state pill; a test that stubs `setItem` to throw `QuotaExceededError` asserts no success message is emitted.
-  Complexity: S
-
 ### P1 — Trust, accessibility, and interoperability
 
 - [ ] P1 — Copy and Cut pixel selections, and write to the system clipboard
@@ -322,6 +315,7 @@ flyout was still nested at that point in boot.
   Touches: `package.json`, `tools/runtime-assets.mjs`, `index.html` pinned URLs and hashes, `npm run runtime:sync`, `npm run security:write`.
   Acceptance: each upgrade lands separately with `runtime:sync` + `security:write` and a passing release gate; the PDF import fixture set passes on pdf.js 6.x; the WebKit project runs against 26.5.
   Complexity: M
+  Research note (2026-08-08): **Verified** — the live lockfile now resolves `nanoid@3.3.16` through `vitest -> vite -> postcss`, and `npm audit` reports high-severity GHSA-2v37-7h3g-55p8 (patched in `nanoid >=3.3.17`). Treat this item as P0 remediation until `npm run test:release` passes the audit stage; `npm audit --omit=dev` remains clean.
 
 - [ ] P2 — Confirm whether the pinned jsPDF bundle embeds DOMPurify
   Why: jsPDF 4.2.1 declares `dompurify@^3.3.1` as an optional dependency, and that range resolves into versions with open advisories — only 3.4.13 (2026-08-03) is clean. If the pinned UMD bundle embeds it, the SHA-384 pin freezes whatever copy was bundled and the project owns that advisory surface rather than inheriting it. jsPDF has shipped roughly one advisory per month across 4.0.0→4.2.1.
@@ -329,6 +323,7 @@ flyout was still nested at that point in boot.
   Touches: `tools/runtime-assets.mjs` (a license/provenance report already exists), README security section.
   Acceptance: the runtime package report records, per bundled asset, which third-party libraries are embedded and at what version; if DOMPurify is present, either the pin moves to a bundle carrying 3.4.13+ or the exposure is documented with the reason it is not reachable; a recurring check flags the answer going stale.
   Complexity: S
+  Research note (2026-08-08): **Verified** — the pinned jsPDF 4.2.1 UMD contains DOMPurify loader hooks but does not embed DOMPurify, and OpenShop does not invoke jsPDF's `.html()` path. The remaining action is to encode that embedded-dependency and reachability fact in the runtime provenance report/test so a future pin cannot silently change it.
 
 ### P3 — Polish and reach
 
@@ -365,4 +360,115 @@ flyout was still nested at that point in boot.
   Evidence: https://github.com/awesome-selfhosted/awesome-selfhosted (full README grep, 2026-08-04); README self-hosting recipe.
   Touches: README (self-hosting and related-tools sections), a PR to the upstream list.
   Acceptance: the self-hosting recipe is verified end-to-end from a clean directory on a plain HTTP server, and a category PR is submitted meeting the list's inclusion rules.
+  Complexity: S
+
+### P0 — 2026-08-08 trust-state additions
+
+- [ ] P0 — Make plugin readiness an explicit success state
+  Why: a plugin that throws after installing a message handler, or answers after the handshake timeout, remains registered, is reported ready, and can still invoke previously granted capabilities because failure only settles the readiness promise.
+  Evidence: `index.html:24088-24092` (`_pluginRejectReady` sets `readySettled`), `24142` (admission checks only settled state), `24317` (10-second timeout), `24338-24347` (`listPlugins()` reports settled records ready), `plugin-sandbox.js:45-52` (source errors are reported); the existing red plugin-handshake test exposes the same lifecycle boundary.
+  Touches: `index.html` plugin record/handshake/admission/disposal methods, `plugin-sandbox.js`, plugin unit and e2e tests.
+  Acceptance: every record has one authoritative `pending | ready | failed | disposed` state; only `ready` admits requests or reports `ready:true`; a source throw and a handshake timeout both dispose the frame, reject queued/in-flight/later calls with a stable reason, and cannot be resurrected by a late message; the existing handshake regression and new throw/timeout tests pass.
+  Complexity: M
+
+- [ ] P0 — Isolate concurrent exports with request-scoped delivery
+  Why: embed export capture temporarily replaces global download methods across an `await`, so two embed requests or an embed request concurrent with user Save can capture each other's output, trigger an unintended download, or restore the wrong sink.
+  Evidence: `index.html:14567-14585` (`_captureExportedBlob` replaces `_downloadBlob`/`_downloadDataUrl`), `14529` and `14670-14678` (asynchronous, unserialized message handling).
+  Touches: `index.html` export writers, `_captureExportedBlob`, embed message dispatcher, export e2e tests.
+  Acceptance: export writers accept a per-call delivery sink end-to-end, or a narrow mutex provides equivalent isolation; two deliberately overlapping embed exports each return the correct distinct blob; a concurrent UI Save still downloads only its own result; rejection/cancellation restores no shared mutable sink.
+  Complexity: M
+
+- [ ] P0 — Parse every shipped stylesheet in the release gate
+  Why: the inline stylesheet contains a real syntax error that tolerant browser recovery hides, and no test validates CSS as shipped.
+  Evidence: standalone extra `}` at `index.html:329` after the reduced-motion rule; a read-only `css-tree.parse` run on 2026-08-08 fails with `Selector is expected` at stylesheet-relative line 27.
+  Touches: `index.html`, `tools/security.mjs` or a focused validation script, `package.json` release test chain.
+  Acceptance: the extra brace is removed; the gate parses every inline `<style>` block and tracked `.css` file with locations enabled, fails with file/line/column on malformed CSS, and passes on the current shipped surface; a malformed fixture proves the gate can fail.
+  Complexity: S
+
+### P1 — 2026-08-08 data-safety and contract additions
+
+- [ ] P1 — Separate interface locale direction from artwork direction
+  Why: changing the UI locale currently calls a direction helper that mutates Fabric text objects, so a presentation preference can change saved artwork and exported pixels.
+  Evidence: `index.html` `setLocale` -> `_applyTextDirection`; the existing locale test codifies object mutation rather than separating DOM `dir` from document text direction; W3C bidi guidance treats page direction and content direction as separate semantics.
+  Touches: `index.html` locale application, text tool/object direction commands, history and project serialization, locale tests.
+  Acceptance: switching among LTR, RTL, and pseudo-locales changes DOM chrome only; serialized project content, history length, and export pixels remain byte/pixel equivalent; artwork direction changes only through an explicit text-object command and round-trips through `.openshop`.
+  Complexity: M
+
+- [ ] P1 — Put dirty-document decisions in front of offline runtime replacement
+  Why: Apply Update, Roll Back, and Rebuild Offline Cache can replace runtime state without a workflow-specific Save / Discard / Cancel transaction, risking edited work despite the generic unload guard.
+  Evidence: `index.html` offline update/rollback/rebuild handlers and generic `beforeunload` path; `web.dev` PWA update guidance; the service worker already exposes staged promotion and rollback primitives.
+  Touches: `index.html` offline controls and document-dirty state, `sw.js` message responses, `tests/offline.e2e.spec.js`.
+  Acceptance: each runtime-replacement action shows Save / Discard / Cancel when dirty; Save completes and verifies persistence before promotion, Discard is explicit, Cancel changes neither document nor service-worker revision; failed save keeps the old runtime active; clean-document and dirty-document paths are covered.
+  Complexity: M
+
+- [ ] P1 — Normalize animated-image Open, Place, Paste, and Drop semantics
+  Why: the same animated bytes currently become frames, a static image, a placed object, or a replacement document depending on the event handler rather than the user's intent.
+  Evidence: normal GIF open uses the frame-aware path while dropped GIF uses a static decode; dropped APNG/WebP and AVIF/SVG follow inconsistent replace-versus-place branches in `index.html` import/drop dispatch.
+  Touches: `index.html` file sniffing, Open/Place/Paste/Drop router, GIF/APNG/WebP decoders, animated import tests.
+  Acceptance: one normalized format descriptor feeds one intent router; Open replaces/creates a document, Place/Paste inserts according to a documented animated-object policy, and Drop chooses by blank/open workspace rather than format-specific accident; GIF, APNG, and animated WebP fixtures preserve frame count/timing consistently across all four entry paths.
+  Complexity: M
+
+- [ ] P1 — Complete composite-control semantics and gate key accessible states
+  Why: most labels have no programmatic association, the command palette and panel tabs lack their required composite roles/state relationships, the application canvas is not keyboard-focusable, and closed mobile drawers remain in the focus order.
+  Evidence: 214 `<label>` elements, of which 190 neither wrap a control nor use `for`; command palette has no combobox/listbox/option semantics; panel tabs lack tab roles/relationships; canvas `role="application"` has no focus entry; mobile drawer lacks `inert`, `aria-expanded`, and `aria-controls`; WAI-ARIA combobox/tab patterns, WCAG 2.2, and the HTML `inert` contract. Menu command enablement remains owned by the existing P1 item rather than this semantic-control pass.
+  Touches: `index.html` markup/event handling/CSS for Preferences, tool panels, command palette, tabs, canvas, mobile drawers, and blank state; Playwright accessibility tests; axe-core test dependency.
+  Acceptance: every form control has a computed accessible name; the palette implements combobox/listbox/option active-descendant behavior; tabs expose tablist/tab/tabpanel selection and ownership; canvas has a documented keyboard focus entry; closed drawers are inert and toggles announce state; keyboard golden paths pass and axe-core reports no serious/critical violations in blank, editor, modal, and mobile-drawer states.
+  Complexity: L
+
+- [ ] P1 — Expose plugin grants, provenance, status, and revocation in Preferences
+  Why: capability grants and revoke/list methods exist, but users have no UI to audit which plugin source/version holds which authority or to revoke it without code.
+  Evidence: `index.html` plugin consent persistence plus `listPlugins()` and revoke/dispose APIs; Pintura/IMG.LY treat integration state as a first-class contract; plugin lifecycle evidence in this research.
+  Touches: `index.html` Preferences UI, plugin consent store, lifecycle state machine, diagnostics, accessibility tests.
+  Acceptance: Preferences lists each plugin's name, source digest/version, lifecycle status, granted capabilities, and last failure; Revoke removes persisted approval, disposes the frame, rejects queued/in-flight calls, and requires fresh consent before re-registration; the surface is keyboard/AT usable and updates without reload.
+  Complexity: M
+
+- [ ] P1 — Establish a round-trip compatibility corpus
+  Why: broad format claims are not protected by enough redistributable fixtures, so layer, mask, frame, metadata, migration, or declared-loss regressions can ship unnoticed.
+  Evidence: sparse current fixture coverage under `tests/fixtures`; Photopea user reports and ag-psd release history show that real compatibility failures cluster in malformed, nested, and version-specific files; existing roadmap items expand PSD, PDF, animation, ORA, JXL, and HEIC scope.
+  Touches: `tests/fixtures`, a compact fixture/invariant manifest, Vitest import/export tests, Playwright golden workflows, format loss-report assertions.
+  Acceptance: redistributable synthetic/upstream-licensed fixtures cover `.openshop` schema versions, PSD layers/groups/masks, PDF pages, GIF/APNG/WebP frames, metadata, and malformed boundaries; open -> export -> reopen asserts dimensions, layer order/names, masks, frame count/timing, metadata policy, and every intentional loss; corpus regressions block release and fixture provenance is machine-readable.
+  Complexity: L
+
+- [ ] P1 — Prove browser tests use the intended checkout across supported engines
+  Why: Playwright always reuses port 4173, so a stale/unrelated server can satisfy startup, while Firefox/WebKit select `@cross-browser` tests that exclude the entire hosted/offline suite despite README coverage claims.
+  Evidence: `playwright.config.js:17-20` (`reuseExistingServer:true`) and `34-35` (Firefox/WebKit grep); zero `@cross-browser` tags in `tests/offline.e2e.spec.js`; README hosted/offline browser claim.
+  Touches: `playwright.config.js`, preview/test identity endpoint or page metadata, `tests/offline.e2e.spec.js`, README support matrix.
+  Acceptance: CI always starts a fresh server; any local reuse must expose and match the current checkout/revision token before tests run; a supported hosted/install/offline subset is tagged and passes in Chromium, Firefox, and WebKit, with explicit capability skips; README claims are derived from or checked against that matrix.
+  Complexity: M
+
+- [ ] P1 — Pin CI actions to immutable commits
+  Why: mutable action tags expand the release supply-chain trust boundary even when runtime assets themselves are digest-pinned.
+  Evidence: `.github/workflows/verify.yml` uses major tags such as `@v4`; GitHub secure-use guidance states that a full-length commit SHA is the only immutable action reference.
+  Touches: `.github/workflows/verify.yml`, dependency update automation/configuration, contributor documentation if needed.
+  Acceptance: every third-party action reference is a full commit SHA with the human-readable release tag in a comment; workflow permissions are least-privilege and explicit; Dependabot or an equivalent reviewed process proposes SHA updates; the workflow and local release lane remain green.
+  Complexity: S
+
+- [ ] P1 — Fail closed on an incomplete runtime license inventory
+  Why: unresolved licenses currently pass tests and several shipped runtimes are absent from the user-facing inventory, so the project can claim traceable licensing without complete machine-verifiable facts.
+  Evidence: `tools/runtime-assets.mjs` omits license metadata for modern-gif and LibRaw-Wasm; `licenseReport()` substitutes a truthy unresolved string and `tests/runtime-assets.test.js` asserts only truthiness; README omits modern-gif, pdf.js, LibRaw-Wasm, and ONNX Runtime Web. Version upgrades remain owned by the existing contributor-toolchain item, and embedded-dependency reachability remains owned by the existing jsPDF item.
+  Touches: `tools/runtime-assets.mjs`, license report/sync scripts, `tests/runtime-assets.test.js`, README dependency table, release checks.
+  Acceptance: every shipped asset records source, exact version, hash, and SPDX-valid license; placeholder or unknown license values fail the release gate; README's runtime inventory is generated from or checked against the canonical manifest; modern-gif and LibRaw-Wasm report their verified package licenses without duplicating the toolchain or jsPDF tasks.
+  Complexity: S
+
+### P2 — 2026-08-08 lifecycle and maintenance additions
+
+- [ ] P2 — Release verified runtime bytes and blob URLs after initialization
+  Why: fulfilled asset and blob promises retain raw bytes and blob backing after large codecs, workers, WASM modules, or AI runtimes also retain initialized state, multiplying memory pressure beside large documents.
+  Evidence: `index.html:3545-3607` (`_runtimeAssetPromises` stores `{asset, bytes}` and `_runtimeBlobPromises` stores URLs indefinitely), runtime initialization at `3645-3723` and `22639-22670`; browser-editor memory complaints and the existing large-document performance work.
+  Touches: `index.html` runtime asset/blob loaders and owners for PDF, RAW, Transformers, ONNX, workers, and UMD globals; runtime lifecycle tests and performance gate.
+  Acceptance: ownership rules release raw verified bytes after successful initialization, revoke temporary URLs at the earliest safe lifecycle point, and clear failed promises so retry works; shared runtimes stay reusable without refetch while owners exist; a deterministic lifecycle test observes zero stale cache entries/URLs after dispose and the real-app memory probe shows no duplicate retained payload class.
+  Complexity: M
+
+- [ ] P2 — Make roadmap and parity status mechanically consistent
+  Why: the active roadmap's failure arithmetic and “parity roadmap drained” claim conflict with live rows and `PHOTOSHOP_PARITY_ROADMAP.md`, while the replaced research previously claimed the roadmap was empty; contradictory trackers make autonomous continuation unsafe.
+  Evidence: `ROADMAP.md` baseline says 10 failures, 4 fixed, and 7 remaining; its parity-drained statement conflicts with 42 `PLANNED`, 3 `BLOCKED`, and 8 `VERIFIED` markers in `PHOTOSHOP_PARITY_ROADMAP.md`; release history shows rapid roadmap churn.
+  Touches: `ROADMAP.md`, `PHOTOSHOP_PARITY_ROADMAP.md`, a focused tracker validation script/test, release checklist.
+  Acceptance: `ROADMAP.md` is the single actionable source; parity rows either map to an active/blocked item or are explicitly historical evidence; a test rejects impossible totals, duplicate active items, checked-off rows, and a “drained” claim while planned rows remain; no cycle log or generated status file is introduced.
+  Complexity: M
+
+- [ ] P2 — Validate release-facing metadata and preview assets
+  Why: the social preview is broken and version/architecture/screenshot claims have drifted from the shipped release, weakening distribution trust even when code metadata is synchronized.
+  Evidence: `index.html:5` references untracked `banner.png`; README architecture graphic says approximately 17,000 lines while `index.html` has 24,691; CLAUDE mixes 0.27.0/0.28.0 against shipped 0.29.0; `tests/openshop.e2e.spec.js-snapshots/*.png` show older version badges.
+  Touches: `index.html` metadata, an existing tracked image asset or metadata URL, README architecture/version surfaces, CLAUDE release instructions, version metadata test, screenshot refresh procedure.
+  Acceptance: every local metadata asset resolves in both `file://` and hosted lanes; release tests verify all version-bearing docs/surfaces and reject missing preview assets; architecture size is generated or expressed without a stale line count; documented QA snapshots identify the release they represent and current required snapshots carry the current version.
   Complexity: S

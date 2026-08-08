@@ -65,6 +65,32 @@ describe('OpenShop core object', () => {
     expect(OS.toast).toHaveBeenCalledTimes(1);
   });
 
+  it('reports a storage quota failure instead of claiming preferences were saved', () => {
+    const OS = loadOpenShop();
+    OS.toast = vi.fn();
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation((key) => {
+      if (key === 'os_prefs') {
+        const error = new Error('storage full');
+        error.name = 'QuotaExceededError';
+        error.code = 22;
+        throw error;
+      }
+    });
+
+    expect(OS._persistPreferences()).toBe(false);
+    expect(OS.toast).toHaveBeenCalledWith(
+      'Preferences could not be saved because browser storage is full',
+      'error'
+    );
+    expect(OS._diagnostics.at(-1)).toMatchObject({
+      kind:'error',
+      message:'Preferences could not be saved because browser storage is full',
+      detail:{ storageKey:'os_prefs', quota:true }
+    });
+
+    setItem.mockRestore();
+  });
+
   it('enables stylus pressure only after observing pressure variance', () => {
     const OS = loadOpenShop();
     OS.canvas = createCanvasMock();

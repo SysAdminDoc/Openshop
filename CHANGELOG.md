@@ -5,6 +5,9 @@ All notable changes to Openshop will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Storage-backed preferences, palettes, presets, imported assets, workspace settings,
+  recent files, themes, plugin consent, and strict-offline state now detect quota
+  failures, record diagnostics, and show an error instead of claiming persistence.
 - The selected bottom tab failed WCAG 2.2 text contrast at 4.01:1 against its own
   tinted background; it now uses the lighter accent step.
 - Two controls sat under the 24x24 CSS pixel pointer-target floor: the workspace

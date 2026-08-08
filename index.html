@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; script-src 'self' 'sha256-TTEy0EeOrma0v69IJlQrFG5I1W91DDTkWvj1XqErTTw=' 'sha256-jlRyXiBdBKvgnCLlnkeOMCfUtSQe40W2KdS2dyWzeqE=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-f156aQhdtHIeLZnyd8RhlMMAKkV9A4/ZUVh8ucDHWLw=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -109,6 +109,15 @@ const OPENSHOP_NETWORK = (() => {
     const state = { strict:false, strictDisabledReason:null, entries:[], dropped:0, blocked:0 };
     const listeners = new Set();
     const announce = () => listeners.forEach(listener => { try { listener(); } catch (error) { console.warn('Network ledger listener failed:', error); } });
+    const isQuotaError = error => Boolean(error && (error.name === 'QuotaExceededError' || error.code === 22 || error.code === 1014));
+    const persistLocal = (key, value) => {
+        try {
+            localStorage.setItem(key, value);
+            return { ok:true, quota:false, error:null };
+        } catch (error) {
+            return { ok:false, quota:isQuotaError(error), error };
+        }
+    };
     try { state.strict = localStorage.getItem(STRICT_KEY) === 'on'; } catch (error) { /* storage may be denied */ }
 
     const describe = raw => {
@@ -172,18 +181,21 @@ const OPENSHOP_NETWORK = (() => {
         setStrict(on) {
             state.strict = Boolean(on);
             if (state.strict) state.strictDisabledReason = null;
-            try { localStorage.setItem(STRICT_KEY, state.strict ? 'on' : 'off'); }
-            catch (error) { /* the toggle still holds for this session */ }
+            const result = persistLocal(STRICT_KEY, state.strict ? 'on' : 'off');
+            if (!result.ok && result.quota) state.strictDisabledReason = 'Strict offline preference could not be saved because browser storage is full';
             announce();
             return state.strict;
         },
         disableStrict(reason) {
             state.strict = false;
             state.strictDisabledReason = String(reason || 'Disabled');
-            try { localStorage.setItem(STRICT_KEY, 'off'); } catch (error) { /* session only */ }
+            const result = persistLocal(STRICT_KEY, 'off');
+            if (!result.ok && result.quota) state.strictDisabledReason = 'Strict offline preference could not be saved because browser storage is full';
             announce();
             return state.strictDisabledReason;
         },
+        persistLocal,
+        isQuotaError,
         snapshot() {
             const hosts = new Map();
             state.entries.forEach(entry => {
@@ -4492,7 +4504,7 @@ const OS = {
         document.documentElement.dataset.osWorkspace = next;
         const selector = document.getElementById('workspace-selector');
         if (selector && selector.value !== next) selector.value = next;
-        try { localStorage.setItem('os_workspace_mode', next); } catch(e) { /* storage is optional */ }
+        this._persistLocal('os_workspace_mode', next, { label:'Workspace preference' });
         this._syncSessionWorkspace();
         if (announce) this.toast(`Workspace: ${next[0].toUpperCase()}${next.slice(1)}`, 'info');
     },
@@ -4998,6 +5010,32 @@ const OS = {
         const stateSuffix = this._persistenceState === 'saving' ? ' (Saving)' : this._persistenceState === 'error' ? ' (Save failed)' : '';
         document.title = `${dirtyPrefix}${this._docName || 'Untitled'}${stateSuffix} — OpenShop v0.29.0`;
         if (this.session) this.session.persistence = { state:this._persistenceState, dirty:Boolean(this._isDirty) };
+    },
+    _persistLocal(key, value, { label = 'Storage', announce = true } = {}) {
+        const writer = window.__openshopNetwork?.persistLocal;
+        let result;
+        if (typeof writer === 'function') {
+            result = writer(String(key), String(value));
+        } else {
+            try {
+                localStorage.setItem(String(key), String(value));
+                result = { ok:true, quota:false, error:null };
+            } catch (error) {
+                result = {
+                    ok:false,
+                    quota:Boolean(error && (error.name === 'QuotaExceededError' || error.code === 22 || error.code === 1014)),
+                    error
+                };
+            }
+        }
+        if (result.ok) return true;
+        const message = result.quota
+            ? `${label} could not be saved because browser storage is full`
+            : `${label} could not be saved`;
+        this._lastStorageError = { key:String(key), quota:Boolean(result.quota), message };
+        this.recordDiagnostic('error', message, { storageKey:String(key), quota:Boolean(result.quota) });
+        if (announce) this.toast(message, 'error');
+        return false;
     },
     _markDocumentDirty() {
         this._documentRevision += 1;
@@ -14224,7 +14262,7 @@ self.onmessage = function(event) {
         try { recent = JSON.parse(localStorage.getItem('openshop_recent') || '[]'); } catch(e) { console.warn('localStorage read failed:', e.message); }
         recent.unshift({ name, dims: `${w}x${h}`, date: new Date().toLocaleDateString() });
         if (recent.length > 10) recent = recent.slice(0, 10);
-        try { localStorage.setItem('openshop_recent', JSON.stringify(recent)); } catch(e) { console.warn('localStorage write failed:', e.message); }
+        this._persistLocal('openshop_recent', JSON.stringify(recent), { label:'Recent files' });
     },
 
     // ====================== GRID ======================
@@ -18108,14 +18146,22 @@ self.onmessage = async function(event) {
         document.documentElement.style.setProperty('--accent', accent);
         const lang = overlay.querySelector('#pref-lang')?.value || 'en';
         if (lang !== this._lang) this.setLocale(lang);
-        try { localStorage.setItem('os_lang', lang); } catch(e) { console.warn('Language save failed:', e.message); }
+        const languageSaved = this._persistLocal('os_lang', lang, { label:'Language preference', announce:false });
         // "Preferences saved" used to mean the language only; every other value
         // here was session-scoped and reset on the next reload.
-        this._persistPreferences(accent);
+        const preferencesSaved = this._persistPreferences(accent, { announce:false });
+        if (!languageSaved || !preferencesSaved) {
+            const message = this._lastStorageError?.message || 'Preferences could not be saved';
+            this._setPersistenceState('error', new Error(message));
+            overlay.remove();
+            this.toast(message, 'error');
+            return false;
+        }
         if (this.gridVisible) this.drawGrid();
         overlay.remove(); this.toast(this._t('Preferences saved'), 'success');
+        return true;
     },
-    _persistPreferences(accent = null) {
+    _persistPreferences(accent = null, { announce = true } = {}) {
         const payload = {
             version: 1,
             defaultW: this._prefs.defaultW,
@@ -18131,8 +18177,7 @@ self.onmessage = async function(event) {
             panelSizes: Array.isArray(this._prefs.panelSizes) ? this._prefs.panelSizes.slice(0, 8) : []
         };
         if (/^#[0-9a-fA-F]{6}$/.test(String(accent || ''))) payload.accent = String(accent).toLowerCase();
-        try { localStorage.setItem('os_prefs', JSON.stringify(payload)); }
-        catch(e) { console.warn('Preferences not stored:', e.message); }
+        return this._persistLocal('os_prefs', JSON.stringify(payload), { label:'Preferences', announce });
     },
     _restorePreferences() {
         let stored = null;
@@ -20627,7 +20672,10 @@ self.onmessage = async function(e) {
         const color = this.state.fgColor;
         if (!this._savedPalette.includes(color)) {
             this._savedPalette.push(color);
-            try { localStorage.setItem('os_palette', JSON.stringify(this._savedPalette)); } catch(e) { console.warn('Palette save failed:', e.message); }
+            if (!this._persistLocal('os_palette', JSON.stringify(this._savedPalette), { label:'Palette' })) {
+                this._savedPalette.pop();
+                return false;
+            }
             this._renderSavedPalette();
             this.toast(`Added ${color} to palette`, 'success');
         }
@@ -20636,14 +20684,20 @@ self.onmessage = async function(e) {
         if (!this._savedPalette.length) { this.toast('Palette is already empty', 'info'); return; }
         const restore = this._savedPalette.slice();
         this._savedPalette = [];
-        try { localStorage.setItem('os_palette', '[]'); } catch(e) { console.warn('Palette clear failed:', e.message); }
+        if (!this._persistLocal('os_palette', '[]', { label:'Palette' })) {
+            this._savedPalette = restore;
+            this._renderSavedPalette();
+            return false;
+        }
         this._renderSavedPalette();
         // Not undoable through canvas history, so offer the undo inline.
         this._toastWithUndo(`Cleared ${restore.length} swatch${restore.length === 1 ? '' : 'es'}`, () => {
             this._savedPalette = restore;
-            try { localStorage.setItem('os_palette', JSON.stringify(restore)); } catch(e) { console.warn('Palette restore failed:', e.message); }
+            if (!this._persistLocal('os_palette', JSON.stringify(restore), { label:'Palette restore' })) {
+                this._savedPalette = [];
+            }
             this._renderSavedPalette();
-            this.toast('Palette restored', 'success');
+            if (this._savedPalette.length) this.toast('Palette restored', 'success');
         });
     },
     exportPalette() {
@@ -20739,8 +20793,12 @@ self.onmessage = async function(e) {
     _commitImportedPalette(colors) {
         const safeColors = this._sanitizePaletteColors(colors);
         if (!safeColors.length) { this.toast('Palette contained no usable colours', 'error'); return 0; }
+        const previous = this._savedPalette.slice();
         this._savedPalette = [...this._savedPalette, ...safeColors].slice(0, this._importLimits.maxPaletteColors);
-        try { localStorage.setItem('os_palette', JSON.stringify(this._savedPalette)); } catch(e) { console.warn('Palette save failed:', e.message); }
+        if (!this._persistLocal('os_palette', JSON.stringify(this._savedPalette), { label:'Palette' })) {
+            this._savedPalette = previous;
+            return 0;
+        }
         this._renderSavedPalette();
         this.toast(`Imported ${safeColors.length} colors`, 'success');
         return safeColors.length;
@@ -20871,10 +20929,9 @@ self.onmessage = async function(e) {
         select.value = this.state.gradientPreset || '';
     },
     _persistImportedAssets() {
-        try {
-            localStorage.setItem('os_brushes', JSON.stringify(this._importedBrushes));
-            localStorage.setItem('os_gradients', JSON.stringify(this._gradientPresets));
-        } catch(e) { console.warn('Asset preset save failed:', e.message); }
+        const brushesSaved = this._persistLocal('os_brushes', JSON.stringify(this._importedBrushes), { label:'Brush presets' });
+        const gradientsSaved = this._persistLocal('os_gradients', JSON.stringify(this._gradientPresets), { label:'Gradient presets' });
+        return brushesSaved && gradientsSaved;
     },
     loadImportedAssets() {
         try {
@@ -21633,8 +21690,7 @@ self.onmessage = async function(e) {
         this._currentTheme = next;
         if (this.session?.preferences) this.session.preferences.theme = next;
         if (persist) {
-            try { localStorage.setItem('os_theme', next); }
-            catch(e) { console.warn('Theme preference not stored:', e.message); }
+            this._persistLocal('os_theme', next, { label:'Theme preference' });
         }
         // Canvas-drawn chrome samples the tokens at paint time, so it must be
         // repainted for a theme change to reach it.
@@ -23931,8 +23987,12 @@ self.onmessage = async function(e) {
     _doSavePreset(overlay) {
         const name = overlay.querySelector('#preset-name-input').value.trim();
         if (!name) { this.toast('Enter a preset name', 'info'); return; }
+        const previous = this._presets.slice();
         this._presets.push({ name: this._safeText(name, 80), adjustments:{brightness:0,contrast:0,saturation:0,hue:0,vibrance:0}, custom:true });
-        try { localStorage.setItem('os_presets', JSON.stringify(this._presets)); } catch(e) { console.warn('Preset save:', e.message); }
+        if (!this._persistLocal('os_presets', JSON.stringify(this._presets), { label:'Preset' })) {
+            this._presets = previous;
+            return;
+        }
         this.toast(`Saved: ${name}`, 'success');
         overlay.remove(); this.showPresets();
     },
@@ -23945,8 +24005,12 @@ self.onmessage = async function(e) {
                 try {
                     const data = JSON.parse(ev.target.result);
                     const safePresets = this._sanitizePresetList(data);
+                    const previous = this._presets;
                     this._presets = [...this._presets, ...safePresets].slice(0, this._importLimits.maxPresets);
-                    try { localStorage.setItem('os_presets', JSON.stringify(this._presets)); } catch(e2) { console.warn('Preset save:', e2.message); }
+                    if (!this._persistLocal('os_presets', JSON.stringify(this._presets), { label:'Preset' })) {
+                        this._presets = previous;
+                        return;
+                    }
                     this.toast(`Imported ${safePresets.length} preset(s)`, 'success');
                 } catch(e2) { this.toast('Invalid preset file', 'error'); }
             }; r.readAsText(f);
@@ -24028,7 +24092,7 @@ self.onmessage = async function(e) {
     _pluginPersistConsents() {
         const serializable = {};
         this._pluginLoadConsents().forEach((value, id) => { serializable[id] = value; });
-        try { localStorage.setItem(this._pluginConsentStorageKey, JSON.stringify(serializable)); } catch (error) { /* storage is optional */ }
+        return this._persistLocal(this._pluginConsentStorageKey, JSON.stringify(serializable), { label:'Plugin consent' });
     },
     _pluginConsentStatus(manifest) {
         const existing = this._pluginLoadConsents().get(manifest.id) || null;
@@ -24037,7 +24101,9 @@ self.onmessage = async function(e) {
         return { allowed:same, changed:!same, record:existing };
     },
     _pluginGrantConsent(manifest) {
-        this._pluginLoadConsents().set(manifest.id, {
+        const consents = this._pluginLoadConsents();
+        const previous = consents.get(manifest.id);
+        consents.set(manifest.id, {
             id:manifest.id,
             version:manifest.version,
             name:manifest.name,
@@ -24045,8 +24111,10 @@ self.onmessage = async function(e) {
             capabilities:[...manifest.capabilities],
             allowedAt:new Date().toISOString()
         });
-        this._pluginPersistConsents();
-        return true;
+        if (this._pluginPersistConsents()) return true;
+        if (previous) consents.set(manifest.id, previous);
+        else consents.delete(manifest.id);
+        return false;
     },
     listPluginConsents() {
         return [...this._pluginLoadConsents().values()].map(value => ({ ...value, capabilities:[...value.capabilities] }));
@@ -24054,9 +24122,14 @@ self.onmessage = async function(e) {
     removePluginConsent(pluginOrId) {
         const id = typeof pluginOrId === 'string' ? pluginOrId : pluginOrId?.manifest?.id || pluginOrId?.id;
         if (!id) return false;
-        const removed = this._pluginLoadConsents().delete(id);
+        const consents = this._pluginLoadConsents();
+        const previous = consents.get(id);
+        const removed = consents.delete(id);
         [...this._pluginRecords.values()].filter(record => record.manifest.id === id).forEach(record => this.disposePlugin(record.id));
-        if (removed) this._pluginPersistConsents();
+        if (removed && !this._pluginPersistConsents()) {
+            consents.set(id, previous);
+            return false;
+        }
         return removed;
     },
     async _pluginVerifySource(record) {
@@ -24239,7 +24312,6 @@ self.onmessage = async function(e) {
         const result = new Promise(done => { resolve = done; });
         deny.addEventListener('click', () => finish(undefined));
         allow.addEventListener('click', () => {
-            this._pluginGrantConsent(manifest);
             finish(this.registerPlugin(plugin, { consent:true }));
         });
         requestAnimationFrame(() => overlay.classList.add('show'));
@@ -24281,7 +24353,7 @@ self.onmessage = async function(e) {
                 ? 'plugin source or version changed; explicit consent is required again'
                 : 'explicit plugin consent is required before loading');
         }
-        if (consent) this._pluginGrantConsent(manifest);
+        if (consent && !this._pluginGrantConsent(manifest)) return this._pluginError('plugin consent could not be saved');
 
         const record = {
             id:manifest.id,
