@@ -16,6 +16,9 @@ All notable changes to Openshop will be documented in this file.
   looked only for the flyout after it has been portalled to the body host, but at
   that point in boot the flyout is still nested inside the group, so the face was
   left unmarked until the user picked a tool by hand.
+- Registered Photoshop-parity tools without an implementation now appear disabled,
+  refuse command and macro execution with a diagnostic, and leave the active tool
+  unchanged instead of swallowing gestures as successful no-ops.
 
 ### Testing
 - Added `tests/issue-3-requests.e2e.spec.js`: one browser test per request in issue

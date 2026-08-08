@@ -81,13 +81,6 @@ flyout was still nested at that point in boot.
 
 ### P0 — Release and trust
 
-- [ ] P0 — Make every registered tool either work or refuse
-  Why: 32 of 60 registered tools execute successfully, return `true`, and do nothing — the user gets a crosshair cursor, a named tool in the status bar, sometimes a populated options bar, and every gesture swallowed.
-  Evidence: `index.html:12262-12325` (60 `_toolCatalog` rows), `12346-12359` (`execute()` calls `setTool` and returns `true`), `10312-10371` (`setTool` switch has 34 cases and no `default`). Extracted diff: 34 tool states have no branch; `quick-mask` and `screen-mode` are special-cased, leaving 32 dead — single-row/column marquee, polygonal and magnetic lasso, quick selection, perspective crop, slice, slice-select, colour sampler, spot healing, patch, content-aware move, red eye, pattern stamp, history brush, art history brush, background and magic eraser, blur, sharpen, freeform pen, add/delete anchor, convert point, vertical type, both type masks, path selection, direct selection, rounded rectangle, custom shape, rotate view. `marquee-row`/`marquee-column` map to the `marquee` options context at `10181`.
-  Touches: `index.html` `_toolCatalog`, `_toolCommandDefinitions`, `setTool`, `getCommandState`, `_applyToolOptions`; `tests/command-registry.test.js`.
-  Acceptance: a `setTool` `default` branch refuses an unhandled state with a toast and leaves the previous tool active; `listRegisteredTools` reports `enabled:false, blocked:'unimplemented'` for those rows and the toolbox renders them disabled; a recorded macro containing one fails the step instead of replaying as a no-op; a test extracts tool states and `setTool` branches and fails if a row is executable without a branch.
-  Complexity: M
-
 - [ ] P0 — Make the coverage gate measure the shipped file
   Why: the release gate enforces 80/70/85/80 thresholds against 189 lines of test harness; V8 attributes nothing to `index.html`, so the gate is structurally incapable of failing on app code.
   Evidence: `tests/os-harness.js:9-24` extracts the `const OS = {` block as a string and evaluates it with `new Function`; `coverage/coverage-summary.json` lists only `os-harness.js` and `tools/security.mjs`; thresholds at `vitest.config.js:12-19`; `test:coverage` is chained into `test:release` in `package.json`.

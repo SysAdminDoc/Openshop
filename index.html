@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-f156aQhdtHIeLZnyd8RhlMMAKkV9A4/ZUVh8ucDHWLw=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-1oH5t9zqzhhgSCrt08OtiGKSkSS6dYcy2cwbb/VOlq0=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -10032,14 +10032,15 @@ self.onmessage = function(event) {
         familyOrder.forEach(family => {
             const members = entries.filter(tool => tool.family === family);
             if (!members.length) return;
+            const defaultMember = members.find(tool => tool.implemented !== false) || members[0];
             const group = document.createElement('div');
             group.className = 'tool-group audit-tool-group';
             group.dataset.group = `registry-${family.toLowerCase().replace(/\s+/g, '-')}`;
             const face = document.createElement('button');
             face.type = 'button';
             face.className = 'tool-btn audit-tool-face';
-            face.dataset.tool = members[0].toolState;
-            face.dataset.tip = `${family}: ${members[0].label}`;
+            face.dataset.tool = defaultMember.toolState;
+            face.dataset.tip = `${family}: ${defaultMember.label}`;
             face.setAttribute('aria-label', face.dataset.tip);
             face.title = face.dataset.tip;
             const glyph = document.createElement('span');
@@ -10063,6 +10064,11 @@ self.onmessage = function(event) {
                 button.setAttribute('aria-label', tool.label);
                 button.setAttribute('role', 'menuitem');
                 button.setAttribute('data-os-click', 'click-229');
+                if (tool.implemented === false) {
+                    button.disabled = true;
+                    button.setAttribute('aria-disabled', 'true');
+                    button.dataset.unimplemented = 'true';
+                }
                 button.title = tool.label;
                 const name = document.createElement('span');
                 name.className = 'tool-name';
@@ -10073,6 +10079,9 @@ self.onmessage = function(event) {
                 button.append(name, shortcut);
                 flyout.appendChild(button);
             });
+            const faceImplemented = defaultMember.implemented !== false;
+            face.disabled = !faceImplemented;
+            if (!faceImplemented) face.setAttribute('aria-disabled', 'true');
             group.append(face, flyout);
             toolbar.appendChild(group);
         });
@@ -10310,6 +10319,11 @@ self.onmessage = function(event) {
 
     setTool(tool) {
         const prevTool = this.state.tool;
+        const known = this._toolCatalog().some(entry => entry.toolState === tool)
+            || this._toolExtensionStates.includes(tool);
+        if (this._unimplementedToolStates.includes(tool) || !known || tool === 'quick-mask' || tool === 'screen-mode') {
+            return this._refuseUnimplementedTool(tool);
+        }
         this.state.tool = tool;
         // The active tool was communicated only by a CSS class, so assistive
         // technology could not tell which of the 42 buttons was selected.
@@ -10409,6 +10423,9 @@ self.onmessage = function(event) {
             case 'measure': document.getElementById('opt-measure').style.display='flex'; document.getElementById('measure-overlay').style.display='block'; break;
             case 'note': c.defaultCursor='crosshair'; c.hoverCursor='crosshair'; break;
         case 'crop': document.getElementById('opt-crop').style.display='flex'; this._initCrop(); break;
+            default:
+                this.state.tool = prevTool;
+                return this._refuseUnimplementedTool(tool);
         }
         this._applyToolOptions(tool);
         this._applyLayerInteractionState({ render:false });
@@ -10416,6 +10433,7 @@ self.onmessage = function(event) {
         document.getElementById('tool-display').textContent = toolNames[tool] || tool.charAt(0).toUpperCase()+tool.replace(/-/g,' ').slice(1);
         this._syncSessionWorkspace();
         this._renderAccessibilityTree();
+        return true;
     },
     setBrushSize(v) { this.state.brushSize=+v; document.getElementById('brush-size-val').textContent=v; if(this.canvas.freeDrawingBrush) this.canvas.freeDrawingBrush.width=+v; },
     setBrushOpacity(v) {
@@ -12303,6 +12321,25 @@ self.onmessage = function(event) {
     pasteObj() { this._pasteSelection(); },
 
     // ====================== HISTORY ======================
+    _unimplementedToolStates: Object.freeze([
+        'marquee-row', 'marquee-column', 'lasso-polygonal', 'lasso-magnetic', 'quick-selection',
+        'perspective-crop', 'slice', 'slice-select', 'color-sampler', 'spot-healing', 'patch',
+        'content-aware-move', 'red-eye', 'pattern-stamp', 'history-brush', 'art-history-brush',
+        'background-eraser', 'magic-eraser', 'blur', 'sharpen', 'freeform-pen', 'add-anchor',
+        'delete-anchor', 'convert-point', 'vertical-text', 'horizontal-text-mask',
+        'vertical-text-mask', 'path-selection', 'direct-selection', 'rounded-rect', 'custom-shape',
+        'rotate-view'
+    ]),
+    _toolExtensionStates: Object.freeze(['brush', 'pencil', 'spray', 'ai-segment']),
+    _refuseUnimplementedTool(tool) {
+        const definition = this._toolCatalog().find(entry => entry.toolState === tool);
+        const label = this._t(definition?.labelKey || definition?.label || String(tool || 'Tool'));
+        const message = `${label} is not implemented`;
+        this.recordDiagnostic('error', message, { tool:String(tool || '') });
+        this.toast(message, 'error');
+        this._announceAccessibility?.(message);
+        return false;
+    },
     _toolCatalog() {
         if (this._toolCatalogCache) return this._toolCatalogCache;
         const rows = [
@@ -12383,6 +12420,7 @@ self.onmessage = function(event) {
             sideEffect,
             auditStatus: 'VISUALLY_INSPECTED',
             toolState,
+            implemented: !this._unimplementedToolStates.includes(toolState),
             visible: true
         }));
         return this._toolCatalogCache;
@@ -12397,8 +12435,8 @@ self.onmessage = function(event) {
             execute: () => {
                 if (tool.id === 'mode.quick-mask') return this.toggleQuickMaskMode();
                 if (tool.id === 'mode.screen') return this.toggleFullscreen();
-                this.setTool(tool.toolState);
-                return true;
+                if (!tool.implemented) return this._refuseUnimplementedTool(tool.toolState);
+                return this.setTool(tool.toolState) !== false;
             }
         }]);
     },
@@ -12406,9 +12444,9 @@ self.onmessage = function(event) {
         return this._toolCatalog().map(tool => ({
             ...tool,
             label: this._t(tool.labelKey),
-            enabled: !tool.requiresDocument || Boolean(documentOpen),
-            blocked: Boolean(tool.requiresDocument && !documentOpen),
-            selected: tool.toolState === this.state.tool,
+            enabled: tool.implemented && (!tool.requiresDocument || Boolean(documentOpen)),
+            blocked: !tool.implemented ? 'unimplemented' : Boolean(tool.requiresDocument && !documentOpen),
+            selected: tool.implemented && tool.toolState === this.state.tool,
             checked: tool.id === 'mode.quick-mask' ? Boolean(this._quickMaskMode) : false
         }));
     },
@@ -12418,8 +12456,9 @@ self.onmessage = function(event) {
         const requiresDocument = definition.kind === 'tool'
             ? Boolean(definition.requiresDocument)
             : definition.requiresDocument !== false;
-        const enabled = !requiresDocument || Boolean(documentOpen);
         const isTool = definition.kind === 'tool';
+        const implemented = !isTool || definition.implemented !== false;
+        const enabled = implemented && (!requiresDocument || Boolean(documentOpen));
         return {
             id,
             kind: definition.kind || 'command',
@@ -12433,14 +12472,15 @@ self.onmessage = function(event) {
             undoPolicy: definition.undoPolicy || null,
             sideEffect: definition.sideEffect || null,
             visible: definition.visible !== false,
+            implemented,
             enabled,
-            blocked: !enabled,
-            selected: isTool && definition.toolState === this.state.tool,
+            blocked: !implemented ? 'unimplemented' : !enabled,
+            selected: implemented && isTool && definition.toolState === this.state.tool,
             checked: id === 'mode.quick-mask' ? Boolean(this._quickMaskMode) : false
         };
     },
     cycleToolGroup(group, { reverse = false } = {}) {
-        const members = this._toolCatalog().filter(tool => tool.family === group);
+        const members = this._toolCatalog().filter(tool => tool.family === group && tool.implemented);
         if (!members.length) return null;
         const current = members.findIndex(tool => tool.toolState === this.state.tool);
         const offset = reverse ? -1 : 1;
