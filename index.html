@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-uebOTYkCLa6z8WcE0J10ikJz28M0afdTf4c5ePoEowM=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-Kk4avu2AHVQ5ZKO7I2122ElkPTo5YrNlVyntI3atFXY=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -5064,7 +5064,22 @@ const OS = {
             this._setPersistenceState('dirty');
         }
     },
-    createNewDocument(w, h, { resetProject = false, clean = false, resetHistory = true, background = null } = {}) {
+    createNewDocument(w, h, options = {}) {
+        // Keep the programmatic API aligned with the embed and installed-file
+        // launch callers, which pass a `{ width, height, ...options }` spec.
+        // The original positional form remains the fast path used by the UI.
+        if (w && typeof w === 'object' && !Array.isArray(w)) {
+            const spec = w;
+            w = spec.width;
+            h = spec.height;
+            options = spec;
+        } else if (typeof options === 'string') {
+            // Older integrations used the third argument as a background
+            // colour; retain that small compatibility surface while the
+            // options object is the canonical form.
+            options = { background:options };
+        }
+        const { resetProject = false, clean = false, resetHistory = true, background = null } = options || {};
         this._blankWorkspace = false;
         if (resetProject) {
             const previousLineage = [this._documentId, ...(this._documentIdAliases || [])].filter(Boolean);

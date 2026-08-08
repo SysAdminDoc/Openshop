@@ -249,7 +249,7 @@ test.describe('hosted offline contract', () => {
       // The editor boots into a blank workspace with no document session, which
       // is deliberate (see "keeps a first-class blank workspace separate from the
       // document session"). Capturing state needs a document to capture.
-      await OS.createNewDocument({ width: 320, height: 240 });
+      await OS.createNewDocument({ width: 320, height: 240, clean: true });
       const project = OS._captureDocumentState();
       project.document.name = 'Launched Project';
       const file = new File([JSON.stringify(project)], 'launched.openshop', {

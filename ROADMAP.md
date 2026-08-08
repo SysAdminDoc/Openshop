@@ -13,18 +13,15 @@ button was looked at — not that the tool works. See P0 below.
 ## P0 — the e2e suite is red at HEAD (found 2026-08-08)
 
 The Chromium suite had **10 failures at the v0.29.0 tree** before any of today's work.
-Four are fixed; the seven below are open. None of them was caught before shipping,
+Six are fixed; the five below are open. None of them was caught before shipping,
 which is the more interesting problem: a release went out on a red suite.
 
 | # | Test | What it reports |
 |---|------|-----------------|
-| 1 | `offline.e2e` — declares supported file handlers and consumes a queued project launch | Two layers. The test predated the blank-workspace change and captured state with no document open (fixed 2026-08-08 — it creates one first). The real defect is underneath: with a document present the queued `.openshop` launch is still never consumed, so `window.__openshopLaunchConsumer` accepts the file and nothing loads. Start at the consumer, not the capture. |
 | 2 | `records validated commands and replays mixed edits as one atomic action` | Replay produces one entry more/less than the recording. Command-registry regression, likely from the tool-registry rebuild. |
 | 3 | `resolves one mobile layout rather than two blocks that fight each other` | Two competing layout blocks resolve at mobile width. |
 | 4 | `keeps one tablet block with the winning panel width` | Same class of defect at tablet width. |
-| 5 | `flags untranslated interface strings through the pseudo-locale` | The audited Photoshop tool inventory added ~40 new DOM strings (`Marquee: Rectangular Marquee Tool`, `Move: Move Tool`, …) with no `zh` entries. **Needs a native speaker** — mechanically-added `zh` strings are already flagged as debt in CLAUDE.md, so do not bulk-translate these. Better fix: build the family tooltip from translated parts so the composite never becomes its own key. |
-| 6 | `runs the Photon WASM backend for real on the operation it is allowed` | Photon parity check fails on the one allowlisted op. |
-| 7 | `registers a sandbox plugin and lets it contribute a command` | `Plugin handshake timed out` — the sandboxed-iframe plugin bridge never completes. |
+| 5 | `runs the Photon WASM backend for real on the operation it is allowed` | Photon parity check fails on the one allowlisted op. |
 
 Fixed on 2026-08-08 and kept here only as the record: WCAG contrast on the selected
 bottom tab (4.01:1 → passing), two pointer targets under the 24×24 floor
