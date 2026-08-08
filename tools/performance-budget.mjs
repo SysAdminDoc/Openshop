@@ -1,182 +1,307 @@
-import { performance } from 'node:perf_hooks';
+import { spawn } from 'node:child_process';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { chromium } from '@playwright/test';
+
+const rootDir = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const port = Number(process.env.OPENSHOP_PERF_PORT || 4174);
+const appUrl = `http://127.0.0.1:${port}/`;
+const iterations = Math.max(1, Math.min(5, Number(process.env.OPENSHOP_PERF_ITERATIONS || 3)));
+const slowFilterArg = process.argv.find(argument => argument.startsWith('--slow-filter-ms='));
+const slowFilterMs = Math.max(0, Number(slowFilterArg?.split('=')[1] || process.env.OPENSHOP_PERF_SLOW_FILTER_MS || 0));
 
 const fixtures = [
-    { name:'4K', width:3840, height:2160, iterations:3 },
-    { name:'8K', width:7680, height:4320, iterations:3 },
-    { name:'12MP', width:4000, height:3000, iterations:3 }
+    { name:'4K', width:3840, height:2160 },
+    { name:'8K', width:7680, height:4320 },
+    { name:'12MP', width:4000, height:3000 }
 ];
 
-// These are release envelopes, not claims that every browser/device meets a
-// particular latency. The report is still useful when a new code path moves
-// p95 or retained memory, and the generous ceilings keep the gate portable.
-const budgets = Object.freeze({
-    import: { p95Ms:60_000 },
-    paint: { p95Ms:5_000 },
-    filterPreview: { p95Ms:10_000 },
-    filterApply: { p95Ms:60_000 },
-    undoRedo: { p95Ms:10_000 },
-    export: { p95Ms:60_000 },
-    batch: { p95Ms:60_000 },
-    cancel: { p95Ms:5_000 },
-    staleResult: { p95Ms:5_000 }
+// Baselines are the observed p95 ceilings from the shipped page in headless
+// Chromium on the contributor machine. The fixed four-times envelope absorbs
+// normal CI variance while keeping an intentionally slowed filter observable.
+const PERFORMANCE_MULTIPLIER = 4;
+const baselineP95Ms = Object.freeze({
+    import:200,
+    paint:100,
+    filterPreview:150,
+    filterApply:4_000,
+    undoRedo:1_000,
+    export:500,
+    batch:2_500,
+    cancel:100,
+    staleResult:100
 });
+const budgets = Object.freeze(Object.fromEntries(
+    Object.entries(baselineP95Ms).map(([name, baseline]) => [name, {
+        baselineP95Ms:baseline,
+        multiplier:PERFORMANCE_MULTIPLIER,
+        p95Ms:baseline * PERFORMANCE_MULTIPLIER
+    }])
+));
 
-const bytesFor = (width, height) => width * height * 4;
-const formatMs = value => `${value.toFixed(1)} ms`;
-const percentile = (values, factor) => {
+const percentile = (values, factor = 0.95) => {
     const sorted = [...values].sort((a, b) => a - b);
     return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * factor) - 1)];
 };
 
-function createSurface(width, height) {
-    const surface = new Uint8Array(bytesFor(width, height));
-    for (let index = 0; index < surface.length; index += 4) {
-        const pixel = index / 4;
-        surface[index] = pixel & 0xff;
-        surface[index + 1] = (pixel >>> 8) & 0xff;
-        surface[index + 2] = (pixel >>> 16) & 0xff;
-        surface[index + 3] = 255;
-    }
-    return surface;
-}
-
-function runOperation(name, fixture) {
-    const { width, height } = fixture;
-    if (name === 'import') return createSurface(width, height);
-    if (name === 'paint') {
-        const surface = createSurface(width, height);
-        const tile = 64 * 64 * 4;
-        for (let offset = 0; offset < Math.min(surface.length, tile * 64); offset += 4) {
-            surface[offset] = 255;
-            surface[offset + 1] = 32;
-            surface[offset + 2] = 16;
-        }
-        return surface;
-    }
-    if (name === 'filterPreview') {
-        const surface = createSurface(width, height);
-        const previewWidth = Math.max(1, Math.ceil(width / 2));
-        const previewHeight = Math.max(1, Math.ceil(height / 2));
-        const preview = new Uint8Array(bytesFor(previewWidth, previewHeight));
-        for (let y = 0; y < previewHeight; y += 1) for (let x = 0; x < previewWidth; x += 1) {
-            const source = (Math.min(height - 1, y * 2) * width + Math.min(width - 1, x * 2)) * 4;
-            const target = (y * previewWidth + x) * 4;
-            const gray = Math.round(surface[source] * 0.299 + surface[source + 1] * 0.587 + surface[source + 2] * 0.114);
-            preview[target] = gray; preview[target + 1] = gray; preview[target + 2] = gray; preview[target + 3] = 255;
-        }
-        return preview;
-    }
-    if (name === 'filterApply') {
-        const surface = createSurface(width, height);
-        for (let index = 0; index < surface.length; index += 4) {
-            const gray = Math.round(surface[index] * 0.299 + surface[index + 1] * 0.587 + surface[index + 2] * 0.114);
-            surface[index] = gray; surface[index + 1] = gray; surface[index + 2] = gray;
-        }
-        return surface;
-    }
-    if (name === 'undoRedo') {
-        const surface = createSurface(width, height);
-        const tileBytes = 64 * 64 * 4;
-        const delta = new Uint8Array(tileBytes * 16);
-        delta.set(surface.subarray(0, delta.length));
-        const redo = delta.slice();
-        return { surface, delta, redo };
-    }
-    if (name === 'export') {
-        const surface = createSurface(width, height);
-        // This is the deterministic RGBA snapshot boundary used before the
-        // browser's PNG/WebP encoder; it deliberately does not call a fake
-        // encoder and is labelled as such in the report.
-        return surface.slice();
-    }
-    if (name === 'batch') {
-        const batch = [];
-        for (let index = 0; index < 3; index += 1) {
-            const surface = createSurface(1024, 1024);
-            for (let pixel = index; pixel < surface.length; pixel += 4) surface[pixel] = (surface[pixel] + 17) & 0xff;
-            batch.push(surface);
-        }
-        return batch;
-    }
-    if (name === 'cancel') {
-        const controller = new AbortController();
-        const surface = createSurface(Math.min(width, 2048), Math.min(height, 2048));
-        let processed = 0;
-        for (let index = 0; index < surface.length; index += 4) {
-            processed += 1;
-            if (processed === 1024) controller.abort();
-            if (controller.signal.aborted) break;
-        }
-        if (!controller.signal.aborted) throw new Error('Cancellation probe did not cancel');
-        return { cancelled:true, processed };
-    }
-    if (name === 'staleResult') {
-        const jobGeneration = 1;
-        const currentGeneration = 2;
-        return { discarded:jobGeneration !== currentGeneration, jobGeneration, currentGeneration };
-    }
-    throw new Error(`Unknown performance operation ${name}`);
-}
-
-function measure(name, fixture) {
-    global.gc?.();
-    const before = process.memoryUsage();
-    const start = performance.now();
-    const result = runOperation(name, fixture);
-    const durationMs = performance.now() - start;
-    const after = process.memoryUsage();
-    // The result is intentionally scoped to this call. GC on the next sample
-    // distinguishes retained memory from one operation's temporary surface.
-    return { durationMs, rssDeltaBytes:Math.max(0, after.rss - before.rss), resultType:Array.isArray(result) ? 'batch' : typeof result };
-}
-
-function benchmarkFixture(fixture) {
-    const operations = {};
-    for (const name of Object.keys(budgets)) {
-        const samples = Array.from({ length:fixture.iterations }, () => measure(name, fixture));
-        operations[name] = {
-            samples:samples.map(sample => Number(sample.durationMs.toFixed(3))),
-            p50Ms:Number(percentile(samples.map(sample => sample.durationMs), 0.5).toFixed(3)),
-            p95Ms:Number(percentile(samples.map(sample => sample.durationMs), 0.95).toFixed(3)),
-            peakRssDeltaBytes:Math.max(...samples.map(sample => sample.rssDeltaBytes)),
-            executionPaths:{ worker:false, gpu:false, cpu:true },
-            cancellation:{ tested:name === 'cancel', observed:name === 'cancel' },
-            staleResultHandling:{ tested:name === 'staleResult', discarded:name === 'staleResult' }
+function waitForServer(server) {
+    return new Promise((resolveReady, rejectReady) => {
+        const deadline = Date.now() + 15_000;
+        const check = async () => {
+            try {
+                const response = await fetch(appUrl, { redirect:'manual' });
+                if (response.ok) return resolveReady();
+            } catch {
+                // The server is still starting.
+            }
+            if (Date.now() >= deadline) return rejectReady(new Error(`Timed out waiting for ${appUrl}`));
+            setTimeout(check, 100);
         };
-    }
-    return {
-        name:fixture.name,
-        width:fixture.width,
-        height:fixture.height,
-        pixels:fixture.width * fixture.height,
-        rgbaBytes:bytesFor(fixture.width, fixture.height),
-        operations
-    };
+        server.once('error', rejectReady);
+        check();
+    });
+}
+
+function startServer() {
+    const server = spawn(process.execPath, ['tests/server.mjs'], {
+        cwd:rootDir,
+        env:{ ...process.env, OPENSHOP_TEST_PORT:String(port) },
+        stdio:['ignore', 'ignore', 'inherit']
+    });
+    return { server, ready:waitForServer(server) };
+}
+
+function stopServer(server) {
+    if (!server || server.killed) return;
+    server.kill('SIGTERM');
+}
+
+function formatMs(value) {
+    return `${value.toFixed(1)} ms`;
 }
 
 function checkReport(report) {
     const failures = [];
     report.fixtures.forEach(fixture => Object.entries(fixture.operations).forEach(([name, result]) => {
-        if (result.p95Ms > budgets[name].p95Ms) failures.push(`${fixture.name}.${name}.p95Ms=${result.p95Ms} > ${budgets[name].p95Ms}`);
+        const budget = report.budgets[name];
+        if (result.p95Ms > budget.p95Ms) failures.push(`${fixture.name}.${name}.p95Ms=${result.p95Ms} > ${budget.p95Ms}`);
+        if (!result.executionPaths?.backend) failures.push(`${fixture.name}.${name} did not report an execution backend`);
+        if (name === 'cancel' && result.cancellation?.observed !== true) {
+            failures.push(`${fixture.name}.cancel did not observe a real cancelled compute job`);
+        }
+        if (name === 'staleResult' && result.staleResultHandling?.discarded !== true) {
+            failures.push(`${fixture.name}.staleResult did not discard a stale compute result`);
+        }
     }));
     if (failures.length) throw new Error(`Performance budget failure: ${failures.join(', ')}`);
 }
 
-const report = {
-    schemaVersion:1,
-    generatedAt:new Date().toISOString(),
-    runtime:{ node:process.version, executionPath:'node-cpu-proxy', memory:'process.rss delta; browser GPU/worker paths require the browser matrix' },
-    budgets,
-    fixtures:fixtures.map(benchmarkFixture)
-};
+async function runFixtureSample(page, fixture, slowMs) {
+    return page.evaluate(async ({ width, height, slowFilterMs: injectedSlowMs }) => {
+        const pathFor = (backend, fallback = 'CanvasRenderingContext2D') => {
+            const webgl = Boolean(backend && window.fabric?.WebGLFilterBackend && backend instanceof fabric.WebGLFilterBackend);
+            const canvas2d = Boolean(backend && window.fabric?.Canvas2dFilterBackend && backend instanceof fabric.Canvas2dFilterBackend);
+            return {
+                backend:backend?.constructor?.name || (canvas2d ? 'Canvas2dFilterBackend' : fallback),
+                worker:false,
+                gpu:webgl,
+                cpu:canvas2d || (!webgl && !backend)
+            };
+        };
+        const timed = async (operation, run, executionPaths) => {
+            const started = performance.now();
+            const value = await run();
+            return {
+                durationMs:Number((performance.now() - started).toFixed(3)),
+                value,
+                executionPaths
+            };
+        };
+        if (injectedSlowMs > 0 && !OS.__openshopPerfSlowFilter) {
+            const original = OS._applyImageFilters;
+            OS._applyImageFilters = function (...args) {
+                const result = original.apply(this, args);
+                const until = performance.now() + injectedSlowMs;
+                while (performance.now() < until) { /* deliberate gate probe */ }
+                return result;
+            };
+            OS.__openshopPerfSlowFilter = true;
+        }
 
-if (process.argv.includes('--check')) checkReport(report);
-if (process.argv.includes('--json')) console.log(JSON.stringify(report, null, 2));
-else {
-    console.log(`Performance budgets passed for ${report.fixtures.length} deterministic fixtures (4K, 8K, 12MP).`);
-    report.fixtures.forEach(fixture => {
-        const values = ['import','paint','filterPreview','filterApply','undoRedo','export','batch','cancel','staleResult']
-            .map(name => `${name} p95 ${formatMs(fixture.operations[name].p95Ms)}`);
-        console.log(`${fixture.name} ${fixture.width}x${fixture.height}: ${values.join(', ')}`);
-    });
+        const imported = await timed('import', () => {
+            OS.createNewDocument(width, height, { resetProject:true, clean:true });
+            if (!OS._hasActiveDocument()) throw new Error('Import probe did not create an active document');
+            return { width:OS.canvasW, height:OS.canvasH };
+        }, pathFor(null, 'CanvasRenderingContext2D'));
+
+        const painted = await timed('paint', () => {
+            const rectangle = new fabric.Rect({
+                left:Math.max(1, Math.round(width / 8)),
+                top:Math.max(1, Math.round(height / 8)),
+                width:Math.max(16, Math.round(width / 4)),
+                height:Math.max(16, Math.round(height / 4)),
+                fill:'#6c8cff',
+                name:'Performance paint'
+            });
+            OS._addObjectAsLayer(rectangle, 'Performance paint');
+            OS.saveHistory('Performance paint');
+            OS.canvas.renderAll();
+            return { layerCount:OS.layers.length, objectCount:OS.canvas.getObjects().length };
+        }, pathFor(null, 'CanvasRenderingContext2D'));
+
+        const source = document.createElement('canvas');
+        source.width = width;
+        source.height = height;
+        const sourceContext = source.getContext('2d');
+        sourceContext.fillStyle = 'rgb(40,80,120)';
+        sourceContext.fillRect(0, 0, width, height);
+        const image = new fabric.Image(source, { left:0, top:0, name:'Performance image' });
+        OS.canvas.add(image);
+        OS.layers[OS.activeLayerIdx].objects.push(image);
+        OS.canvas.setActiveObject(image);
+        OS.canvas.renderAll();
+        if (OS.canvas.getActiveObject() !== image) throw new Error('Filter probe did not select its image target');
+
+        OS.showFilterDialog('Brightness');
+        const filterPanel = document.getElementById('filter-dialog-overlay');
+        filterPanel.querySelector('#fp-bright').value = '25';
+        const preview = await timed('filterPreview', () => OS._filterPreviewNow('Brightness'),
+            pathFor(OS._previewFilterBackend, 'Canvas2dFilterBackend'));
+        const previewMetrics = { ...OS._lastFilterRenderMetrics };
+
+        const applied = await timed('filterApply', () => OS._filterApply(), pathFor(fabric.getFilterBackend?.(), 'FabricFilterBackend'));
+        const applyMetrics = { ...OS._lastFilterRenderMetrics };
+
+        const exported = await timed('export', async () => {
+            const captured = await OS._captureExportedBlob('png');
+            if (!captured?.blob?.size) throw new Error('Export probe produced an empty blob');
+            return { bytes:captured.blob.size, filename:captured.filename };
+        }, pathFor(null, 'CanvasRenderingContext2D'));
+
+        const history = await timed('undoRedo', async () => {
+            await OS.undo();
+            await OS.redo();
+            return { historyIndex:OS.historyIdx, historyLength:OS.history.length };
+        }, pathFor(null, 'CanvasRenderingContext2D'));
+
+        const inputBlob = await new Promise((resolveBlob, rejectBlob) => source.toBlob(blob => blob ? resolveBlob(blob) : rejectBlob(new Error('Batch fixture encoding failed')), 'image/png'));
+        const batch = await timed('batch', async () => {
+            const file = new File([inputBlob], 'performance.png', { type:'image/png' });
+            const recipe = [{
+                schemaVersion:1,
+                id:'layer.add',
+                args:{ layerId:'performance-batch-layer', name:'Performance batch layer' }
+            }];
+            const result = await OS.runBatch([file], recipe, { format:'png' });
+            if (result.failed.length || result.processed.length !== 1 || !result.blob?.size) {
+                throw new Error('Batch probe did not process one image successfully');
+            }
+            return { processed:result.processed.length, bytes:result.blob.size };
+        }, pathFor(null, 'CanvasRenderingContext2D'));
+
+        const cancelled = await timed('cancel', () => {
+            const job = OS._startComputeJob('performance-cancel');
+            const observed = OS._cancelComputeJob(job, 'Performance cancellation probe');
+            return { observed, signalAborted:job.controller.signal.aborted, jobs:OS._computeJobs.size };
+        }, { backend:'compute-controller', worker:false, gpu:false, cpu:false });
+
+        const stale = await timed('staleResult', () => {
+            const job = OS._startComputeJob('performance-stale');
+            OS._documentRevision += 1;
+            let discarded = false;
+            try {
+                OS._assertComputeJobCurrent(job);
+            } catch (error) {
+                discarded = OS._isComputeAbort(error) && /changed|replaced|target/i.test(String(error.message));
+            } finally {
+                OS._finishComputeJob(job);
+            }
+            return { discarded, jobs:OS._computeJobs.size };
+        }, { backend:'compute-controller', worker:false, gpu:false, cpu:false });
+
+        const output = {
+            import:imported,
+            paint:painted,
+            filterPreview:{ ...preview, value:previewMetrics },
+            filterApply:{ ...applied, value:applyMetrics },
+            export:exported,
+            undoRedo:history,
+            batch,
+            cancel:{ ...cancelled, value:cancelled.value },
+            staleResult:{ ...stale, value:stale.value }
+        };
+        await OS.closeDocument({ force:true });
+        return output;
+    }, { ...fixture, slowFilterMs:slowMs });
 }
+
+async function benchmark(page) {
+    const reportFixtures = [];
+    for (const fixture of fixtures) {
+        const samples = Object.fromEntries(Object.keys(budgets).map(name => [name, []]));
+        for (let index = 0; index < iterations; index += 1) {
+            const measured = await runFixtureSample(page, fixture, slowFilterMs);
+            Object.entries(measured).forEach(([name, result]) => {
+                samples[name].push({
+                    durationMs:result.durationMs,
+                    executionPaths:result.executionPaths,
+                    cancellation:name === 'cancel' ? { tested:true, observed:Boolean(result.value?.observed && result.value.signalAborted) } : undefined,
+                    staleResultHandling:name === 'staleResult' ? { tested:true, discarded:Boolean(result.value?.discarded) } : undefined
+                });
+            });
+        }
+        const operations = Object.fromEntries(Object.entries(samples).map(([name, values]) => [name, {
+                samples:values.map(value => Number(value.durationMs.toFixed(3))),
+                p50Ms:Number(percentile(values.map(value => value.durationMs), 0.5).toFixed(3)),
+                p95Ms:Number(percentile(values.map(value => value.durationMs), 0.95).toFixed(3)),
+                executionPaths:values.at(-1).executionPaths,
+                cancellation:values.at(-1).cancellation,
+                staleResultHandling:values.at(-1).staleResultHandling
+        }]));
+        reportFixtures.push({
+            name:fixture.name,
+            width:fixture.width,
+            height:fixture.height,
+            pixels:fixture.width * fixture.height,
+            operations
+        });
+    }
+    return {
+        schemaVersion:2,
+        generatedAt:new Date().toISOString(),
+        runtime:{ browser:'chromium', executionPath:'playwright-headless', iterations, slowFilterMs },
+        budgets,
+        fixtures:reportFixtures
+    };
+}
+
+async function main() {
+    const { server, ready } = startServer();
+    let browser;
+    try {
+        await ready;
+        browser = await chromium.launch({ headless:true });
+        const page = await browser.newPage({ viewport:{ width:1440, height:1000 } });
+        await page.goto(appUrl, { waitUntil:'domcontentloaded' });
+        await page.waitForFunction(() => document.documentElement.dataset.osBoot === 'ready', null, { timeout:30_000 });
+        await page.getByRole('button', { name:'Enter Studio' }).click();
+        const report = await benchmark(page);
+        if (process.argv.includes('--check')) checkReport(report);
+        if (process.argv.includes('--json')) console.log(JSON.stringify(report, null, 2));
+        else {
+            console.log(`Performance budgets passed for ${report.fixtures.length} real browser fixtures (4K, 8K, 12MP).`);
+            report.fixtures.forEach(fixture => {
+                const values = Object.keys(budgets).map(name => `${name} p95 ${formatMs(fixture.operations[name].p95Ms)}`);
+                console.log(`${fixture.name} ${fixture.width}x${fixture.height}: ${values.join(', ')}`);
+            });
+        }
+    } finally {
+        await browser?.close().catch(() => {});
+        stopServer(server);
+    }
+}
+
+main().catch(error => {
+    console.error(error.stack || error.message || error);
+    process.exitCode = 1;
+});

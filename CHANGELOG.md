@@ -35,6 +35,9 @@ All notable changes to Openshop will be documented in this file.
 - Coverage now executes the extracted shipped `index.html` application block from a
   temporary source file, reports its real line numbers under `index.html`, and enforces
   thresholds against measured application coverage instead of the test harness.
+- The performance gate now starts a fresh headless Chromium page and drives real
+  4K/8K/12MP document, filter, history, export, batch, cancellation, and stale-result
+  operations with fixed four-times p95 envelopes and recorded execution backends.
 
 ### Testing
 - Added `tests/issue-3-requests.e2e.spec.js`: one browser test per request in issue

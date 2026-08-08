@@ -81,13 +81,6 @@ flyout was still nested at that point in boot.
 
 ### P0 — Release and trust
 
-- [ ] P0 — Make the performance gate exercise the application
-  Why: the gate never loads `index.html`. It benchmarks fabricated typed-array loops, "export" is `surface.slice()`, `staleResult` returns `1 !== 2`, `executionPaths` is hard-coded, and `cancellation.observed` is derived from the operation's own name. Budgets are 5,000-60,000 ms p95 against measured values of 8-175 ms — 300-3000× headroom.
-  Evidence: `tools/performance-budget.mjs:43-119` (`runOperation`), `:90` (export), `:101-117` (cancel/staleResult), `:138-146` (hard-coded `executionPaths`, name-derived assertions), `:12-22` (budgets).
-  Touches: `tools/performance-budget.mjs`, `package.json` (`test:perf`), possibly a Playwright-driven variant.
-  Acceptance: each probe drives a real `OS` operation on a real document (Playwright or the harness), budgets are re-baselined to measured p95 with a defined multiplier, `executionPaths` reflects the backend actually taken, and an artificially slowed filter fails the gate.
-  Complexity: L
-
 ### P1 — Trust, accessibility, and interoperability
 
 - [ ] P1 — Copy and Cut pixel selections, and write to the system clipboard
