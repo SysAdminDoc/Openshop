@@ -81,13 +81,6 @@ flyout was still nested at that point in boot.
 
 ### P0 — Release and trust
 
-- [ ] P0 — Make the coverage gate measure the shipped file
-  Why: the release gate enforces 80/70/85/80 thresholds against 189 lines of test harness; V8 attributes nothing to `index.html`, so the gate is structurally incapable of failing on app code.
-  Evidence: `tests/os-harness.js:9-24` extracts the `const OS = {` block as a string and evaluates it with `new Function`; `coverage/coverage-summary.json` lists only `os-harness.js` and `tools/security.mjs`; thresholds at `vitest.config.js:12-19`; `test:coverage` is chained into `test:release` in `package.json`.
-  Touches: `tests/os-harness.js`, `vitest.config.js`, `package.json`.
-  Acceptance: coverage output attributes lines to `index.html` (e.g. by writing the extracted script to a temp `.js` with a source map back to the inline block, or by loading the real page under a browser coverage provider); thresholds are re-baselined against measured app coverage; deleting a covered method drops the number.
-  Complexity: L
-
 - [ ] P0 — Make the performance gate exercise the application
   Why: the gate never loads `index.html`. It benchmarks fabricated typed-array loops, "export" is `surface.slice()`, `staleResult` returns `1 !== 2`, `executionPaths` is hard-coded, and `cancellation.observed` is derived from the operation's own name. Budgets are 5,000-60,000 ms p95 against measured values of 8-175 ms — 300-3000× headroom.
   Evidence: `tools/performance-budget.mjs:43-119` (`runOperation`), `:90` (export), `:101-117` (cancel/staleResult), `:138-146` (hard-coded `executionPaths`, name-derived assertions), `:12-22` (budgets).

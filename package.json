@@ -13,7 +13,7 @@
   "scripts": {
     "test": "vitest run",
     "test:unit": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "node tools/coverage-gate.mjs",
     "test:e2e": "playwright test --project=chromium --project=chromium-http",
     "css:check": "node tools/css-syntax.mjs",
     "security:check": "node tools/security.mjs --check",

@@ -5,6 +5,7 @@ node_modules/
 test-results/
 playwright-report/
 coverage/
+.coverage-temp/
 CLAUDE.md
 
 # Markdown files local-only (except README)

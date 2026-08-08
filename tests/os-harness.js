@@ -1,13 +1,17 @@
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Script } from 'node:vm';
 import { vi } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const indexPath = join(__dirname, '..', 'index.html');
+const coverageDir = join(__dirname, '..', '.coverage-temp');
+const coveragePath = join(coverageDir, 'index.html');
 
 export function loadOpenShop() {
   delete globalThis.OS;
+  mkdirSync(coverageDir, { recursive:true });
   const html = readFileSync(indexPath, 'utf8');
   const start = html.indexOf('const OS = {');
   const tail = html.slice(start);
@@ -16,10 +20,16 @@ export function loadOpenShop() {
     throw new Error('Could not locate OS object in index.html');
   }
   const end = start + endMatch;
-  const source = html
+  const appSource = html
     .slice(start, end + 3)
     .replace('const OS =', 'globalThis.OS =');
-  new Function(source)();
+  const sourceStartLine = html.slice(0, start).split(/\r?\n/).length;
+  const source = `${'\n'.repeat(sourceStartLine - 1)}${appSource}`;
+  writeFileSync(coveragePath, source, 'utf8');
+  // Give V8 the shipped filename instead of attributing the evaluated app
+  // object to this test harness. The source remains the exact inline block,
+  // but coverage can now report executable lines against index.html.
+  new Script(source, { filename:coveragePath }).runInThisContext();
   return globalThis.OS;
 }
 

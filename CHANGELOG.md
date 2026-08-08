@@ -32,6 +32,9 @@ All notable changes to Openshop will be documented in this file.
 - Removed inert `frame-ancestors` declarations from meta policies. The security gate now
   rejects header-only directives in meta delivery, while hosted embedding documents a
   deployment-selected response header and the file lane's exact-window handshake guard.
+- Coverage now executes the extracted shipped `index.html` application block from a
+  temporary source file, reports its real line numbers under `index.html`, and enforces
+  thresholds against measured application coverage instead of the test harness.
 
 ### Testing
 - Added `tests/issue-3-requests.e2e.spec.js`: one browser test per request in issue
