@@ -76,11 +76,16 @@ describe('release security contract', () => {
     expect(() => check(changed)).toThrow(/expected 2 inline scripts, found 3/);
   });
 
-  test.each(['base-uri', 'object-src', 'frame-ancestors', 'connect-src'])(
+  test.each(['base-uri', 'object-src', 'connect-src'])(
     'requires the %s directive',
     directive => {
       const changed = html.replace(new RegExp(`${directive} [^;]+; `), '');
       expect(() => check(changed)).toThrow(new RegExp(`${directive} directive is missing`));
     }
   );
+
+  test('rejects header-only directives when they appear in meta delivery', () => {
+    const changed = html.replace("object-src 'none';", "object-src 'none'; frame-ancestors https://host.example; ");
+    expect(() => check(changed)).toThrow(/frame-ancestors is header-only/);
+  });
 });

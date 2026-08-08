@@ -24,9 +24,12 @@ const SCRIPT_SOURCE_TOKENS = new Set(["'self'", "'wasm-unsafe-eval'", 'blob:']);
 const REQUIRED_POLICY_DIRECTIVES = new Map([
   ['base-uri', ["'none'"]],
   ['object-src', ["'none'"]],
-  ['frame-ancestors', ["'none'"]],
   ['connect-src', null]
 ]);
+// CSP3 defines these as response-header controls. A meta-delivered policy can
+// carry the text, but the browser must ignore it; accepting it here would make
+// the release gate certify protection the shipped file does not have.
+const META_UNSUPPORTED_DIRECTIVES = new Set(['frame-ancestors', 'report-uri', 'report-to', 'sandbox']);
 
 export function inlineScriptHashes(html) {
   return [...html.matchAll(/<script(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi)]
@@ -185,6 +188,11 @@ export function check(html) {
     }
   }
   const byName = new Map(directives.map(directive => [directive.name, directive]));
+  for (const directive of directives) {
+    if (META_UNSUPPORTED_DIRECTIVES.has(directive.name)) {
+      failures.push(`${directive.name} is header-only and cannot be satisfied by a meta policy`);
+    }
+  }
   const scriptDirective = byName.get('script-src');
   const scriptSources = scriptDirective?.sources || [];
   if (!scriptDirective) failures.push('script-src directive is missing');

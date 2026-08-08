@@ -29,6 +29,9 @@ All notable changes to Openshop will be documented in this file.
 - Embed exports now pass request-scoped delivery sinks through raster, AVIF, SVG, and
   PDF writers. Concurrent exports no longer replace global download methods or capture
   a user's unrelated Save result.
+- Removed inert `frame-ancestors` declarations from meta policies. The security gate now
+  rejects header-only directives in meta delivery, while hosted embedding documents a
+  deployment-selected response header and the file lane's exact-window handshake guard.
 
 ### Testing
 - Added `tests/issue-3-requests.e2e.spec.js`: one browser test per request in issue

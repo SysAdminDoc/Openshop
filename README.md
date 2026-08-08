@@ -288,6 +288,19 @@ A host page can drive OpenShop in an iframe over a versioned `postMessage` contr
 
 Serve OpenShop over http(s) rather than `file://` when embedding. A `file://` document reports its origin as the literal string `null`, which `postMessage` cannot be given as a target — the editor falls back to `'*'` for its replies in that case, so the handshake still works for local testing but the replies are not origin-restricted. The editor always binds to the exact window that sent `openshop:hello` and ignores every other one.
 
+For a hosted deployment, set clickjacking protection in the **HTTP response
+header**, using the ancestor list that matches your host application:
+
+```http
+Content-Security-Policy: frame-ancestors https://studio.example;
+```
+
+Do not use `frame-ancestors 'none'` on a deployment that embeds the editor. Browsers
+ignore this directive when it is placed in a `<meta>` policy, so the portable
+`file://` lane intentionally omits it and relies on the exact-window binding in the
+versioned handshake above. The release checker rejects header-only directives in the
+shipped meta policy rather than treating their text as protection.
+
 ## Privacy and Network Use
 
 OpenShop has no account, no credit meter, no telemetry, and no upload path. Every edit, filter, export, and AI inference runs in your browser on your machine. There is no server-side component to send a document to, so no document, layer, selection, or pixel is ever transmitted.
@@ -323,7 +336,7 @@ One honest limitation: on the standalone `file://` lane a cold start needs the t
 - SVG export is sanitized to strip script tags and event handlers
 - jsPDF upgraded to 4.2.1 to patch CVE-2026-25755
 
-The portable `file://` lane enforces the policy embedded in `index.html`; because it has no response headers, it cannot emit violation reports. Hosted deployments retain that baseline and should copy the generated policy into an HTTP `Content-Security-Policy` header. Test stricter policies with `Content-Security-Policy-Report-Only` and a deployment-owned reporting endpoint before enforcing them. After any inline script edit, run `npm run security:write`; `npm run security:check` rejects stale hashes, executable event attributes, undeclared UI actions, unverified external scripts, and lazy executable paths that bypass the digest manifest.
+The portable `file://` lane enforces the policy embedded in `index.html`; because it has no response headers, it cannot emit violation reports or deliver header-only controls such as `frame-ancestors`. Its real embedding guard is the exact-window binding in the `postMessage` handshake. Hosted deployments retain that baseline and should copy the generated policy into an HTTP `Content-Security-Policy` header, adding a deployment-chosen `frame-ancestors` list when the editor is embedded. Test stricter policies with `Content-Security-Policy-Report-Only` and a deployment-owned reporting endpoint before enforcing them. After any inline script edit, run `npm run security:write`; `npm run security:check` rejects stale hashes, executable event attributes, undeclared UI actions, unverified external scripts, lazy executable paths that bypass the digest manifest, and header-only directives incorrectly placed in meta delivery.
 
 ## Offline, Install, and File Launch
 
@@ -354,6 +367,10 @@ git init && git add . && git commit -m "init"
 No build step. No bundler. No runtime `node_modules`. `index.html` remains usable by itself; the six static companions enable the hosted PWA and sandboxed-plugin contract.
 
 Keep those seven hosted files together in their own directory. A service worker's default scope is the directory containing `sw.js`; placing it at `/sw.js` grants it navigation control over every path on that origin. GitHub project Pages sites such as `/Openshop/` already provide the desired directory scope. A user/organization Pages site served at the origin root should publish OpenShop below a subdirectory instead.
+
+If the hosted directory is embedded by another site, add the response header shown in
+the Embedding section at the server or reverse proxy. The allowed ancestor list belongs
+to that deployment; it is deliberately not baked into the portable HTML file.
 
 ## Testing
 

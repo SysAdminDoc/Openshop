@@ -95,13 +95,6 @@ flyout was still nested at that point in boot.
   Acceptance: each probe drives a real `OS` operation on a real document (Playwright or the harness), budgets are re-baselined to measured p95 with a defined multiplier, `executionPaths` reflects the backend actually taken, and an artificially slowed filter fails the gate.
   Complexity: L
 
-- [ ] P0 — Resolve the `frame-ancestors` contradiction
-  Why: two problems at once. CSP3 requires `frame-ancestors`, `report-uri` and `sandbox` to be ignored in a `<meta>` policy, and both CSPs are meta-only — so the declared clickjacking protection does not exist, and `tools/security.mjs` requires the inert form, printing "Security contract OK" for a control the browser discards. Worse, the declared value is `'none'`, which is *incompatible with the shipped embedding contract*: README documents hosting OpenShop in a host-page iframe over a versioned `postMessage` handshake, so a deployment that correctly promotes the policy to a response header would break embedding outright. The policy states an intent the product does not have.
-  Evidence: `index.html:12` and `plugin-sandbox.html:5` (meta-only delivery, `frame-ancestors 'none'`); `tools/security.mjs:24-27` (`REQUIRED_POLICY_DIRECTIVES` includes `['frame-ancestors', ["'none'"]]`); README "Embedding OpenShop" and the embed handshake at `index.html:14086+`; https://www.w3.org/TR/CSP3/#directive-frame-ancestors
-  Touches: `index.html`, `plugin-sandbox.html`, `tools/security.mjs`, `README.md` (Security and Embedding sections), the self-hosting recipe.
-  Acceptance: the checker classifies directives by delivery channel and refuses to count a header-only directive as satisfied by a meta policy; the shipped meta policy no longer declares `frame-ancestors`; the self-hosting recipe documents the header form with a deployment-chosen ancestor list (not `'none'`, which would disable embedding) and says which lane needs which; the `file://`/meta-only lane relies on the existing window-binding handshake as the real guard, documented as such; a test asserts the checker fails when a meta policy claims a header-only directive.
-  Complexity: M
-
 ### P1 — Trust, accessibility, and interoperability
 
 - [ ] P1 — Copy and Cut pixel selections, and write to the system clipboard
