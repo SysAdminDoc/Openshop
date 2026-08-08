@@ -371,13 +371,6 @@ flyout was still nested at that point in boot.
   Acceptance: export writers accept a per-call delivery sink end-to-end, or a narrow mutex provides equivalent isolation; two deliberately overlapping embed exports each return the correct distinct blob; a concurrent UI Save still downloads only its own result; rejection/cancellation restores no shared mutable sink.
   Complexity: M
 
-- [ ] P0 — Parse every shipped stylesheet in the release gate
-  Why: the inline stylesheet contains a real syntax error that tolerant browser recovery hides, and no test validates CSS as shipped.
-  Evidence: standalone extra `}` at `index.html:329` after the reduced-motion rule; a read-only `css-tree.parse` run on 2026-08-08 fails with `Selector is expected` at stylesheet-relative line 27.
-  Touches: `index.html`, `tools/security.mjs` or a focused validation script, `package.json` release test chain.
-  Acceptance: the extra brace is removed; the gate parses every inline `<style>` block and tracked `.css` file with locations enabled, fails with file/line/column on malformed CSS, and passes on the current shipped surface; a malformed fixture proves the gate can fail.
-  Complexity: S
-
 ### P1 — 2026-08-08 data-safety and contract additions
 
 - [ ] P1 — Separate interface locale direction from artwork direction

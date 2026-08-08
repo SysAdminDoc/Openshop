@@ -15,17 +15,19 @@
     "test:unit": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test --project=chromium --project=chromium-http",
+    "css:check": "node tools/css-syntax.mjs",
     "security:check": "node tools/security.mjs --check",
     "security:write": "node tools/security.mjs --write",
     "runtime:sync": "node tools/sync-runtime-assets.mjs",
     "test:perf": "node --expose-gc tools/performance-budget.mjs --check",
     "test:mobile": "playwright test --project=mobile-chromium --project=mobile-firefox --project=mobile-webkit",
-    "test:release": "npm run security:check && npm audit --audit-level=high && npm run test:perf && npm run test:coverage && npm run test:e2e && npm run test:cross-browser && npm run test:mobile",
+    "test:release": "npm run css:check && npm run security:check && npm audit --audit-level=high && npm run test:perf && npm run test:coverage && npm run test:e2e && npm run test:cross-browser && npm run test:mobile",
     "test:cross-browser": "playwright test --project=firefox --project=webkit"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",
     "@vitest/coverage-v8": "^4.1.10",
+    "css-tree": "^3.2.1",
     "jsdom": "^27.2.0",
     "vitest": "^4.0.15",
     "vitest-canvas-mock": "^0.3.3"

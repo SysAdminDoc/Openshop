@@ -19,6 +19,8 @@ All notable changes to Openshop will be documented in this file.
 - Registered Photoshop-parity tools without an implementation now appear disabled,
   refuse command and macro execution with a diagnostic, and leave the active tool
   unchanged instead of swallowing gestures as successful no-ops.
+- Removed an unmatched stylesheet brace and added a release-gate parser for every
+  inline and tracked stylesheet, with source locations and malformed-fixture coverage.
 
 ### Testing
 - Added `tests/issue-3-requests.e2e.spec.js`: one browser test per request in issue
