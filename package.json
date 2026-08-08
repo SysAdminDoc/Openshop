@@ -5,7 +5,7 @@
   "description": "Single-file browser image editor test harness",
   "type": "module",
   "release": {
-    "shellRevision": 1
+    "shellRevision": 2
   },
   "engines": {
     "node": ">=20"

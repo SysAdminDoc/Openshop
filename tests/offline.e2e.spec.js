@@ -246,6 +246,10 @@ test.describe('hosted offline contract', () => {
     await page.waitForFunction(() => document.documentElement.dataset.osBoot === 'ready', null, { timeout: 60000 });
     await expect(page.locator('#editor-canvas')).toBeVisible();
     const result = await page.evaluate(async () => {
+      // The editor boots into a blank workspace with no document session, which
+      // is deliberate (see "keeps a first-class blank workspace separate from the
+      // document session"). Capturing state needs a document to capture.
+      await OS.createNewDocument({ width: 320, height: 240 });
       const project = OS._captureDocumentState();
       project.document.name = 'Launched Project';
       const file = new File([JSON.stringify(project)], 'launched.openshop', {

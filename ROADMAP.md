@@ -18,7 +18,7 @@ which is the more interesting problem: a release went out on a red suite.
 
 | # | Test | What it reports |
 |---|------|-----------------|
-| 1 | `offline.e2e` — declares supported file handlers and consumes a queued project launch | `_captureDocumentState` throws `No active document` when a launch queue is drained with nothing open. Guard the capture, or open the queued project first. |
+| 1 | `offline.e2e` — declares supported file handlers and consumes a queued project launch | Two layers. The test predated the blank-workspace change and captured state with no document open (fixed 2026-08-08 — it creates one first). The real defect is underneath: with a document present the queued `.openshop` launch is still never consumed, so `window.__openshopLaunchConsumer` accepts the file and nothing loads. Start at the consumer, not the capture. |
 | 2 | `records validated commands and replays mixed edits as one atomic action` | Replay produces one entry more/less than the recording. Command-registry regression, likely from the tool-registry rebuild. |
 | 3 | `resolves one mobile layout rather than two blocks that fight each other` | Two competing layout blocks resolve at mobile width. |
 | 4 | `keeps one tablet block with the winning panel width` | Same class of defect at tablet width. |
