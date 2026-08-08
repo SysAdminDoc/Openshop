@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-M0Ua/I12VF+PllzoDrswCEbyqDc/TeL9jBZESelvztM=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-uebOTYkCLa6z8WcE0J10ikJz28M0afdTf4c5ePoEowM=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -3872,7 +3872,8 @@ const OS = {
         if (/\bexport\b/.test(classicSource)) throw new Error('Photon module conversion left executable exports');
         return classicSource;
     },
-    _downloadBlob(blob, filename) {
+    _downloadBlob(blob, filename, deliver = null) {
+        if (typeof deliver === 'function') return deliver(blob, filename) !== false;
         if (this._embed?.overrideSave) {
             this._postEmbed({ type:'openshop:save-requested', filename, blob });
             return true;
@@ -7092,7 +7093,8 @@ const OS = {
         for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
         return new Blob([bytes], { type });
     },
-    _downloadDataUrl(dataUrl, filename) {
+    _downloadDataUrl(dataUrl, filename, deliver = null) {
+        if (typeof deliver === 'function') return deliver(this._dataUrlToBlob(dataUrl), filename) !== false;
         if (this._embed?.overrideSave) {
             this._postEmbed({ type:'openshop:save-requested', filename, blob:this._dataUrlToBlob(dataUrl) });
             return true;
@@ -7143,7 +7145,7 @@ const OS = {
     },
     saveFile(format, options = {}) {
         format = String(format || '').toLowerCase();
-        if (format === 'svg') return this._exportSVG();
+        if (format === 'svg') return this._exportSVG(options);
         if (format === 'avif') return this._exportAVIF(options);
         try {
             const captured = this._captureExportRaster({
@@ -7153,7 +7155,7 @@ const OS = {
                 transparent:options.transparent ?? format !== 'jpeg',
                 matte:options.matte || '#ffffff'
             });
-            this._downloadDataUrl(captured.dataUrl, this._exportFileName(captured.options.format));
+            this._downloadDataUrl(captured.dataUrl, this._exportFileName(captured.options.format), options.deliver);
             this.toast(`Exported as ${captured.options.format.toUpperCase()}`, 'success');
             return true;
         } catch (error) {
@@ -7173,7 +7175,7 @@ const OS = {
             });
             this.toast('Encoding AVIF with the verified local codec…', 'info');
             const bytes = await this._encodeAvifImageData(captured.imageData, captured.options.quality);
-            this._downloadBlob(new Blob([bytes], { type:'image/avif' }), this._exportFileName('avif'));
+            this._downloadBlob(new Blob([bytes], { type:'image/avif' }), this._exportFileName('avif'), options.deliver);
             this.toast('Exported as AVIF', 'success');
             return true;
         } catch (error) {
@@ -7223,11 +7225,11 @@ const OS = {
             height:this.canvasH
         })));
     },
-    _exportSVG() {
+    _exportSVG(options = {}) {
         try {
             const svg = this._exportSVGMarkup();
             const blob = new Blob([svg], { type:'image/svg+xml' });
-            this._downloadBlob(blob, this._exportFileName('svg'));
+            this._downloadBlob(blob, this._exportFileName('svg'), options.deliver);
             this.toast('Exported as SVG', 'success');
             return true;
         } catch (error) {
@@ -14645,21 +14647,13 @@ self.onmessage = function(event) {
         const normalized = String(format || 'png').toLowerCase();
         if (!this._embedFormats.includes(normalized)) throw new Error(`Unsupported export format: ${normalized}`);
         let captured = null;
-        const blobSink = this._downloadBlob;
-        const urlSink = this._downloadDataUrl;
         const deliver = (blob, filename) => { captured = { blob, filename }; return true; };
-        this._downloadBlob = deliver;
-        this._downloadDataUrl = (dataUrl, filename) => deliver(this._dataUrlToBlob(dataUrl), filename);
-        try {
-            const ok = normalized === 'pdf'
-                ? await this.exportPDF({ ...options, deliver })
-                : await this.saveFile(normalized, options);
-            if (!ok || !captured) throw new Error(`Export as ${normalized} produced nothing`);
-            return captured;
-        } finally {
-            this._downloadBlob = blobSink;
-            this._downloadDataUrl = urlSink;
-        }
+        const exportOptions = { ...options, deliver };
+        const ok = normalized === 'pdf'
+            ? await this.exportPDF(exportOptions)
+            : await this.saveFile(normalized, exportOptions);
+        if (!ok || !captured) throw new Error(`Export as ${normalized} produced nothing`);
+        return captured;
     },
     async _applyEmbedDocument(spec) {
         if (!spec || typeof spec !== 'object') return false;

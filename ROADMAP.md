@@ -357,13 +357,6 @@ flyout was still nested at that point in boot.
 
 ### P0 — 2026-08-08 trust-state additions
 
-- [ ] P0 — Isolate concurrent exports with request-scoped delivery
-  Why: embed export capture temporarily replaces global download methods across an `await`, so two embed requests or an embed request concurrent with user Save can capture each other's output, trigger an unintended download, or restore the wrong sink.
-  Evidence: `index.html:14567-14585` (`_captureExportedBlob` replaces `_downloadBlob`/`_downloadDataUrl`), `14529` and `14670-14678` (asynchronous, unserialized message handling).
-  Touches: `index.html` export writers, `_captureExportedBlob`, embed message dispatcher, export e2e tests.
-  Acceptance: export writers accept a per-call delivery sink end-to-end, or a narrow mutex provides equivalent isolation; two deliberately overlapping embed exports each return the correct distinct blob; a concurrent UI Save still downloads only its own result; rejection/cancellation restores no shared mutable sink.
-  Complexity: M
-
 ### P1 — 2026-08-08 data-safety and contract additions
 
 - [ ] P1 — Separate interface locale direction from artwork direction

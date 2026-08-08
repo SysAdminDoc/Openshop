@@ -512,6 +512,32 @@ describe('OpenShop core object', () => {
     }
   });
 
+  it('keeps overlapping embed export deliveries request-scoped', async () => {
+    const OS = loadOpenShop();
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const originalDownloadBlob = OS._downloadBlob;
+    const originalDownloadDataUrl = OS._downloadDataUrl;
+    OS.saveFile = vi.fn(async (format, options) => {
+      await gate;
+      options.deliver(new Blob([format]), `${format}-result.${format}`);
+      return true;
+    });
+
+    const first = OS._captureExportedBlob('png');
+    const second = OS._captureExportedBlob('webp');
+    await Promise.resolve();
+    expect(OS._downloadBlob).toBe(originalDownloadBlob);
+    expect(OS._downloadDataUrl).toBe(originalDownloadDataUrl);
+
+    release();
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+    expect(firstResult.filename).toBe('png-result.png');
+    expect(secondResult.filename).toBe('webp-result.webp');
+    expect(firstResult.blob.size).toBe(3);
+    expect(secondResult.blob.size).toBe(4);
+  });
+
   it('exports PNG using a sanitized download name', () => {
     const OS = loadOpenShop();
     const boundary = {
