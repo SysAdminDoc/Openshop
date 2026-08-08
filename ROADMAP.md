@@ -10,6 +10,28 @@ testing gates. Note (2026-08-04): that breakdown is marked fully drained, but
 `_toolCatalog` rows carry `auditStatus:'VISUALLY_INSPECTED'`, which means the
 button was looked at — not that the tool works. See P0 below.
 
+## P0 — the e2e suite is red at HEAD (found 2026-08-08)
+
+The Chromium suite had **10 failures at the v0.29.0 tree** before any of today's work.
+Four are fixed; the seven below are open. None of them was caught before shipping,
+which is the more interesting problem: a release went out on a red suite.
+
+| # | Test | What it reports |
+|---|------|-----------------|
+| 1 | `offline.e2e` — declares supported file handlers and consumes a queued project launch | `_captureDocumentState` throws `No active document` when a launch queue is drained with nothing open. Guard the capture, or open the queued project first. |
+| 2 | `records validated commands and replays mixed edits as one atomic action` | Replay produces one entry more/less than the recording. Command-registry regression, likely from the tool-registry rebuild. |
+| 3 | `resolves one mobile layout rather than two blocks that fight each other` | Two competing layout blocks resolve at mobile width. |
+| 4 | `keeps one tablet block with the winning panel width` | Same class of defect at tablet width. |
+| 5 | `flags untranslated interface strings through the pseudo-locale` | The audited Photoshop tool inventory added ~40 new DOM strings (`Marquee: Rectangular Marquee Tool`, `Move: Move Tool`, …) with no `zh` entries. **Needs a native speaker** — mechanically-added `zh` strings are already flagged as debt in CLAUDE.md, so do not bulk-translate these. Better fix: build the family tooltip from translated parts so the composite never becomes its own key. |
+| 6 | `runs the Photon WASM backend for real on the operation it is allowed` | Photon parity check fails on the one allowlisted op. |
+| 7 | `registers a sandbox plugin and lets it contribute a command` | `Plugin handshake timed out` — the sandboxed-iframe plugin bridge never completes. |
+
+Fixed on 2026-08-08 and kept here only as the record: WCAG contrast on the selected
+bottom tab (4.01:1 → passing), two pointer targets under the 24×24 floor
+(`#workspace-selector`, `#tool-options-reset`), and the tool-family face never showing
+its active state because `setTool` looked only for the portalled flyout while the
+flyout was still nested at that point in boot.
+
 ## Planned Features
 
 ### Format & I/O

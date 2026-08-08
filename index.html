@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; script-src 'self' 'sha256-TTEy0EeOrma0v69IJlQrFG5I1W91DDTkWvj1XqErTTw=' 'sha256-N5yjCeRL4SK8fQP451rnzwVAf6VTB2FWck3QqHSaklc=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; script-src 'self' 'sha256-TTEy0EeOrma0v69IJlQrFG5I1W91DDTkWvj1XqErTTw=' 'sha256-jlRyXiBdBKvgnCLlnkeOMCfUtSQe40W2KdS2dyWzeqE=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -435,7 +435,7 @@ html.os-native-popovers #context-menu[popover]{position-area:block-end span-inli
 .opt-group input[type="color"]{width:24px;height:22px;border:1px solid var(--border);border-radius:4px;background:none;cursor:pointer;padding:0}
 .opt-val{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-secondary);min-width:24px;text-align:center}
 .opt-group input[type="checkbox"]{accent-color:var(--accent)}
-#tool-options-reset{margin-inline-start:auto;flex:0 0 auto;padding:3px 10px;font-size:10px}
+#tool-options-reset{margin-inline-start:auto;flex:0 0 auto;padding:3px 10px;font-size:10px;min-height:24px}
 
 /* === PANELS === */
 #panels{position:absolute;right:0;top:var(--topbar-h);bottom:var(--statusbar-h);width:var(--panel-width);background:var(--bg-depth-1);border-left:1px solid var(--border);display:flex;flex-direction:column;z-index:50;overflow-y:auto;overflow-x:hidden}
@@ -544,9 +544,9 @@ html.os-native-popovers #context-menu[popover]{position-area:block-end span-inli
 /* === CANVAS === */
 #canvas-area{position:absolute;left:var(--toolbar-w);top:calc(var(--topbar-h) + 34px);right:var(--panel-width);bottom:calc(var(--statusbar-h) + var(--bottom-tabs-h));background:var(--canvas-bg);overflow:hidden;cursor:crosshair;touch-action:none}
 #bottom-tabs{position:absolute;left:var(--toolbar-w);right:var(--panel-width);bottom:var(--statusbar-h);height:var(--bottom-tabs-h);display:flex;align-items:stretch;gap:1px;padding:0 8px;background:var(--bg-depth-1);border-top:1px solid var(--border);z-index:900;}
-.bottom-tab{min-width:112px;padding:0 14px;border:0;border-right:1px solid var(--border);background:transparent;color:var(--text-muted);font:600 10px 'DM Sans',sans-serif;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:var(--transition-chrome)}
+.bottom-tab{min-width:112px;padding:0 14px;border:0;border-right:1px solid var(--border);background:transparent;color:var(--text-secondary);font:600 10px 'DM Sans',sans-serif;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:var(--transition-chrome)}
 .bottom-tab:hover{background:var(--bg-depth-3);color:var(--text-secondary)}
-.bottom-tab[aria-selected="true"]{color:var(--accent);background:var(--accent-dim);box-shadow:inset 0 2px 0 var(--accent)}
+.bottom-tab[aria-selected="true"]{color:var(--accent-hover);background:var(--accent-dim);box-shadow:inset 0 2px 0 var(--accent)}
 .bottom-tab:focus-visible{box-shadow:var(--focus-ring)}
 #blank-workspace{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:110;pointer-events:none;text-align:center}
 #blank-workspace.hidden{display:none}
@@ -1112,7 +1112,8 @@ body{
 }
 #workspace-selector-wrap select{
   min-width:96px;
-  height:22px;
+  /* WCAG 2.5.8 target size: 22px was two short of the 24px floor. */
+  height:24px;
   border:0;
   color:var(--text-primary);
   background:transparent;
@@ -10281,8 +10282,13 @@ self.onmessage = function(event) {
         });
         document.querySelectorAll('.audit-tool-group').forEach(group => {
             const face = group.querySelector(':scope > .audit-tool-face');
+            // The flyout is portalled to a body-level host by initToolGroups, which is
+            // when _parentGroup gets set. Before that it is still a child of the group,
+            // and looking only for the portalled form left the family face without its
+            // active state on first paint until the user picked a tool by hand.
             const flyout = [...document.querySelectorAll('.audit-tool-flyout')]
-                .find(candidate => candidate._parentGroup === group);
+                .find(candidate => candidate._parentGroup === group)
+                || group.querySelector(':scope > .audit-tool-flyout');
             const selected = Boolean(flyout && [...flyout.querySelectorAll('.tool-btn')].some(button => button.dataset.tool === tool));
             if (face) {
                 face.classList.toggle('active', selected);

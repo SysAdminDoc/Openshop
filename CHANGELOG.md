@@ -4,6 +4,23 @@ All notable changes to Openshop will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- The selected bottom tab failed WCAG 2.2 text contrast at 4.01:1 against its own
+  tinted background; it now uses the lighter accent step.
+- Two controls sat under the 24x24 CSS pixel pointer-target floor: the workspace
+  selector (22px tall) and the tool options Reset button (20px tall).
+- The tool family button never showed its active state on first paint. `setTool`
+  looked only for the flyout after it has been portalled to the body host, but at
+  that point in boot the flyout is still nested inside the group, so the face was
+  left unmarked until the user picked a tool by hand.
+
+### Testing
+- Added `tests/issue-3-requests.e2e.spec.js`: one browser test per request in issue
+  #3, driving the running editor. The changelog already claimed all six shipped;
+  these check the behaviour instead, so a regression surfaces here rather than in a
+  second bug report.
+
+
 ## [v0.29.0] - 2026-08-02
 
 ### Added
