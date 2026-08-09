@@ -279,9 +279,6 @@ export const OPENSHOP_LOCAL_SHELL_ASSETS = Object.freeze([
   './icon-192.png',
   './icon-512.png'
 ]);
-export const OPENSHOP_SHELL_FONT_ASSETS = Object.freeze([
-  'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap'
-]);
 export const OPENSHOP_OPTIONAL_RUNTIME_KEYS = Object.freeze([
   'photonModule',
   'photonWasm',
@@ -289,9 +286,7 @@ export const OPENSHOP_OPTIONAL_RUNTIME_KEYS = Object.freeze([
   'gifWorker'
 ]);
 export const OPENSHOP_RUNTIME_ORIGINS = Object.freeze([
-  'https://cdn.jsdelivr.net',
-  'https://fonts.googleapis.com',
-  'https://fonts.gstatic.com'
+  'https://cdn.jsdelivr.net'
 ]);
 export const OPENSHOP_ASSETS_BY_KEY = Object.freeze(
   Object.fromEntries([...OPENSHOP_BOOT_ASSETS, ...OPENSHOP_RUNTIME_ASSETS].map(value => [value.key, value]))

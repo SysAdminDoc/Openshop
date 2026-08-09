@@ -9,7 +9,6 @@ import {
   OPENSHOP_REQUIRED_BOOT_KEYS,
   OPENSHOP_RUNTIME_ASSETS,
   OPENSHOP_RUNTIME_ORIGINS,
-  OPENSHOP_SHELL_FONT_ASSETS,
   assetsForKeys
 } from './runtime-assets.mjs';
 
@@ -53,10 +52,7 @@ function renderLazyAssets() {
 
 function renderShellAssets() {
   const required = [...OPENSHOP_LOCAL_SHELL_ASSETS, ...assetsForKeys(OPENSHOP_REQUIRED_BOOT_KEYS).map(value => value.url)];
-  const optional = [
-    ...OPENSHOP_SHELL_FONT_ASSETS,
-    ...assetsForKeys(OPENSHOP_OPTIONAL_RUNTIME_KEYS).map(value => value.url)
-  ];
+  const optional = assetsForKeys(OPENSHOP_OPTIONAL_RUNTIME_KEYS).map(value => value.url);
   const shellUrls = new Set([...required, ...optional]);
   const cacheable = OPENSHOP_CACHEABLE_RUNTIME_ASSETS
     .map(value => value.url)

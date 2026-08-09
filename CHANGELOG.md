@@ -5,6 +5,8 @@ All notable changes to Openshop will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Documented local system UI and monospace font stacks and removed the Google
+  Fonts request from the standalone page, hosted shell, CSP, and runtime manifest.
 - Reimagined the complete editor shell from image-generated design references,
   including all seven top-menu states, command search in the product bar, a
   synchronized floating canvas zoom HUD, denser inspector cards, split color

@@ -49,7 +49,6 @@ const REQUIRED_ASSETS = [
 ];
 
 const OPTIONAL_ASSETS = [
-    "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap",
     "https://cdn.jsdelivr.net/npm/@silvia-odwyer/photon@0.3.3/photon_rs.js",
     "https://cdn.jsdelivr.net/npm/@silvia-odwyer/photon@0.3.3/photon_rs_bg.wasm",
     "https://cdn.jsdelivr.net/npm/modern-gif@2.1.0/dist/index.js",
@@ -57,9 +56,7 @@ const OPTIONAL_ASSETS = [
 ];
 
 const RUNTIME_ORIGINS = new Set([
-    "https://cdn.jsdelivr.net",
-    "https://fonts.googleapis.com",
-    "https://fonts.gstatic.com"
+    "https://cdn.jsdelivr.net"
 ]);
 
 const CACHEABLE_RUNTIME_URLS = new Set([
@@ -297,8 +294,7 @@ function isCacheableRuntimeRequest(request) {
         return CACHEABLE_RUNTIME_URLS.has(withoutQuery);
     }
     if (CACHEABLE_RUNTIME_URLS.has(url.href)) return true;
-    return url.origin === 'https://fonts.gstatic.com'
-        && /\.(?:woff2?|ttf)$/i.test(url.pathname);
+    return false;
 }
 
 function responseAllowsRuntimeCaching(response) {

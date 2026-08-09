@@ -214,7 +214,7 @@ requests without revoking consent.
 | [Transformers.js 4.2](https://huggingface.co/docs/transformers.js) | Client-side AI inference via WebGPU/WASM (loaded on demand) |
 | [Photon 0.3.3](https://github.com/silvia-odwyer/photon) | Optional WASM acceleration for supported pixel filters (loaded on demand) |
 | [jSquash AVIF 2.1.1](https://github.com/jamsinclair/jSquash) (Apache-2.0) | Deterministic AVIF encode/decode via libavif WASM (loaded on demand) |
-| [Google Fonts](https://fonts.google.com/) | JetBrains Mono + DM Sans |
+| System font stacks | UI and monospace text without a third-party font request |
 
 OpenShop `.openshop` files are JSON-encoded document schema v1. The same envelope drives project save/open, recovery, and undo/redo so layer membership and order, masks, guides, selections, animation frames, color-profile metadata/bytes, AI segment masks, and active state stay synchronized. Legacy `.json`, Fabric 5, and OpenShop 0.18.13 projects are migrated on load through an explicit version registry; unknown future schemas are rejected before the active document is touched. Native project import/export records a structured compatibility report, and PSD import/export reports unsupported fields, color modes, metadata, and approximations. Pixel conversion between profiles is intentionally deferred; the embedded ICC payload is retained as opaque project data until a color-managed renderer is enabled.
 
@@ -312,7 +312,7 @@ What OpenShop *does* fetch is program code — and, the first time you use an AI
 |---|---|---|
 | `cdn.jsdelivr.net` | Pinned, SHA-384-verified libraries and codecs (Fabric, ag-psd, jsPDF, Photon, GIF, AVIF, Transformers.js, ONNX Runtime) | Three at startup; the rest only when a feature that needs them is used |
 | `huggingface.co` / `*.hf.co` | Pinned AI model weights | First use of a given AI feature |
-| `fonts.googleapis.com` / `fonts.gstatic.com` | JetBrains Mono and DM Sans | Page load |
+| *(none)* | UI fonts use the device's system and monospace stacks | Page load |
 
 You do not have to take that on trust. **The status bar reports outbound requests where a hosted competitor shows remaining credits.** It reads `Nothing sent` until something is fetched, then names the count; clicking it opens **Network Activity**, which lists every request this session grouped by host and purpose. The ledger is installed before the first fetch in the document, so the three startup libraries are on the list too.
 
@@ -414,7 +414,7 @@ Offline installation depends on service-worker/PWA support. Operating-system fil
 ## FAQ
 
 **Q: Is this really just one HTML file?**
-Yes. All CSS, HTML, and JavaScript are in a single self-contained file. External resources are limited to CDN-hosted libraries (loaded with integrity hashes) and fonts.
+Yes. All CSS, HTML, and JavaScript are in a single self-contained file. External resources are limited to CDN-hosted libraries (loaded with integrity hashes); the interface uses local system font stacks.
 
 **Q: Do my images get uploaded anywhere?**
 No. Everything runs in your browser. Images are processed locally via Canvas API and never leave your machine. AI models are downloaded once to your browser cache and run client-side.

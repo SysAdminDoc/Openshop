@@ -10,7 +10,6 @@ import {
   OPENSHOP_REQUIRED_BOOT_KEYS,
   OPENSHOP_RUNTIME_ASSETS,
   OPENSHOP_RUNTIME_ORIGINS,
-  OPENSHOP_SHELL_FONT_ASSETS,
   assetsForKeys
 } from './runtime-assets.mjs';
 
@@ -132,10 +131,7 @@ export function checkServiceWorker(source) {
     ...OPENSHOP_LOCAL_SHELL_ASSETS,
     ...assetsForKeys(OPENSHOP_REQUIRED_BOOT_KEYS).map(asset => asset.url)
   ];
-  const optional = [
-    ...OPENSHOP_SHELL_FONT_ASSETS,
-    ...assetsForKeys(OPENSHOP_OPTIONAL_RUNTIME_KEYS).map(asset => asset.url)
-  ];
+  const optional = assetsForKeys(OPENSHOP_OPTIONAL_RUNTIME_KEYS).map(asset => asset.url);
   compareArray(arrayValues(source, 'REQUIRED_ASSETS'), required, 'required shell asset', failures);
   compareArray(arrayValues(source, 'OPTIONAL_ASSETS'), optional, 'optional shell asset', failures);
 
@@ -152,8 +148,7 @@ export function checkServiceWorker(source) {
     const directValues = [...cacheMatch[1].matchAll(/["']([^"']+)["']/g)].map(([, value]) => value);
     const cacheable = new Set([...required, ...optional, ...directValues]);
     const expected = [
-      ...OPENSHOP_CACHEABLE_RUNTIME_ASSETS.map(asset => asset.url),
-      ...OPENSHOP_SHELL_FONT_ASSETS
+      ...OPENSHOP_CACHEABLE_RUNTIME_ASSETS.map(asset => asset.url)
     ];
     for (const url of expected) {
       if (!cacheable.has(url)) failures.push(`runtime asset is not cache-allowlisted: ${url}`);
@@ -173,7 +168,7 @@ export function checkServiceWorker(source) {
   return {
     requiredAssets: required.length,
     optionalAssets: optional.length,
-    cacheableAssets: OPENSHOP_CACHEABLE_RUNTIME_ASSETS.length + OPENSHOP_SHELL_FONT_ASSETS.length
+    cacheableAssets: OPENSHOP_CACHEABLE_RUNTIME_ASSETS.length
   };
 }
 

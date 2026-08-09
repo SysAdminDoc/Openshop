@@ -26,9 +26,14 @@ describe('canonical runtime asset manifest', () => {
     expect(check(html)).toMatchObject({ bootAssets: 3, lazyAssets: 23 });
     expect(checkServiceWorker(serviceWorker)).toMatchObject({
       requiredAssets: 10,
-      optionalAssets: 5,
-      cacheableAssets: 27
+      optionalAssets: 4,
+      cacheableAssets: 26
     });
+  });
+
+  test('keeps the font stack local to the device', () => {
+    expect(html).not.toMatch(/fonts\.(?:googleapis|gstatic)\.com/i);
+    expect(serviceWorker).not.toMatch(/fonts\.(?:googleapis|gstatic)\.com/i);
   });
 
   test('refuses a service worker that omits a lazy asset from its cache allowlist', () => {
