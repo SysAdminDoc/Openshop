@@ -16,8 +16,13 @@ All notable changes to Openshop will be documented in this file.
 - Turned the Motion workspace into a fitted, side-effect-free frame timeline
   with transport controls, live frame counts, a deliberate first-frame action,
   checkerboard thumbnails, and automatic canvas reflow instead of an overlay.
+- Replaced the Move tool's instructional sentence with a compact options bar:
+  functional Auto-select and Transform Controls toggles plus six existing align
+  commands now match the image-generated studio reference at desktop and tablet.
 
 ### Fixed
+- The seven top-level menu roots had only a 13px-high pointer target after the
+  visual redesign; their interactive region now spans the full product bar.
 - Automatic narrow-screen and explicitly selected Mobile workspaces now share
   one bottom-dock geometry. The horizontal tool rail and timeline clear the
   bottom tabs, tool families collapse to icon-only targets, and transient status

@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-Wbp2kLbneLmIJSUlDSU1KSCe8MbGi+0ngQZSvjKWuVU=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-vmN9w/NrsC4QHQhFM8nI5iKe0UiQUCAOpaMhIsMtXdU=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -1902,6 +1902,7 @@ body{
 #topbar .logo .logo-version{color:var(--accent-hover)}
 .menu-bar{align-self:stretch}
 .menu-item{
+  align-self:stretch;
   display:flex;
   align-items:center;
   padding:0 11px;
@@ -2101,6 +2102,50 @@ body{
   color:var(--text-secondary);
   background:rgba(255,255,255,.025);
 }
+#opt-select{gap:10px}
+#opt-select .select-mode-chip{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  min-height:28px;
+  padding:0 9px;
+  border:1px solid var(--border-active);
+  border-radius:6px;
+  color:var(--text-primary);
+  background:rgba(20,32,51,.72);
+  font:600 10px 'DM Sans',sans-serif;
+}
+#opt-select .select-mode-chip svg{width:14px;height:14px;color:var(--accent-hover)}
+#opt-select .select-toggle{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  min-height:28px;
+  padding:0 3px;
+  color:var(--text-secondary);
+  font-size:10px;
+  cursor:pointer;
+}
+#opt-select .select-toggle input{margin:0;accent-color:var(--accent)}
+#opt-select .select-divider{width:1px;height:20px;background:var(--border-active)}
+#opt-select .select-align{display:flex;align-items:center;gap:3px}
+#opt-select .select-align button{
+  appearance:none;
+  display:grid;
+  place-items:center;
+  width:28px;
+  height:28px;
+  padding:0;
+  border:1px solid transparent;
+  border-radius:6px;
+  color:var(--text-muted);
+  background:transparent;
+  cursor:pointer;
+  transition:var(--transition-chrome);
+}
+#opt-select .select-align button:hover{color:var(--text-primary);border-color:var(--border-active);background:var(--bg-depth-4)}
+#opt-select .select-align button:focus-visible{box-shadow:var(--focus-ring)}
+#opt-select .select-align svg{width:15px;height:15px}
 #panels{
   top:calc(var(--topbar-h) + 10px);
   bottom:calc(var(--statusbar-h) + 2px);
@@ -3235,7 +3280,20 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
         <label>Strength</label><input type="range" id="smudge-str" min="10" max="100" value="60" data-os-input="input-017">
     </div>
     <div class="opt-group" id="opt-measure" style="display:none"><span style="color:var(--text-muted);font-size:11px">Click two points to measure distance.</span><span id="measure-result" style="color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:11px;margin-left:8px"></span></div>
-    <div class="opt-group" id="opt-select" style="display:none"><span style="color:var(--text-muted);font-size:11px">Click to select. Drag to move. Handles to resize/rotate.</span></div>
+    <div class="opt-group" id="opt-select" style="display:none">
+        <span class="select-mode-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 3l7.1 17 2.5-7.4 7.4-2.5z"/><path d="m13 13 6 6"/></svg>Move</span>
+        <label class="select-toggle"><input type="checkbox" id="select-auto" checked data-os-change="change-045"> Auto-select</label>
+        <label class="select-toggle"><input type="checkbox" id="select-transform" checked data-os-change="change-046"> Show transform controls</label>
+        <span class="select-divider" aria-hidden="true"></span>
+        <div class="select-align" role="group" aria-label="Align selected objects">
+            <button type="button" data-os-click="click-168" title="Align left" aria-label="Align left"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 3v18M8 6h11v4H8zM8 14h7v4H8z"/></svg></button>
+            <button type="button" data-os-click="click-169" title="Align horizontal centers" aria-label="Align horizontal centers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v18M5 6h14v4H5zM8 14h8v4H8z"/></svg></button>
+            <button type="button" data-os-click="click-170" title="Align right" aria-label="Align right"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 3v18M5 6h11v4H5zM9 14h7v4H9z"/></svg></button>
+            <button type="button" data-os-click="click-171" title="Align top" aria-label="Align top"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 4h18M6 8v11h4V8zM14 8v7h4V8z"/></svg></button>
+            <button type="button" data-os-click="click-172" title="Align vertical centers" aria-label="Align vertical centers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 12h18M6 5v14h4V5zM14 8v8h4V8z"/></svg></button>
+            <button type="button" data-os-click="click-173" title="Align bottom" aria-label="Align bottom"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 20h18M6 5v11h4V5zM14 9v7h4V9z"/></svg></button>
+        </div>
+    </div>
     <div class="opt-group" id="opt-zoom" style="display:none"><span style="color:var(--text-muted);font-size:11px">Click to zoom in. Alt-click to zoom out.</span><button type="button" class="btn" data-os-click="click-103">Fit</button></div>
     <button type="button" id="tool-options-reset" class="btn" data-os-click="click-227" aria-label="Reset options" title="Reset the current tool options">Reset</button>
 </div>
@@ -3946,7 +4004,9 @@ const OS_EVENT_HANDLERS = Object.freeze({
         "change-041": function(event) { OS.setTextDecoration('textDecorationColor', this.value) },
         "change-042": function(event) { OS.setTextDecoration('textDecorationThickness', this.value) },
         "change-043": function(event) { OS.setWorkspaceMode(this.value) },
-        "change-044": function(event) { OS.selectGradientPreset(this.value) }
+        "change-044": function(event) { OS.selectGradientPreset(this.value) },
+        "change-045": function(event) { OS.setAutoSelect(this.checked) },
+        "change-046": function(event) { OS.setTransformControls(this.checked) }
     }),
     input: Object.freeze({
         "input-001": function(event) { OS.setBrushSize(this.value) },
@@ -5016,6 +5076,7 @@ const OS = {
     ],
     state: {
         tool: 'select', fgColor: '#ffffff', bgColor: '#000000',
+        autoSelect: true, showTransformControls: true,
         brushSize: 8, brushOpacity: 100, brushPreset: 'round',
         shapeFill: '#6c8cff', shapeStroke: '#ffffff', shapeStrokeWidth: 2, shapeFilled: true,
         textFont: 'DM Sans', textSize: 24, textColor: '#ffffff', textBold: false, textItalic: false,
@@ -10035,11 +10096,53 @@ self.onmessage = function(event) {
             }
             object.selectable = selectMode && editable;
             object.evented = (selectMode && editable) || (fillMode && editable) || (readTargetMode && visible);
+            object.hasControls = this.state.showTransformControls !== false;
+            object.hasBorders = this.state.showTransformControls !== false;
         });
         if (this._drawingLayerTools.has(tool)) this.canvas.isDrawingMode = this._isLayerEditable();
-        const activeObjects = this.canvas.getActiveObjects?.() || [this.canvas.getActiveObject?.()].filter(Boolean);
-        if (activeObjects.some(object => !this._isObjectEditable(object))) this.canvas.discardActiveObject();
+        let activeObjects = this.canvas.getActiveObjects?.() || [this.canvas.getActiveObject?.()].filter(Boolean);
+        if (activeObjects.some(object => !this._isObjectEditable(object))) {
+            this.canvas.discardActiveObject();
+            activeObjects = [];
+        }
+        if (selectMode && this.state.autoSelect === false) {
+            if (!activeObjects.length) {
+                const candidate = [...(this.layers[this.activeLayerIdx]?.objects || [])]
+                    .reverse()
+                    .find(object => object.name !== '__boundary__' && this._isObjectEditable(object));
+                if (candidate) {
+                    this.canvas.setActiveObject(candidate);
+                    activeObjects = [candidate];
+                }
+            }
+            const selected = new Set(activeObjects);
+            this.canvas.selection = false;
+            this.canvas.getObjects().forEach(object => {
+                if (object.name === '__boundary__' || object.excludeFromExport || object._wandOverlay) return;
+                object.selectable = object.selectable && selected.has(object);
+                object.evented = object.evented && selected.has(object);
+            });
+        }
+        const active = this.canvas.getActiveObject?.();
+        if (active) {
+            active.hasControls = this.state.showTransformControls !== false;
+            active.hasBorders = this.state.showTransformControls !== false;
+        }
         if (render) this.canvas.renderAll();
+    },
+    setAutoSelect(enabled) {
+        this.state.autoSelect = Boolean(enabled);
+        const control = document.getElementById('select-auto');
+        if (control) control.checked = this.state.autoSelect;
+        if (this.canvas && this.state.tool === 'select') this._applyLayerInteractionState();
+        return true;
+    },
+    setTransformControls(enabled) {
+        this.state.showTransformControls = Boolean(enabled);
+        const control = document.getElementById('select-transform');
+        if (control) control.checked = this.state.showTransformControls;
+        if (this.canvas) this._applyLayerInteractionState();
+        return true;
     },
     _enforceLayerInvariants({ render = true } = {}) {
         this._syncCanvasStackFromLayers({ render:false });
@@ -10885,7 +10988,7 @@ self.onmessage = function(event) {
         });
         this._toolOptionSchemaCache = Object.freeze({
             none: schema(null, false),
-            select: schema('opt-select', true),
+            select: schema('opt-select', true, ['select-auto', 'select-transform']),
             brush: schema('opt-brush', true, ['brush-preset', 'brush-size', 'brush-opacity']),
             spray: schema('opt-spray', true, ['spray-density', 'spray-width']),
             marquee: schema('opt-marquee', true),

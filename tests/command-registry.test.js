@@ -139,7 +139,12 @@ describe('OpenShop typed command and tool registry', () => {
     const OS = loadOpenShop();
     const byState = state => OS.listRegisteredTools({ documentOpen: true }).find(tool => tool.toolState === state);
 
-    expect(byState('select').optionsSchema).toMatchObject({ context:'select', groupId:'opt-select', requiresDocument:true });
+    expect(byState('select').optionsSchema).toMatchObject({
+      context:'select',
+      groupId:'opt-select',
+      requiresDocument:true,
+      controls:['select-auto', 'select-transform']
+    });
     expect(byState('eraser').optionsSchema).toMatchObject({ context:'eraser', groupId:'opt-brush' });
     expect(byState('pen').optionsSchema).toMatchObject({ context:'pen', groupId:'opt-pen' });
     expect(byState('text').optionsSchema).toMatchObject({ context:'type', groupId:'opt-text' });

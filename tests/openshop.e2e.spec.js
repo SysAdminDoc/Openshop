@@ -160,6 +160,63 @@ test('turns the Motion workspace into a fitted frame timeline @cross-browser', a
   await expect(page.locator('#mini-bridge-tab')).toHaveAttribute('aria-selected', 'true');
 });
 
+test('makes the Move options bar control selection and transform chrome @cross-browser', async ({ page }) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).evaluate(button => button.click());
+  await expect(page.locator('#opt-select')).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Align selected objects' })).toBeVisible();
+
+  await page.evaluate(() => {
+    const first = new fabric.Rect({ left:80, top:80, width:50, height:50, name:'Move option first' });
+    const second = new fabric.Rect({ left:180, top:80, width:50, height:50, name:'Move option second' });
+    OS._addObjectAsLayer(first, 'Move option first');
+    OS._addObjectAsLayer(second, 'Move option second');
+    OS._enforceLayerInvariants();
+    OS.canvas.setActiveObject(first);
+  });
+  await page.locator('#select-auto').evaluate((control) => {
+    control.checked = false;
+    control.dispatchEvent(new Event('change', { bubbles:true }));
+  });
+  expect(await page.evaluate(() => {
+    const first = OS.canvas.getObjects().find(object => object.name === 'Move option first');
+    const second = OS.canvas.getObjects().find(object => object.name === 'Move option second');
+    return {
+      autoSelect:OS.state.autoSelect,
+      canvasSelection:OS.canvas.selection,
+      firstSelectable:first.selectable,
+      secondSelectable:second.selectable,
+      active:OS.canvas.getActiveObject()?.name
+    };
+  })).toEqual({
+    autoSelect:false,
+    canvasSelection:false,
+    firstSelectable:true,
+    secondSelectable:false,
+    active:'Move option first'
+  });
+
+  await page.locator('#select-transform').evaluate((control) => {
+    control.checked = false;
+    control.dispatchEvent(new Event('change', { bubbles:true }));
+  });
+  expect(await page.evaluate(() => ({
+    showTransformControls:OS.state.showTransformControls,
+    objectControls:OS.canvas.getObjects()
+      .filter(object => object.name?.startsWith('Move option'))
+      .map(object => object.hasControls),
+    activeControls:OS.canvas.getActiveObject()?.hasControls
+  }))).toEqual({ showTransformControls:false, objectControls:[false, false], activeControls:false });
+
+  await page.locator('#select-auto').evaluate((control) => {
+    control.checked = true;
+    control.dispatchEvent(new Event('change', { bubbles:true }));
+  });
+  expect(await page.evaluate(() => OS.canvas.getObjects()
+    .filter(object => object.name?.startsWith('Move option'))
+    .every(object => object.selectable && object.evented))).toBe(true);
+});
+
 test('navigates Layers and History listboxes without a pointer @cross-browser', async ({ page }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).click();
