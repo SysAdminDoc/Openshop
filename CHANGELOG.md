@@ -10,6 +10,9 @@ All notable changes to Openshop will be documented in this file.
   synchronized floating canvas zoom HUD, denser inspector cards, split color
   controls, and a more deliberate local-first status treatment. The approved
   master, menu board, and Select-state mockups are retained under `design/`.
+- Restored the shell's hand-drawn SVG tool language in the registry-generated
+  two-column rail and flyouts. Family faces now follow the selected nested tool
+  instead of remaining as letter placeholders or showing a stale default.
 
 ### Fixed
 - Automatic narrow-screen and explicitly selected Mobile workspaces now share

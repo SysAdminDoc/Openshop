@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-OGweyUIM48jyGfUxxZ+COnb03Tl9KVCtAX2iQiae6ME=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-bRgQQousH8nUgoScdMdBOmUrxYTtJgQVFa6Xa5JHWoo=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -1209,9 +1209,13 @@ body{
 #toolbar .audit-tool-group{width:48px;min-width:0}
 #toolbar .audit-tool-face{width:46px;height:36px;flex-direction:column;gap:2px;padding:3px;border:1px solid transparent}
 #toolbar .audit-tool-face .tool-glyph{font:700 9px 'JetBrains Mono',monospace;letter-spacing:-.04em;line-height:1;color:currentColor}
+#toolbar .audit-tool-face .tool-face-icon{width:17px;height:17px;flex:0 0 17px;stroke-width:1.8}
 #toolbar .audit-tool-face .tool-family-label{max-width:43px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:7px;line-height:1;color:var(--text-muted)}
 #toolbar .audit-tool-flyout{min-width:232px;padding:5px;gap:2px}
 #toolbar .audit-tool-flyout .tool-btn{width:220px;height:29px;justify-content:flex-start;gap:8px;padding:4px 8px;border-radius:5px}
+#toolbar .audit-tool-flyout .tool-member-icon{width:15px;height:15px;flex:0 0 15px;color:var(--text-muted);stroke-width:1.8}
+#toolbar .audit-tool-flyout .tool-member-glyph{width:15px;flex:0 0 15px;text-align:center;color:var(--text-muted);font:700 8px 'JetBrains Mono',monospace}
+#toolbar .audit-tool-flyout .tool-btn:hover .tool-member-icon,#toolbar .audit-tool-flyout .tool-btn.active .tool-member-icon{color:var(--accent-hover)}
 #toolbar .audit-tool-flyout .tool-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:var(--text-secondary)}
 #toolbar .audit-tool-flyout .tool-shortcut{margin-inline-start:auto;color:var(--text-muted);font:10px 'JetBrains Mono',monospace}
 #toolbar .audit-tool-flyout .tool-btn:hover .tool-name,#toolbar .audit-tool-flyout .tool-btn.active .tool-name{color:var(--text-primary)}
@@ -10493,6 +10497,26 @@ self.onmessage = function(event) {
     _buildToolboxFromRegistry() {
         const toolbar = document.getElementById('toolbar');
         if (!toolbar || toolbar.dataset.registryBuilt === 'true') return;
+        // The static shell carries the hand-drawn SVG set. Preserve it before
+        // the audited registry rebuilds the toolbar so the complete inventory
+        // keeps the same visual language instead of degrading to initials.
+        const iconTemplates = new Map();
+        toolbar.querySelectorAll('.tool-btn[data-tool]').forEach(button => {
+            const icon = button.querySelector(':scope > svg');
+            if (icon && !iconTemplates.has(button.dataset.tool)) {
+                iconTemplates.set(button.dataset.tool, icon.cloneNode(true));
+            }
+        });
+        const cloneIcon = (toolState, fallbackState = '') => {
+            const template = iconTemplates.get(toolState) || iconTemplates.get(fallbackState);
+            if (!template) return null;
+            const icon = template.cloneNode(true);
+            icon.removeAttribute('width');
+            icon.removeAttribute('height');
+            icon.setAttribute('aria-hidden', 'true');
+            icon.setAttribute('focusable', 'false');
+            return icon;
+        };
         const catalog = this._toolCatalog().filter(tool => tool.kind === 'tool' && tool.family !== 'Mode');
         // These OpenShop-native brushes remain visible alongside the audited
         // Photoshop family inventory so existing drawing behavior is not lost.
@@ -10515,9 +10539,11 @@ self.onmessage = function(event) {
             const members = entries.filter(tool => tool.family === family);
             if (!members.length) return;
             const defaultMember = members.find(tool => tool.implemented !== false) || members[0];
+            const familyIconState = members.find(tool => iconTemplates.has(tool.toolState))?.toolState || '';
             const group = document.createElement('div');
             group.className = 'tool-group audit-tool-group';
             group.dataset.group = `registry-${family.toLowerCase().replace(/\s+/g, '-')}`;
+            group.dataset.family = family;
             const face = document.createElement('button');
             face.type = 'button';
             face.className = 'tool-btn audit-tool-face';
@@ -10525,13 +10551,18 @@ self.onmessage = function(event) {
             face.dataset.tip = `${family}: ${defaultMember.label}`;
             face.setAttribute('aria-label', face.dataset.tip);
             face.title = face.dataset.tip;
-            const glyph = document.createElement('span');
-            glyph.className = 'tool-glyph';
-            glyph.textContent = abbreviations[family] || family.slice(0, 2).toUpperCase();
+            let faceVisual = cloneIcon(defaultMember.toolState, familyIconState);
+            if (faceVisual) {
+                faceVisual.classList.add('tool-face-icon');
+            } else {
+                faceVisual = document.createElement('span');
+                faceVisual.className = 'tool-glyph';
+                faceVisual.textContent = abbreviations[family] || family.slice(0, 2).toUpperCase();
+            }
             const familyLabel = document.createElement('span');
             familyLabel.className = 'tool-family-label';
             familyLabel.textContent = family;
-            face.append(glyph, familyLabel);
+            face.append(faceVisual, familyLabel);
             const flyout = document.createElement('div');
             flyout.className = 'tool-flyout audit-tool-flyout';
             flyout.setAttribute('role', 'menu');
@@ -10552,13 +10583,23 @@ self.onmessage = function(event) {
                     button.dataset.unimplemented = 'true';
                 }
                 button.title = tool.label;
+                button.dataset.family = family;
+                button.dataset.glyph = abbreviations[family] || family.slice(0, 2).toUpperCase();
+                let memberVisual = cloneIcon(tool.toolState, familyIconState);
+                if (memberVisual) {
+                    memberVisual.classList.add('tool-member-icon');
+                } else {
+                    memberVisual = document.createElement('span');
+                    memberVisual.className = 'tool-member-glyph';
+                    memberVisual.textContent = button.dataset.glyph;
+                }
                 const name = document.createElement('span');
                 name.className = 'tool-name';
                 name.textContent = tool.label;
                 const shortcut = document.createElement('span');
                 shortcut.className = 'tool-shortcut';
                 shortcut.textContent = tool.shortcut || '';
-                button.append(name, shortcut);
+                button.append(memberVisual, name, shortcut);
                 flyout.appendChild(button);
             });
             const faceImplemented = defaultMember.implemented !== false;
@@ -10569,8 +10610,39 @@ self.onmessage = function(event) {
         });
         this.setTool(this.state.tool);
     },
+    _syncRegistryToolFace(face, member, family = member?.dataset.family || '') {
+        if (!face || !member?.dataset.tool) return false;
+        const sourceVisual = member.querySelector(':scope > .tool-member-icon, :scope > .tool-member-glyph');
+        let faceVisual = sourceVisual?.cloneNode(true);
+        if (faceVisual?.classList.contains('tool-member-icon')) {
+            faceVisual.classList.replace('tool-member-icon', 'tool-face-icon');
+        } else if (faceVisual) {
+            faceVisual.classList.replace('tool-member-glyph', 'tool-glyph');
+        }
+        if (!faceVisual) {
+            faceVisual = document.createElement('span');
+            faceVisual.className = 'tool-glyph';
+            faceVisual.textContent = member.dataset.glyph || family.slice(0, 2).toUpperCase();
+        }
+        const familyLabel = document.createElement('span');
+        familyLabel.className = 'tool-family-label';
+        familyLabel.textContent = family;
+        const label = member.dataset.tip || member.getAttribute('aria-label') || member.dataset.tool;
+        face.replaceChildren(faceVisual, familyLabel);
+        face.dataset.tool = member.dataset.tool;
+        face.dataset.tip = family ? `${family}: ${label}` : label;
+        face.setAttribute('aria-label', face.dataset.tip);
+        face.title = face.dataset.tip;
+        face.disabled = member.disabled;
+        if (member.disabled) face.setAttribute('aria-disabled', 'true');
+        else face.removeAttribute('aria-disabled');
+        return true;
+    },
     selectRegistryTool(button) {
         if (!button?.dataset.tool) return false;
+        const flyout = button.closest('.audit-tool-flyout');
+        const group = flyout?._parentGroup || flyout?.closest('.audit-tool-group');
+        this._syncRegistryToolFace(group?.querySelector(':scope > .audit-tool-face'), button, group?.dataset.family);
         this._closeAllFlyouts();
         this.setTool(button.dataset.tool);
         return true;
@@ -10823,8 +10895,10 @@ self.onmessage = function(event) {
             const flyout = [...document.querySelectorAll('.audit-tool-flyout')]
                 .find(candidate => candidate._parentGroup === group)
                 || group.querySelector(':scope > .audit-tool-flyout');
-            const selected = Boolean(flyout && [...flyout.querySelectorAll('.tool-btn')].some(button => button.dataset.tool === tool));
+            const selectedMember = flyout && [...flyout.querySelectorAll('.tool-btn')].find(button => button.dataset.tool === tool);
+            const selected = Boolean(selectedMember);
             if (face) {
+                if (selectedMember) this._syncRegistryToolFace(face, selectedMember, group.dataset.family);
                 face.classList.toggle('active', selected);
                 face.setAttribute('aria-pressed', selected ? 'true' : 'false');
             }

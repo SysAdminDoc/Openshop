@@ -64,6 +64,35 @@ describe('OpenShop typed command and tool registry', () => {
     expect(executable.filter(tool => !branchStates.has(tool.toolState))).toEqual([]);
   });
 
+  it('preserves shell icons and updates a family face when its nested tool changes', () => {
+    const OS = loadOpenShop();
+    const toolbar = document.getElementById('toolbar');
+    const addIcon = (button, name) => {
+      button.innerHTML = `<svg data-icon="${name}" viewBox="0 0 24 24"><path d="M2 2h20v20H2z"/></svg>`;
+    };
+    addIcon(toolbar.querySelector('[data-tool="brush"]'), 'brush');
+    const pencilSource = document.createElement('button');
+    pencilSource.className = 'tool-btn';
+    pencilSource.dataset.tool = 'pencil';
+    addIcon(pencilSource, 'pencil');
+    toolbar.appendChild(pencilSource);
+    OS.setTool = vi.fn();
+
+    OS._buildToolboxFromRegistry();
+    const brushGroup = document.querySelector('.audit-tool-group[data-family="Brush"]');
+    const face = brushGroup.querySelector(':scope > .audit-tool-face');
+    const pencil = brushGroup.querySelector('.audit-tool-flyout .tool-btn[data-tool="pencil"]');
+
+    expect(face.querySelector('.tool-face-icon')?.dataset.icon).toBe('brush');
+    expect(pencil.querySelector('.tool-member-icon')?.dataset.icon).toBe('pencil');
+    expect(OS.selectRegistryTool(pencil)).toBe(true);
+    expect(face.dataset.tool).toBe('pencil');
+    expect(face.querySelector('.tool-face-icon')?.dataset.icon).toBe('pencil');
+    expect(face.querySelector('.tool-family-label')?.textContent).toBe('Brush');
+    expect(face.getAttribute('aria-label')).toBe('Brush: Pencil');
+    expect(OS.setTool).toHaveBeenCalledWith('pencil');
+  });
+
   it('reports blank-state enablement without changing the command IDs', () => {
     const OS = loadOpenShop();
     OS.session.application.ready = true;
