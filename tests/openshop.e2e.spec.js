@@ -59,6 +59,26 @@ test('keeps a first-class blank workspace separate from the document session @cr
   });
 });
 
+test('renders the intentional blank studio as a first-class state @cross-browser', async ({ page }, testInfo) => {
+  await openApp(page);
+  await page.evaluate(() => OS.dismissWelcome());
+  await expect(page.locator('#welcome-overlay')).toBeHidden();
+  await expect(page.locator('html')).toHaveAttribute('data-os-document', 'blank');
+  await expect(page.locator('#layers-empty')).toContainText('No document open');
+  await expect(page.locator('#history-list .history-empty')).toContainText('History begins after you open a document.');
+  await expect(page.locator('#select-auto')).toBeDisabled();
+  await expect(page.locator('#select-transform')).toBeDisabled();
+  await expect(page.locator('#blank-workspace .blank-kicker')).toHaveText('Local workspace ready');
+
+  if (testInfo.project.name === 'chromium') {
+    await expect(page).toHaveScreenshot('openshop-blank-shell.png', {
+      animations: 'disabled',
+      fullPage: false,
+      maxDiffPixelRatio: 0.03
+    });
+  }
+});
+
 test('loads the editor shell and supports core UI interactions @cross-browser', async ({ page }, testInfo) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));

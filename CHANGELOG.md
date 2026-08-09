@@ -19,6 +19,9 @@ All notable changes to Openshop will be documented in this file.
 - Replaced the Move tool's instructional sentence with a compact options bar:
   functional Auto-select and Transform Controls toggles plus six existing align
   commands now match the image-generated studio reference at desktop and tablet.
+- Elevated the intentional blank studio with a local-workspace launch card,
+  keyboard and drop affordances, structured Layers/History empty states, and a
+  current Chromium visual contract instead of the stale v0.27 snapshot.
 
 ### Fixed
 - The seven top-level menu roots had only a 13px-high pointer target after the
