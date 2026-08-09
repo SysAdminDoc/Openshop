@@ -171,6 +171,35 @@ test('surfaces active document color metadata without stale blank-state values @
   await expect(page.locator('#info-color-profile')).toHaveText('—');
 });
 
+test('frames desktop documents with persistent measured rulers @cross-browser', async ({ page }) => {
+  await openApp(page);
+  await expect(page.locator('#ruler-h')).toBeHidden();
+  await page.getByRole('button', { name: 'Enter Studio' }).evaluate(button => button.click());
+  await expect(page.locator('body')).toHaveClass(/rulers-on/);
+  await expect(page.locator('#ruler-h')).toBeVisible();
+  await expect(page.locator('#ruler-v')).toBeVisible();
+
+  const frame = await page.evaluate(() => {
+    const rect = id => {
+      const value = document.getElementById(id).getBoundingClientRect();
+      return { top:value.top, right:value.right, bottom:value.bottom, left:value.left };
+    };
+    return { options:rect('tool-options'), horizontal:rect('ruler-h'), vertical:rect('ruler-v'), canvas:rect('canvas-area') };
+  });
+  expect(Math.abs(frame.options.bottom - frame.horizontal.top)).toBeLessThanOrEqual(1);
+  expect(Math.abs(frame.horizontal.bottom - frame.canvas.top)).toBeLessThanOrEqual(1);
+  expect(Math.abs(frame.vertical.right - frame.canvas.left)).toBeLessThanOrEqual(1);
+
+  await page.evaluate(() => OS.toggleRulers());
+  await expect(page.locator('body')).not.toHaveClass(/rulers-on/);
+  await expect(page.locator('#ruler-h')).toBeHidden();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('os_prefs')).rulersVisible)).toBe(false);
+
+  await page.evaluate(() => OS.toggleRulers());
+  await expect(page.locator('#ruler-h')).toBeVisible();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('os_prefs')).rulersVisible)).toBe(true);
+});
+
 test('turns the Motion workspace into a fitted frame timeline @cross-browser', async ({ page }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).evaluate(button => button.click());

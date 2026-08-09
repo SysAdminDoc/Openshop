@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-3E40Fs22CYolAwQheT4TFf9einAs5kyIyNGzoNMOmHU=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-7gJBiv5yAKxI4Sg7jo3/c42KUf1rtNO3K+S4iNPvSmg=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -2097,6 +2097,25 @@ body{
   border-radius:10px;
   box-shadow:0 14px 32px rgba(0,0,0,.28),inset 0 1px rgba(255,255,255,.035);
 }
+/* Measured desktop framing from the approved studio reference: options first,
+   then the horizontal scale, with the vertical scale forming the canvas edge. */
+.ruler-h{
+  left:calc(var(--toolbar-w) + 20px);
+  top:calc(var(--topbar-h) + 54px);
+  background:linear-gradient(180deg,rgba(14,23,36,.98),rgba(9,16,27,.98));
+  border-color:color-mix(in srgb,var(--border-active) 58%,transparent);
+  border-radius:6px 6px 0 0;
+}
+.ruler-v{
+  top:calc(var(--topbar-h) + 74px);
+  bottom:calc(var(--statusbar-h) + var(--bottom-tabs-h));
+  background:linear-gradient(90deg,rgba(14,23,36,.98),rgba(9,16,27,.98));
+  border-color:color-mix(in srgb,var(--border-active) 58%,transparent);
+  border-radius:6px 0 0 6px;
+}
+body.rulers-on #tool-options{top:calc(var(--topbar-h) + 10px)}
+body.rulers-on #canvas-area{top:calc(var(--topbar-h) + 74px);left:calc(var(--toolbar-w) + 20px)}
+body.rulers-on .ruler-v{top:calc(var(--topbar-h) + 74px)}
 #tool-options-reset{
   border-radius:7px;
   color:var(--text-secondary);
@@ -5117,7 +5136,7 @@ const OS = {
     _pressureSupported: false,
     _inputCapabilityObservations: { visualViewportResize:0, orientationChange:0 },
     _inputCapabilityObserversReady: false,
-    _prefs: { gridSize: 20, historyStates: 120, defaultW: 1920, defaultH: 1080, theme: 'dark', snapTolerance: 5, stackNewObjects: false, vectorStrokes: false },
+    _prefs: { gridSize: 20, historyStates: 120, defaultW: 1920, defaultH: 1080, theme: 'dark', snapTolerance: 5, stackNewObjects: false, vectorStrokes: false, rulersVisible: true, accent: null },
     _importLimits: {
         maxJsonBytes: 10 * 1024 * 1024,
         maxImageBytes: 100 * 1024 * 1024,
@@ -5149,7 +5168,7 @@ const OS = {
     },
     _batchRunning: false,
     _batchCancelRequested: false,
-    gridVisible: false, rulersVisible: false, snapEnabled: false, gridSize: 20,
+    gridVisible: false, rulersVisible: true, snapEnabled: false, gridSize: 20,
     templates: [
         { name:'HD 1080p', w:1920, h:1080, icon:'16:9', cat:'Video' },
         { name:'4K UHD', w:3840, h:2160, icon:'4K', cat:'Video' },
@@ -5248,6 +5267,7 @@ const OS = {
         const selector = document.getElementById('workspace-selector');
         if (selector && selector.value !== next) selector.value = next;
         this._persistLocal('os_workspace_mode', next, { label:'Workspace preference' });
+        this._syncRulerChrome({ resize:false });
         const timeline = document.getElementById('timeline-panel');
         if (timeline && next === 'motion' && !timeline.classList.contains('visible')) {
             // Choosing a layout must not silently create a frame, add history,
@@ -5275,6 +5295,7 @@ const OS = {
     _updateDocumentAvailability() {
         const blank = !this._hasActiveDocument();
         document.documentElement.dataset.osDocument = blank ? 'blank' : 'open';
+        this._syncRulerChrome({ fitDocument:true });
         const area = document.getElementById('canvas-area');
         if (area) {
             area.dataset.documentState = blank ? 'blank' : 'open';
@@ -5541,12 +5562,13 @@ const OS = {
                 await this._commitStrokeToLayer(e.path, mirrors);
             })();
         });
-        window.addEventListener('resize', () => { this.resizeCanvas(); this.drawGrid(); this.drawRulers(); });
+        window.addEventListener('resize', () => { this._syncRulerChrome({ resize:false }); this.resizeCanvas(); this.drawGrid(); this.drawRulers(); });
         window.addEventListener('beforeunload', e => {
             if (this._isDirty) { e.preventDefault(); e.returnValue = ''; }
         });
         this.initSwatches();
         this._restorePreferences();
+        this.rulersVisible = this._prefs.rulersVisible !== false;
         this._restoreTheme();
         this.initCmdPalette();
         this.setTool('select');
@@ -15258,12 +15280,27 @@ self.onmessage = function(event) {
     // ====================== RULERS ======================
     toggleRulers() {
         this.rulersVisible = !this.rulersVisible;
-        document.getElementById('ruler-h').classList.toggle('visible', this.rulersVisible);
-        document.getElementById('ruler-v').classList.toggle('visible', this.rulersVisible);
-        document.body.classList.toggle('rulers-on', this.rulersVisible);
-        if (this.rulersVisible) this.drawRulers();
-        this.resizeCanvas();
-        this.toast(this.rulersVisible ? 'Rulers on' : 'Rulers off', 'info');
+        this._prefs.rulersVisible = this.rulersVisible;
+        this._syncRulerChrome({ fitDocument:true });
+        const saved = this._persistPreferences(null, { announce:false });
+        this.toast(
+            `${this.rulersVisible ? 'Rulers on' : 'Rulers off'}${saved ? '' : ' (preference not saved)'}`,
+            saved ? 'info' : 'error'
+        );
+    },
+    _syncRulerChrome({ resize = true, fitDocument = false } = {}) {
+        const compact = window.innerWidth < 1024 || document.documentElement.dataset.osWorkspace === 'mobile';
+        const visible = Boolean(this.rulersVisible && this._hasActiveDocument() && !compact);
+        const changed = document.body.classList.contains('rulers-on') !== visible;
+        document.getElementById('ruler-h')?.classList.toggle('visible', visible);
+        document.getElementById('ruler-v')?.classList.toggle('visible', visible);
+        document.body.classList.toggle('rulers-on', visible);
+        if (changed && resize && this.canvas) {
+            this.resizeCanvas();
+            if (fitDocument && visible) this.zoomFit();
+        }
+        if (visible) this.drawRulers();
+        return changed;
     },
     drawRulers() {
         if (!this.rulersVisible) return;
@@ -19053,6 +19090,7 @@ self.onmessage = async function(event) {
             <div class="pref-section">
                 <h4>Interface</h4>
                 <div class="pref-row"><label>Accent Color</label><input id="pref-accent" type="color" value="#6c8cff"></div>
+                <div class="pref-row"><label>Show rulers on desktop</label><input id="pref-rulers" type="checkbox" ${this.rulersVisible ? 'checked' : ''}></div>
                 <div class="pref-row"><label>Language</label><select id="pref-lang"><option value="en" ${this._lang === 'en' ? 'selected' : ''}>English</option><option value="zh" ${this._lang === 'zh' ? 'selected' : ''}>简体中文</option></select></div>
             </div>
             <div class="modal-btns"><button class="btn" data-modal-close>Cancel</button>
@@ -19085,9 +19123,13 @@ self.onmessage = async function(event) {
         this._prefs.snapTolerance = snap.value;
         this._prefs.stackNewObjects = Boolean(overlay.querySelector('#pref-stack')?.checked);
         this._prefs.vectorStrokes = Boolean(overlay.querySelector('#pref-vector')?.checked);
+        this.rulersVisible = Boolean(overlay.querySelector('#pref-rulers')?.checked);
+        this._prefs.rulersVisible = this.rulersVisible;
         this.maxHistory = history.value;
         const accent = overlay.querySelector('#pref-accent').value;
+        this._prefs.accent = accent;
         document.documentElement.style.setProperty('--accent', accent);
+        this._syncRulerChrome({ fitDocument:true });
         const lang = overlay.querySelector('#pref-lang')?.value || 'en';
         if (lang !== this._lang) this.setLocale(lang);
         const languageSaved = this._persistLocal('os_lang', lang, { label:'Language preference', announce:false });
@@ -19115,12 +19157,14 @@ self.onmessage = async function(event) {
             maxHistory: this.maxHistory,
             stackNewObjects: Boolean(this._prefs.stackNewObjects),
             vectorStrokes: Boolean(this._prefs.vectorStrokes),
+            rulersVisible: this.rulersVisible !== false,
             toolOptions: this._prefs.toolOptions && typeof this._prefs.toolOptions === 'object'
                 ? Object.fromEntries(Object.entries(this._prefs.toolOptions).slice(0, 120))
                 : {},
             panelSizes: Array.isArray(this._prefs.panelSizes) ? this._prefs.panelSizes.slice(0, 8) : []
         };
-        if (/^#[0-9a-fA-F]{6}$/.test(String(accent || ''))) payload.accent = String(accent).toLowerCase();
+        const persistedAccent = /^#[0-9a-fA-F]{6}$/.test(String(accent || '')) ? accent : this._prefs.accent;
+        if (/^#[0-9a-fA-F]{6}$/.test(String(persistedAccent || ''))) payload.accent = String(persistedAccent).toLowerCase();
         return this._persistLocal('os_prefs', JSON.stringify(payload), { label:'Preferences', announce });
     },
     _restorePreferences() {
@@ -19142,6 +19186,8 @@ self.onmessage = async function(event) {
         this.maxHistory = clamp(stored.maxHistory, 10, 200, this.maxHistory);
         this._prefs.stackNewObjects = Boolean(stored.stackNewObjects);
         this._prefs.vectorStrokes = Boolean(stored.vectorStrokes);
+        this._prefs.rulersVisible = stored.rulersVisible === undefined ? this._prefs.rulersVisible : Boolean(stored.rulersVisible);
+        this.rulersVisible = this._prefs.rulersVisible;
         this._prefs.toolOptions = stored.toolOptions && typeof stored.toolOptions === 'object'
             ? Object.fromEntries(Object.entries(stored.toolOptions).slice(0, 120))
             : {};
@@ -19149,7 +19195,8 @@ self.onmessage = async function(event) {
             ? stored.panelSizes.slice(0, 8).map(value => clamp(value, this._panelMinHeight, 2000, this._panelMinHeight))
             : [];
         if (/^#[0-9a-fA-F]{6}$/.test(String(stored.accent || ''))) {
-            document.documentElement.style.setProperty('--accent', String(stored.accent).toLowerCase());
+            this._prefs.accent = String(stored.accent).toLowerCase();
+            document.documentElement.style.setProperty('--accent', this._prefs.accent);
         }
     },
 

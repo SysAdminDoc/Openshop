@@ -91,6 +91,19 @@ describe('OpenShop core object', () => {
     setItem.mockRestore();
   });
 
+  it('persists the ruler preference without dropping the saved accent', () => {
+    const OS = loadOpenShop();
+    OS._prefs.accent = '#4f72d8';
+    OS.rulersVisible = false;
+
+    expect(OS._persistPreferences(null, { announce:false })).toBe(true);
+    expect(JSON.parse(localStorage.getItem('os_prefs'))).toMatchObject({
+      version:1,
+      accent:'#4f72d8',
+      rulersVisible:false
+    });
+  });
+
   it('enables stylus pressure only after observing pressure variance', () => {
     const OS = loadOpenShop();
     OS.canvas = createCanvasMock();

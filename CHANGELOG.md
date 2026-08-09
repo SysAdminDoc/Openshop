@@ -25,6 +25,9 @@ All notable changes to Openshop will be documented in this file.
 - Rebalanced the status bar around active-document information: bit depth and
   color profile now follow blank, new, restored, and imported document state,
   while save and network health occupy a consistent right-side cluster.
+- Made the mockup's measured canvas frame the desktop default. Rulers now sit
+  between tool options and artwork, disappear for blank/compact workspaces, and
+  remember the user's View-menu or Preferences choice.
 
 ### Fixed
 - The seven top-level menu roots had only a 13px-high pointer target after the
