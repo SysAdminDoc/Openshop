@@ -13,6 +13,9 @@ All notable changes to Openshop will be documented in this file.
 - Restored the shell's hand-drawn SVG tool language in the registry-generated
   two-column rail and flyouts. Family faces now follow the selected nested tool
   instead of remaining as letter placeholders or showing a stale default.
+- Turned the Motion workspace into a fitted, side-effect-free frame timeline
+  with transport controls, live frame counts, a deliberate first-frame action,
+  checkerboard thumbnails, and automatic canvas reflow instead of an overlay.
 
 ### Fixed
 - Automatic narrow-screen and explicitly selected Mobile workspaces now share

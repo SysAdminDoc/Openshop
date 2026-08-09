@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-bRgQQousH8nUgoScdMdBOmUrxYTtJgQVFa6Xa5JHWoo=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-Wbp2kLbneLmIJSUlDSU1KSCe8MbGi+0ngQZSvjKWuVU=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -2243,6 +2243,104 @@ html[data-os-document="blank"] #canvas-hud{display:none}
   height:2px;
   background:linear-gradient(90deg,transparent,var(--accent),var(--accent-alt),transparent);
 }
+html[data-os-bottom-tab="timeline"] body:not(.fullscreen) #canvas-area{
+  bottom:calc(var(--statusbar-h) + var(--bottom-tabs-h) + 152px);
+}
+html[data-os-bottom-tab="timeline"] body:not(.fullscreen) .ruler-v{
+  bottom:calc(var(--statusbar-h) + var(--bottom-tabs-h) + 152px);
+}
+#timeline-panel{
+  height:152px;
+  overflow:hidden;
+  background:linear-gradient(180deg,rgba(17,28,44,.985),rgba(8,14,23,.985));
+  border:1px solid color-mix(in srgb,var(--border-active) 68%,transparent);
+  border-bottom:0;
+  border-radius:11px 11px 0 0;
+  box-shadow:0 -18px 44px rgba(0,0,0,.38),inset 0 1px rgba(255,255,255,.04);
+}
+#timeline-header{
+  height:42px;
+  padding:0 11px 0 13px;
+  gap:7px;
+  overflow-x:auto;
+  scrollbar-width:none;
+  background:rgba(10,18,30,.84);
+  border-bottom-color:rgba(56,84,122,.48);
+}
+#timeline-header::-webkit-scrollbar{display:none}
+#timeline-header .timeline-title{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  min-width:152px;
+  color:var(--text-primary);
+  font:700 9px 'DM Sans',sans-serif;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+}
+#timeline-header .timeline-title svg{width:16px;height:16px;color:var(--accent-hover)}
+#timeline-header .timeline-title > span{color:inherit;font:inherit}
+#timeline-header .timeline-title small{
+  margin-left:2px;
+  padding:3px 6px;
+  border:1px solid rgba(91,124,255,.22);
+  border-radius:999px;
+  color:var(--text-muted);
+  background:rgba(91,124,255,.08);
+  font:600 8px 'JetBrains Mono',monospace;
+  letter-spacing:0;
+  text-transform:none;
+}
+#timeline-header .btn{min-height:28px;padding:3px 9px;border-radius:6px;font-size:9px}
+.timeline-transport{gap:4px}
+.timeline-transport button{width:28px;height:28px;border-radius:7px;background:rgba(20,32,51,.8)}
+#timeline-frames{
+  gap:10px;
+  padding:10px 12px;
+  background-image:
+    linear-gradient(rgba(56,84,122,.08) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(56,84,122,.08) 1px,transparent 1px);
+  background-size:20px 20px;
+}
+.frame-thumb{
+  width:96px;
+  min-width:96px;
+  min-height:72px;
+  border:1px solid rgba(56,84,122,.7);
+  border-radius:8px;
+  background-color:#e8ebef;
+  background-image:
+    linear-gradient(45deg,#cfd3d8 25%,transparent 25%),
+    linear-gradient(-45deg,#cfd3d8 25%,transparent 25%),
+    linear-gradient(45deg,transparent 75%,#cfd3d8 75%),
+    linear-gradient(-45deg,transparent 75%,#cfd3d8 75%);
+  background-position:0 0,0 5px,5px -5px,-5px 0;
+  background-size:10px 10px;
+  box-shadow:0 8px 18px rgba(0,0,0,.2);
+}
+.frame-thumb:hover{border-color:var(--border-active);transform:translateY(-1px)}
+.frame-thumb.active{border-color:var(--accent-hover);box-shadow:0 0 0 2px rgba(91,124,255,.3),0 10px 24px rgba(0,0,0,.3)}
+.timeline-empty{
+  appearance:none;
+  display:grid;
+  place-items:center;
+  align-content:center;
+  gap:5px;
+  width:116px;
+  min-width:116px;
+  min-height:78px;
+  padding:8px;
+  border:1px dashed rgba(91,124,255,.42);
+  border-radius:8px;
+  color:var(--text-muted);
+  background:rgba(20,32,51,.54);
+  cursor:pointer;
+  transition:var(--transition-chrome);
+}
+.timeline-empty:hover{color:var(--text-primary);border-color:var(--accent-hover);background:rgba(91,124,255,.12);transform:translateY(-1px)}
+.timeline-empty:focus-visible{box-shadow:var(--focus-ring)}
+.timeline-empty strong{display:grid;place-items:center;width:22px;height:22px;border-radius:6px;color:#fff;background:var(--accent);font:500 17px/1 'DM Sans',sans-serif}
+.timeline-empty span{font:600 9px 'DM Sans',sans-serif;letter-spacing:.035em}
 #bottom-tabs{
   gap:4px;
   padding:5px 8px 0;
@@ -2252,10 +2350,23 @@ html[data-os-document="blank"] #canvas-hud{display:none}
 .bottom-tab{
   min-width:126px;
   padding:0 16px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
   border:1px solid transparent;
   border-bottom:0;
   border-radius:8px 8px 0 0;
   color:var(--text-muted);
+}
+.bottom-tab svg{width:14px;height:14px;flex:0 0 14px}
+.bottom-tab output{
+  min-width:18px;
+  padding:2px 5px;
+  border-radius:999px;
+  color:var(--text-muted);
+  background:rgba(255,255,255,.055);
+  font:700 8px 'JetBrains Mono',monospace;
 }
 .bottom-tab:hover{color:var(--text-primary);background:rgba(20,32,51,.72)}
 .bottom-tab[aria-selected="true"]{
@@ -2264,6 +2375,7 @@ html[data-os-document="blank"] #canvas-hud{display:none}
   background:linear-gradient(180deg,rgba(91,124,255,.2),rgba(91,124,255,.07));
   box-shadow:inset 0 2px var(--accent);
 }
+.bottom-tab[aria-selected="true"] output{color:var(--accent-hover);background:rgba(91,124,255,.16)}
 #statusbar{
   padding:0 15px;
   gap:14px;
@@ -2303,6 +2415,10 @@ html[data-os-document="blank"] #canvas-hud{display:none}
   .cr-left,.cr-right{min-width:auto;width:100%}
   /* Clears the floating toolbar (46px tall, inset 6px), not the old flush 48px bar. */
   #timeline-panel{left:6px;right:6px;bottom:calc(58px + var(--bottom-tabs-h))}
+  html[data-os-bottom-tab="timeline"] body:not(.fullscreen) #canvas-area{
+    bottom:calc(var(--bottom-tabs-h) + 58px);
+  }
+  html[data-os-bottom-tab="timeline"] body:not(.fullscreen) .ruler-v{bottom:0}
   #topbar{
     gap:1px;
     padding:0 6px;
@@ -2544,6 +2660,7 @@ html[data-os-workspace="mobile"] #panels .panel-tab-group{flex-shrink:0}
 html[data-os-workspace="mobile"] #panels .panel-tab-group.ptg-flex{flex:0 0 250px}
 html[data-os-workspace="mobile"] #bottom-tabs{left:0;right:0}
 html[data-os-workspace="mobile"] #canvas-hud{display:none}
+html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullscreen) #canvas-area{bottom:calc(var(--bottom-tabs-h) + 58px)}
 
 @media(min-width:768px) and (max-width:1023px){
   :root{--panel-width:248px;--toolbar-w:112px}
@@ -3158,8 +3275,8 @@ html[data-os-workspace="mobile"] #canvas-hud{display:none}
     </div>
 </div>
 <nav id="bottom-tabs" aria-label="Bottom panels">
-    <button type="button" class="bottom-tab" id="mini-bridge-tab" data-bottom-tab="mini-bridge" aria-selected="true" data-os-click="click-226">Mini Bridge</button>
-    <button type="button" class="bottom-tab" id="timeline-tab" data-bottom-tab="timeline" aria-selected="false" data-os-click="click-117">Timeline</button>
+    <button type="button" class="bottom-tab" id="mini-bridge-tab" data-bottom-tab="mini-bridge" aria-selected="true" data-os-click="click-226"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 7h7l2 2h9v10H3z"/><path d="M3 7V5h7l2 2"/></svg><span>Mini Bridge</span></button>
+    <button type="button" class="bottom-tab" id="timeline-tab" data-bottom-tab="timeline" aria-selected="false" aria-controls="timeline-panel" data-os-click="click-117"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14M17 5v14M3 9h4M17 9h4M3 15h4M17 15h4"/></svg><span>Timeline</span><output id="timeline-tab-count" aria-label="Animation frame count">0</output></button>
 </nav>
 <section id="canvas-a11y-tree" class="sr-only" aria-label="Canvas state">
     <h2>Canvas state</h2>
@@ -3496,21 +3613,21 @@ html[data-os-workspace="mobile"] #canvas-hud{display:none}
     <div id="liquify-canvas-wrap"><canvas id="liquify-canvas"></canvas></div>
 </div>
 <!-- ===== TIMELINE ===== -->
-<div id="timeline-panel">
+<div id="timeline-panel" role="region" aria-label="Animation timeline">
     <div id="timeline-header">
-        <span>Animation</span>
+        <span class="timeline-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14M17 5v14M3 9h4M17 9h4M3 15h4M17 15h4"/></svg><span>Timeline</span><small id="timeline-summary">0 frames</small></span>
         <span style="flex:1"></span>
         <div class="timeline-transport">
-            <button data-os-click="click-198" title="Previous"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zM9.5 12l8.5 6V6z"/></svg></button>
-            <button id="tl-play" data-os-click="click-199" title="Play/Pause"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
-            <button data-os-click="click-200" title="Next"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg></button>
+            <button type="button" data-os-click="click-198" title="Previous" aria-label="Previous frame"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zM9.5 12l8.5 6V6z"/></svg></button>
+            <button type="button" id="tl-play" data-os-click="click-199" title="Play/Pause" aria-label="Play or pause animation"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+            <button type="button" data-os-click="click-200" title="Next" aria-label="Next frame"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg></button>
         </div>
-        <button class="btn" data-os-click="click-201">+ Frame</button>
-        <button class="btn" data-os-click="click-202">Dup</button>
+        <button type="button" class="btn" data-os-click="click-201">+ Frame</button>
+        <button type="button" class="btn" data-os-click="click-202">Duplicate</button>
         <label style="font-size:10px;color:var(--text-muted)">FPS</label>
         <input type="number" id="tl-fps" value="12" min="1" max="60" style="width:40px;height:22px;background:var(--bg-depth-3);border:1px solid var(--border);border-radius:3px;color:var(--text-primary);font-size:11px;text-align:center">
-        <button class="btn btn-primary" data-os-click="click-203">Export GIF</button>
-        <button class="btn" data-os-click="click-117" style="padding:2px 6px">X</button>
+        <button type="button" class="btn btn-primary" data-os-click="click-203">Export GIF</button>
+        <button type="button" class="btn" data-os-click="click-117" style="padding:2px 6px" aria-label="Close timeline">×</button>
     </div>
     <div id="timeline-frames"></div>
 </div>
@@ -4976,6 +5093,27 @@ const OS = {
         const selector = document.getElementById('workspace-selector');
         if (selector && selector.value !== next) selector.value = next;
         this._persistLocal('os_workspace_mode', next, { label:'Workspace preference' });
+        const timeline = document.getElementById('timeline-panel');
+        if (timeline && next === 'motion' && !timeline.classList.contains('visible')) {
+            // Choosing a layout must not silently create a frame, add history,
+            // or dirty the document. Show the tray; its explicit first-frame
+            // control starts animation state when the user is ready.
+            timeline.classList.add('visible');
+            this.selectBottomTab('timeline');
+            this._renderFrames();
+        } else if (timeline && next !== 'motion' && timeline.classList.contains('visible')) {
+            this._stopAnimationPlayback();
+            timeline.classList.remove('visible');
+            this.selectBottomTab('mini-bridge');
+        }
+        if (this.canvas) {
+            this.resizeCanvas();
+            if (this._hasActiveDocument()) this.zoomFit();
+            else {
+                this.drawGrid();
+                this.drawRulers();
+            }
+        }
         this._syncSessionWorkspace();
         if (announce) this.toast(`Workspace: ${next[0].toUpperCase()}${next.slice(1)}`, 'info');
     },
@@ -22859,6 +22997,26 @@ self.onmessage = async function(e) {
     _renderFrames() {
         const container = document.getElementById('timeline-frames');
         this._clearNode(container);
+        const frameCount = this._animFrames.length;
+        const summary = document.getElementById('timeline-summary');
+        const tabCount = document.getElementById('timeline-tab-count');
+        if (summary) summary.textContent = `${frameCount} ${frameCount === 1 ? 'frame' : 'frames'}`;
+        if (tabCount) tabCount.textContent = String(frameCount);
+        if (!frameCount && container) {
+            const empty = document.createElement('button');
+            empty.type = 'button';
+            empty.className = 'timeline-empty';
+            empty.setAttribute('aria-label', 'Add first animation frame');
+            const plus = document.createElement('strong');
+            plus.setAttribute('aria-hidden', 'true');
+            plus.textContent = '+';
+            const label = document.createElement('span');
+            label.textContent = 'Add first frame';
+            empty.append(plus, label);
+            empty.addEventListener('click', () => this.addFrame());
+            container.appendChild(empty);
+            return;
+        }
         const activeIndex = this._animPlaying ? this._animPreviewIdx : this._animIdx;
         this._animFrames.forEach((data, i) => {
             const div = document.createElement('div');

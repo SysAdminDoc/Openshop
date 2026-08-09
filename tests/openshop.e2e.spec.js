@@ -117,6 +117,49 @@ test('opens command search and keeps both zoom readouts synchronized @cross-brow
   await expect(statusReadout).toHaveText(await canvasReadout.textContent());
 });
 
+test('turns the Motion workspace into a fitted frame timeline @cross-browser', async ({ page }) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).evaluate(button => button.click());
+  const before = await page.evaluate(() => ({ dirty:OS._isDirty, history:OS.history.length }));
+  await page.evaluate(() => OS.setWorkspaceMode('motion', { announce:false }));
+
+  await expect(page.locator('html')).toHaveAttribute('data-os-workspace', 'motion');
+  await expect(page.locator('html')).toHaveAttribute('data-os-bottom-tab', 'timeline');
+  await expect(page.locator('#timeline-panel')).toBeVisible();
+  await expect(page.locator('#timeline-tab')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('#timeline-summary')).toHaveText('0 frames');
+  await expect(page.locator('#timeline-tab-count')).toHaveText('0');
+  await expect(page.getByRole('button', { name: 'Add first animation frame' })).toBeVisible();
+  expect(await page.evaluate(() => ({ dirty:OS._isDirty, history:OS.history.length }))).toEqual(before);
+  const fitted = await page.evaluate(() => {
+    const area = document.getElementById('canvas-area');
+    const canvas = area.getBoundingClientRect();
+    const timeline = document.getElementById('timeline-panel').getBoundingClientRect();
+    const viewport = OS.canvas.viewportTransform;
+    return {
+      canvasBottom:canvas.bottom,
+      timelineTop:timeline.top,
+      backingHeight:OS.canvas.height,
+      areaHeight:area.clientHeight,
+      documentTop:viewport[5],
+      documentBottom:viewport[5] + OS.canvasH * OS.zoom
+    };
+  });
+  expect(fitted.canvasBottom).toBeLessThanOrEqual(fitted.timelineTop + 1);
+  expect(fitted.backingHeight).toBe(fitted.areaHeight);
+  expect(fitted.documentTop).toBeGreaterThanOrEqual(39);
+  expect(fitted.documentBottom).toBeLessThanOrEqual(fitted.areaHeight - 39);
+
+  await page.getByRole('button', { name: 'Add first animation frame' }).evaluate(button => button.click());
+  await expect(page.locator('#timeline-summary')).toHaveText('1 frame');
+  await expect(page.locator('#timeline-tab-count')).toHaveText('1');
+
+  await page.evaluate(() => OS.setWorkspaceMode('standard', { announce:false }));
+  await expect(page.locator('#timeline-panel')).toBeHidden();
+  await expect(page.locator('html')).toHaveAttribute('data-os-bottom-tab', 'mini-bridge');
+  await expect(page.locator('#mini-bridge-tab')).toHaveAttribute('aria-selected', 'true');
+});
+
 test('navigates Layers and History listboxes without a pointer @cross-browser', async ({ page }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).click();
