@@ -8,24 +8,7 @@ windows-app-audit and is the implementation sequence for the audited shell, tool
 menus, panels, document semantics, accessibility, persistence, performance, and
 testing gates. Note (2026-08-04): that breakdown is marked fully drained, but
 `_toolCatalog` rows carry `auditStatus:'VISUALLY_INSPECTED'`, which means the
-button was looked at — not that the tool works. See P0 below.
-
-## P0 — the e2e suite is red at HEAD (found 2026-08-08)
-
-The Chromium suite had **10 failures at the v0.29.0 tree** before any of today's work.
-Eight are fixed; the two below are open. None of them was caught before shipping,
-which is the more interesting problem: a release went out on a red suite.
-
-| # | Test | What it reports |
-|---|------|-----------------|
-| 2 | `records validated commands and replays mixed edits as one atomic action` | Replay produces one entry more/less than the recording. Command-registry regression, likely from the tool-registry rebuild. |
-| 5 | `runs the Photon WASM backend for real on the operation it is allowed` | Photon parity check fails on the one allowlisted op. |
-
-Fixed on 2026-08-08 and kept here only as the record: WCAG contrast on the selected
-bottom tab (4.01:1 → passing), two pointer targets under the 24×24 floor
-(`#workspace-selector`, `#tool-options-reset`), and the tool-family face never showing
-its active state because `setTool` looked only for the portalled flyout while the
-flyout was still nested at that point in boot.
+button was looked at — not that the tool works. See the active items below.
 
 ## Planned Features
 

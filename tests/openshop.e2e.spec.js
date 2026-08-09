@@ -1993,7 +1993,7 @@ test('records validated commands and replays mixed edits as one atomic action', 
   expect(result.replayed).toEqual(result.edited);
   expect(result.replayEntry).toEqual({
     kind: 'openshop-history-entry',
-    schemaVersion: 1,
+    schemaVersion: 2,
     commandId: 'macro.sequence',
     childIds: ['layer.rename', 'layer.opacity.set', 'object.rotate']
   });
@@ -7550,6 +7550,9 @@ test('runs the Photon WASM backend for real on the operation it is allowed @slow
     };
 
     OS._photonFilterDisabled = false;
+    // The application prefers the parity-verified GPU path when it is
+    // available; this test is specifically the real Photon contract.
+    OS._gpuFilterDisabled = true;
     OS._filterWorkerPhotonReady = false;
 
     // Invert is the one operation whose WASM and JavaScript results agree, so

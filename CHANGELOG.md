@@ -58,6 +58,9 @@ All notable changes to Openshop will be documented in this file.
   looked only for the flyout after it has been portalled to the body host, but at
   that point in boot the flyout is still nested inside the group, so the face was
   left unmarked until the user picked a tool by hand.
+- The Chromium release checks now track the v2 tiled-history envelope and force
+  the dedicated Photon smoke test past the preferred GPU backend, keeping the
+  macro replay and verified-WASM contracts meaningful.
 - Registered Photoshop-parity tools without an implementation now appear disabled,
   refuse command and macro execution with a diagnostic, and leave the active tool
   unchanged instead of swallowing gestures as successful no-ops.
