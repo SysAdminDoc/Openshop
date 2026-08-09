@@ -4966,6 +4966,97 @@ test('accepts image files from clipboard paste and drag-and-drop', async ({ page
   expect(result.names).toEqual(expect.arrayContaining(['clipboard-fixture.png', 'drop-fixture.png']));
 });
 
+test('copies and cuts pixel selections through PNG and the system clipboard @cross-browser', async ({ page }) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).click();
+
+  const result = await page.evaluate(async () => {
+    OS.createNewDocument(8, 8, { resetProject:true, clean:true });
+    const source = document.createElement('canvas');
+    source.width = 8; source.height = 8;
+    source.getContext('2d').fillStyle = '#c8501e';
+    source.getContext('2d').fillRect(0, 0, 8, 8);
+    const image = await fabric.Image.fromURL(source.toDataURL('image/png'));
+    image.set({ left:0, top:0, name:'Clipboard source' });
+    OS.canvas.add(image);
+    OS.layers[OS.activeLayerIdx].objects.push(image);
+    OS.canvas.setActiveObject(image);
+    OS._enforceLayerInvariants();
+
+    const mask = new Uint8Array(8 * 8);
+    for (let y = 3; y < 5; y++) for (let x = 2; x < 5; x++) mask[y * 8 + x] = 255;
+    const setSelection = () => OS._setPixelSelectionMask(mask.slice(), 8, 8, { coverage:true });
+    const readPixel = (target, x, y) => {
+      const probe = document.createElement('canvas'); probe.width = 8; probe.height = 8;
+      const ctx = probe.getContext('2d'); ctx.drawImage(target.getElement(), 0, 0);
+      return [...ctx.getImageData(x, y, 1, 1).data];
+    };
+
+    const writes = [];
+    let rejectWrite = false;
+    const clipboardApi = { write: async items => {
+      if (rejectWrite) throw new Error('clipboard permission denied');
+      writes.push(items);
+    } };
+    class FakeClipboardItem { constructor(data) { this.data = data; } }
+    Object.defineProperty(navigator, 'clipboard', { configurable:true, value:clipboardApi });
+    Object.defineProperty(globalThis, 'ClipboardItem', { configurable:true, value:FakeClipboardItem });
+
+    setSelection();
+    const copied = await OS._copyPixelSelection();
+    const copiedImage = await fabric.Image.fromURL(OS._pixelClipboard.dataUrl);
+    const copiedPixel = readPixel(copiedImage, 1, 1);
+    const copiedShape = { width:copiedImage.width, height:copiedImage.height, pixel:copiedPixel };
+
+    setSelection();
+    OS._cutSelection();
+    await new Promise((resolve, reject) => {
+      const started = performance.now();
+      const poll = () => {
+        if (OS.history.at(-1)?.action === 'Cut Selection') { resolve(); return; }
+        if (performance.now() - started > 5000) { reject(new Error('Cut did not commit')); return; }
+        setTimeout(poll, 10);
+      };
+      poll();
+    });
+    const cutTarget = OS._layerRasterTarget(OS.layers[OS.activeLayerIdx]);
+    const cutInside = readPixel(cutTarget, 2, 3);
+    const cutOutside = readPixel(cutTarget, 0, 0);
+
+    const pasted = await OS._pastePixelSelection();
+    const pastedImage = OS.canvas.getActiveObject();
+    const pastedShape = { width:pastedImage?.width, height:pastedImage?.height, left:pastedImage?.left, top:pastedImage?.top };
+
+    rejectWrite = true;
+    setSelection();
+    const copiedWithoutPermission = await OS._copyPixelSelection();
+    const warning = [...document.querySelectorAll('#toast-container .toast')].at(-1)?.textContent || '';
+    return {
+      copied,
+      writes:writes.length,
+      clipboardType:writes[0]?.[0]?.data?.['image/png']?.type,
+      copiedShape,
+      cutInside,
+      cutOutside,
+      pasted,
+      pastedShape,
+      copiedWithoutPermission,
+      warning
+    };
+  });
+
+  expect(result.copied).toBe(true);
+  expect(result.writes).toBe(2);
+  expect(result.clipboardType).toBe('image/png');
+  expect(result.copiedShape).toEqual({ width:3, height:2, pixel:[200, 80, 30, 255] });
+  expect(result.cutInside[3]).toBe(0);
+  expect(result.cutOutside).toEqual([200, 80, 30, 255]);
+  expect(result.pasted).toBe(true);
+  expect(result.pastedShape).toMatchObject({ width:3, height:2 });
+  expect(result.copiedWithoutPermission).toBe(true);
+  expect(result.warning).toContain('system clipboard unavailable');
+});
+
 test('stays usable in forced-colors mode', async ({ page }) => {
   // The chrome is glassmorphic — translucent panels over a blur — which in
   // Windows High Contrast renders as invisible controls on an invisible

@@ -34,6 +34,7 @@ Or download `index.html` and open it locally. Everything runs client-side. Your 
 | **Mobile Workspace** | Switch the Workspace selector to Mobile for a compact bottom toolbar, slide-out panels, touch-safe canvas targets, and variance-detected pen pressure sizing |
 | **Selection Tools** | Rectangular/Elliptical Marquee, Magic Wand (contiguous + global), Lasso, Color Range dialog with fuzziness, presets, and live preview |
 | **Selection Operations** | Select All, Deselect, Reselect, Inverse, Grow, Similar, Modify (Expand, Contract, Feather, Border, Smooth) |
+| **Clipboard** | Copy and Cut pixel selections as PNG through the system clipboard, with an OpenShop-local paste fallback when browser permission is unavailable |
 | **Symmetry Drawing** | Horizontal, vertical, both-axes, and radial (6-fold) mirror modes for brush strokes |
 | **Undo/Redo** | 120-step versioned transaction history with dirty 64×64 raster tiles, named entries, exact destructive-edit rollback, and a visual history panel |
 | **Snapshots & Branches** | Name the current state and return to it later, outside the undo step limit; editing after an undo archives the abandoned line as a branch instead of deleting it. Session-scoped and memory-budgeted |

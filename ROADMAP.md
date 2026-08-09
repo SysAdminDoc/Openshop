@@ -61,13 +61,6 @@ button was looked at — not that the tool works. See the active items below.
 
 ### P1 — Trust, accessibility, and interoperability
 
-- [ ] P1 — Copy and Cut pixel selections, and write to the system clipboard
-  Why: `_copySelection` only clones an active Fabric object into an internal `_clipboard`. With a marquee selection on a raster layer it reports "Nothing selected", and nothing OpenShop copies ever reaches the OS clipboard — you can paste an image *in* but cannot paste a selection *out* into any other application. Pixels can already be deleted through a selection, so the asymmetry is in Copy alone.
-  Evidence: `index.html:21314-21323` (`_copySelection`/`_cutSelection`), `21325-21343` (`_pasteSelection`), `20430-20445` (paste-in works), `_deleteSelectionPixels` at `21390+`; `navigator.clipboard` appears once, at `7890`, for text. `Clipboard.write()` with `image/png` is Baseline 2024 (MDN).
-  Touches: `index.html` `_copySelection`, `_cutSelection`, `copyObj`, the Edit menu and context menus, `_readDocumentImageData`.
-  Acceptance: with a pixel selection active, Copy extracts the selected region of the active raster layer, Cut clears it through the existing history transaction, and both write a PNG `ClipboardItem` when `navigator.clipboard.write` exists; a browser that refuses reports it rather than failing silently; paste-back into OpenShop and into a second application both work.
-  Complexity: M
-
 - [ ] P1 — Resolve keyboard shortcuts by physical key
   Why: every shortcut goes through `e.key.toLowerCase()`. Under Cyrillic, Greek, Hebrew, Arabic or Thai layouts `e.key` is a non-Latin character, so the entire advertised "Photoshop-style shortcut set (40+ bindings)" — including Ctrl+Z, Ctrl+S and every single-letter tool key — is unreachable. Dvorak and Colemak shift it rather than break it. The project ships a `zh` locale and asks for more.
   Evidence: `index.html:21163`, `21213`, `21287`; zero occurrences of `e.code`; https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/code

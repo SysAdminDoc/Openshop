@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-BKxczdV31L+S2p4Jxdn5sjk+RuSSEPwPh49oPu69JjY=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-KfYDxc9or9q9QbTwzl8IubfFlfo7+Z+kE/KAjR6K42o=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -22521,6 +22521,7 @@ self.onmessage = async function(e) {
 
     // ====================== KEYBOARD SHORTCUT HANDLER ======================
     _clipboard: null,
+    _pixelClipboard: null,
     _initKeyboardShortcuts() {
         document.addEventListener('keydown', e => {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
@@ -22554,7 +22555,14 @@ self.onmessage = async function(e) {
                     case 'x':
                         e.preventDefault(); this._cutSelection(); return;
                     case 'v':
-                        e.preventDefault(); this._pasteSelection(); return;
+                        // Let the native paste event reach initClipboardPaste when
+                        // there is no OpenShop-owned clipboard entry. Swallowing
+                        // Ctrl+V unconditionally made system clipboard paste look
+                        // broken after the editor gained an internal object path.
+                        if (this._pixelClipboard || this._clipboard) {
+                            e.preventDefault(); this._pasteSelection();
+                        }
+                        return;
                     case 'j':
                         e.preventDefault(); this._duplicateSelection(); return;
                     case 'g':
@@ -22684,19 +22692,151 @@ self.onmessage = async function(e) {
         this.clearSelection();
         this.canvas.requestRenderAll();
     },
+    _pixelSelectionTarget() {
+        const active = this.canvas?.getActiveObject?.();
+        if (active?.type === 'image' && !active._wandOverlay && active.name !== '__boundary__') return active;
+        return this._layerRasterTarget?.(this.layers?.[this.activeLayerIdx]) || null;
+    },
+    _pixelSelectionBounds() {
+        const bounds = this._selectionBounds;
+        if (!bounds || ![bounds.x, bounds.y, bounds.w, bounds.h].every(Number.isFinite) || bounds.w <= 0 || bounds.h <= 0) return null;
+        const width = Math.max(1, Math.round(this.canvasW));
+        const height = Math.max(1, Math.round(this.canvasH));
+        const x = Math.max(0, Math.floor(bounds.x));
+        const y = Math.max(0, Math.floor(bounds.y));
+        const right = Math.min(width, Math.ceil(bounds.x + bounds.w));
+        const bottom = Math.min(height, Math.ceil(bounds.y + bounds.h));
+        if (right <= x || bottom <= y) return null;
+        return { x, y, w:right - x, h:bottom - y, documentWidth:width, documentHeight:height };
+    },
+    _selectionCoverageAt(mask, x, y, documentWidth, documentHeight) {
+        if (!mask) return 255;
+        const sx = mask.w === documentWidth ? x : Math.floor(x * mask.w / documentWidth);
+        const sy = mask.h === documentHeight ? y : Math.floor(y * mask.h / documentHeight);
+        if (sx < 0 || sy < 0 || sx >= mask.w || sy >= mask.h) return 0;
+        return mask.mask[sy * mask.w + sx] || 0;
+    },
+    async _capturePixelSelection() {
+        const target = this._pixelSelectionTarget();
+        const bounds = this._pixelSelectionBounds();
+        if (!target || !bounds) return null;
+        const element = target.getElement?.();
+        const sourceWidth = Math.max(1, Math.round(element?.naturalWidth || element?.width || 0));
+        const sourceHeight = Math.max(1, Math.round(element?.naturalHeight || element?.height || 0));
+        if (!element || !sourceWidth || !sourceHeight) return null;
+
+        const documentCanvas = document.createElement('canvas');
+        documentCanvas.width = bounds.documentWidth;
+        documentCanvas.height = bounds.documentHeight;
+        const documentContext = documentCanvas.getContext('2d', { willReadFrequently:true });
+        const matrix = target.calcTransformMatrix?.() || [1, 0, 0, 1, target.left || 0, target.top || 0];
+        documentContext.save();
+        documentContext.setTransform(...matrix);
+        documentContext.drawImage(element, -sourceWidth / 2, -sourceHeight / 2, sourceWidth, sourceHeight);
+        documentContext.restore();
+
+        const crop = document.createElement('canvas');
+        crop.width = bounds.w;
+        crop.height = bounds.h;
+        const cropContext = crop.getContext('2d', { willReadFrequently:true });
+        cropContext.drawImage(documentCanvas, -bounds.x, -bounds.y);
+        const pixels = cropContext.getImageData(0, 0, bounds.w, bounds.h);
+        const mask = this._selectionMask;
+        for (let y = 0; y < bounds.h; y++) {
+            for (let x = 0; x < bounds.w; x++) {
+                const coverage = this._selectionCoverageAt(mask, bounds.x + x, bounds.y + y, bounds.documentWidth, bounds.documentHeight);
+                if (coverage < 255) {
+                    const alpha = (y * bounds.w + x) * 4 + 3;
+                    pixels.data[alpha] = Math.round(pixels.data[alpha] * coverage / 255);
+                }
+            }
+        }
+        cropContext.putImageData(pixels, 0, 0);
+        const blob = await new Promise(resolve => crop.toBlob(resolve, 'image/png'));
+        if (!blob) throw new Error('The browser could not encode the selection as PNG');
+        return {
+            blob,
+            dataUrl:crop.toDataURL('image/png'),
+            x:bounds.x, y:bounds.y, width:bounds.w, height:bounds.h
+        };
+    },
+    async _copyPixelSelection() {
+        try {
+            const clipboard = await this._capturePixelSelection();
+            if (!clipboard) { this.toast('Select pixels on a raster layer first', 'info'); return false; }
+            this._pixelClipboard = clipboard;
+            this._clipboard = null;
+            let written = false;
+            if (navigator.clipboard?.write && typeof globalThis.ClipboardItem === 'function') {
+                try {
+                    await navigator.clipboard.write([new globalThis.ClipboardItem({ 'image/png': clipboard.blob })]);
+                    written = true;
+                } catch (error) {
+                    console.warn('System clipboard rejected image selection:', error.message);
+                }
+            }
+            this.toast(written ? 'Copied selection to clipboard' : 'Copied selection for OpenShop; system clipboard unavailable', written ? 'success' : 'warning');
+            return true;
+        } catch (error) {
+            console.error('Pixel selection copy failed:', error);
+            this.toast('Could not copy selection: ' + error.message, 'error');
+            return false;
+        }
+    },
     _copySelection() {
+        if (this._selectionMask || this._selectionBounds) {
+            void this._copyPixelSelection();
+            return true;
+        }
         const active = this.canvas.getActiveObject();
-        if (!active) { this.toast('Nothing selected', 'info'); return; }
+        if (!active) { this.toast('Nothing selected', 'info'); return false; }
+        this._pixelClipboard = null;
         active.clone(cloned => { this._clipboard = cloned; });
         this.toast('Copied', 'info');
+        return true;
     },
     _cutSelection() {
-        this._copySelection();
+        if (this._selectionMask || this._selectionBounds) {
+            void this._copyPixelSelection().then(copied => {
+                if (copied) this._deleteSelectionPixels({ history:'Cut Selection', success:'Cut selection' });
+            });
+            return true;
+        }
+        if (!this._copySelection()) return false;
         this._deleteSelected();
         this.toast('Cut', 'info');
+        return true;
+    },
+    async _pastePixelSelection() {
+        const clipboard = this._pixelClipboard;
+        if (!clipboard) return false;
+        if (!this._guardActiveLayerEdit()) return false;
+        try {
+            const image = await fabric.Image.fromURL(clipboard.dataUrl);
+            image.set({
+                left:Math.min(this.canvasW - image.width, clipboard.x + 20),
+                top:Math.min(this.canvasH - image.height, clipboard.y + 20),
+                selectable:true,
+                name:'Pasted Selection'
+            });
+            this._ensureObjectId(image);
+            this.canvas.add(image);
+            this.layers[this.activeLayerIdx].objects.push(image);
+            this.canvas.setActiveObject(image);
+            this.canvas.requestRenderAll();
+            this.saveHistory('Paste Selection');
+            this.updateLayersPanel();
+            this.toast('Pasted selection', 'success');
+            return true;
+        } catch (error) {
+            console.error('Pixel selection paste failed:', error);
+            this.toast('Could not paste selection: ' + error.message, 'error');
+            return false;
+        }
     },
     _pasteSelection() {
-        if (!this._clipboard) { this.toast('Nothing to paste', 'info'); return; }
+        if (this._pixelClipboard) { void this._pastePixelSelection(); return true; }
+        if (!this._clipboard) { this.toast('Nothing to paste', 'info'); return false; }
         if (!this._guardActiveLayerEdit()) return;
         this._clipboard.clone(cloned => {
             this.canvas.discardActiveObject();
@@ -22715,6 +22855,7 @@ self.onmessage = async function(e) {
             this.saveHistory('Paste');
             this.updateLayersPanel();
         });
+        return true;
     },
     _duplicateSelection() {
         const active = this.canvas.getActiveObject();
@@ -22761,7 +22902,7 @@ self.onmessage = async function(e) {
         this.updateLayersPanel();
     },
     // Delete pixels within current selection on the active image
-    _deleteSelectionPixels() {
+    _deleteSelectionPixels({ history = 'Delete Pixels', success = 'Deleted selected pixels' } = {}) {
         // Find the target image — active object or first image under selection
         let target = this.canvas.getActiveObject();
         if (!target || target.type !== 'image' || target._wandOverlay) {
@@ -22832,10 +22973,10 @@ self.onmessage = async function(e) {
         // claim success even when the guard refused the write, so the user got
         // an error and a success toast together and lost the selection they
         // would have needed to retry.
-        this._replaceActiveImage(target, oc.toDataURL('image/png'), 'Delete Pixels').then(committed => {
+        this._replaceActiveImage(target, oc.toDataURL('image/png'), history).then(committed => {
             if (!committed) return;
             this.clearSelection();
-            this.toast('Deleted selected pixels', 'success');
+            this.toast(success, 'success');
         });
     },
     setZoom(level) {
