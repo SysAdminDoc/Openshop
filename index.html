@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-7gJBiv5yAKxI4Sg7jo3/c42KUf1rtNO3K+S4iNPvSmg=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-IZ7oSzux/+x2vvxvQ348tIWBcVZvg9wzxkipaDFFcZA=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -2103,6 +2103,16 @@ body{
 .dd-item[data-os-click="click-028"]::before,
 .dd-item[data-os-click="click-029"]::before,
 .dd-item[data-os-click="click-030"]::before{border-style:dashed;background:none}
+.dd-item[data-os-click="click-230"]::before{border-style:dashed;background:none}
+.dd-item[data-os-click="click-231"]::before,
+.dd-item[data-os-click="click-232"]::before{
+  border-radius:3px;
+  background:none;
+  font:700 13px/14px 'JetBrains Mono',monospace;
+  text-align:center;
+}
+.dd-item[data-os-click="click-231"]::before{content:'↓'}
+.dd-item[data-os-click="click-232"]::before{content:'↑'}
 .dd-item[data-os-click="click-094"]::before,
 .dd-item[data-os-click="click-096"]::before,
 .dd-item[data-os-click="click-097"]::before,
@@ -2985,6 +2995,11 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
             <div class="dd-sep"></div>
             <div class="dd-item" data-os-click="click-037">Grow</div>
             <div class="dd-item" data-os-click="click-038">Similar</div>
+            <div class="dd-sep"></div>
+            <div class="dd-item" data-os-click="click-230">Transform Selection...</div>
+            <div class="dd-sep"></div>
+            <div class="dd-item" data-os-click="click-231">Save Selection...</div>
+            <div class="dd-item" data-os-click="click-232">Load Selection...</div>
         </div>
     </div>
     <div class="menu-item" role="menuitem" aria-haspopup="true">Image
@@ -4112,7 +4127,10 @@ const OS_EVENT_HANDLERS = Object.freeze({
         "click-226": function(event) { OS.selectBottomTab('mini-bridge') },
         "click-227": function(event) { OS.resetToolOptions() },
         "click-228": function(event) { OS.toggleCmdPalette() },
-        "click-229": function(event) { OS.selectRegistryTool(this) }
+        "click-229": function(event) { OS.selectRegistryTool(this) },
+        "click-230": function(event) { OS.showTransformSelection() },
+        "click-231": function(event) { OS.showSaveSelectionDialog() },
+        "click-232": function(event) { OS.openSelectionFile() }
     }),
     change: Object.freeze({
         "change-001": function(event) { OS.setBrushPreset(this.value) },
@@ -4825,6 +4843,9 @@ const OS = {
         "Show": "显示",
         "Sides": "边数",
         "Similar": "选取相似",
+        "Transform Selection...": "变换选区...",
+        "Save Selection...": "保存选区...",
+        "Load Selection...": "载入选区...",
         "Size": "大小",
         "Skew...": "斜切...",
         "Snapshots & Branches...": "快照与分支...",
@@ -4904,6 +4925,86 @@ const OS = {
         "Text (T)": "文字 (T)",
         "Triangle": "三角形",
         "Zoom (Z)": "缩放 (Z)",
+        "Auto-select": "自动选择",
+        "Show transform controls": "显示变换控件",
+        "Marquee: Rectangular Marquee Tool": "选框：矩形选框工具",
+        "Move: Move Tool": "移动：移动工具",
+        "Lasso: Lasso Tool": "套索：套索工具",
+        "Selection: Magic Wand Tool": "选择：魔棒工具",
+        "Crop: Crop Tool": "裁剪：裁剪工具",
+        "Sampling: Eyedropper Tool": "取样：吸管工具",
+        "Brush: Brush": "画笔：画笔",
+        "Healing: Healing Brush Tool": "修复：修复画笔工具",
+        "Clone: Clone Stamp Tool": "仿制：仿制图章工具",
+        "History: History Brush Tool": "历史记录：历史记录画笔工具",
+        "Eraser: Eraser Tool": "橡皮擦：橡皮擦工具",
+        "Fill: Gradient Tool": "填充：渐变工具",
+        "Blur: Smudge Tool": "模糊：涂抹工具",
+        "Tone: Dodge Tool": "色调：减淡工具",
+        "Pen: Pen Tool": "钢笔：钢笔工具",
+        "Type: Horizontal Type Tool": "文字：横排文字工具",
+        "Path Selection: Path Selection Tool": "路径选择：路径选择工具",
+        "Shape: Rectangle Tool": "形状：矩形工具",
+        "Navigation: Hand Tool": "导航：抓手工具",
+        "AI Select: AI Segment Select": "AI 选择：AI 分割选择",
+        "Rectangular Marquee Tool": "矩形选框工具",
+        "Elliptical Marquee Tool": "椭圆选框工具",
+        "Single Row Marquee Tool": "单行选框工具",
+        "Single Column Marquee Tool": "单列选框工具",
+        "Move Tool": "移动工具",
+        "Lasso Tool": "套索工具",
+        "Polygonal Lasso Tool": "多边形套索工具",
+        "Magnetic Lasso Tool": "磁性套索工具",
+        "Quick Selection Tool": "快速选择工具",
+        "Magic Wand Tool": "魔棒工具",
+        "Crop Tool": "裁剪工具",
+        "Perspective Crop Tool": "透视裁剪工具",
+        "Slice Tool": "切片工具",
+        "Slice Select Tool": "切片选择工具",
+        "Eyedropper Tool": "吸管工具",
+        "Color Sampler Tool": "颜色取样器工具",
+        "Ruler Tool": "标尺工具",
+        "Note Tool": "注释工具",
+        "Spot Healing Brush Tool": "污点修复画笔工具",
+        "Healing Brush Tool": "修复画笔工具",
+        "Patch Tool": "修补工具",
+        "Content-Aware Move Tool": "内容感知移动工具",
+        "Red Eye Tool": "红眼工具",
+        "Clone Stamp Tool": "仿制图章工具",
+        "Pattern Stamp Tool": "图案图章工具",
+        "History Brush Tool": "历史记录画笔工具",
+        "Art History Brush Tool": "历史记录艺术画笔工具",
+        "Eraser Tool": "橡皮擦工具",
+        "Background Eraser Tool": "背景橡皮擦工具",
+        "Magic Eraser Tool": "魔术橡皮擦工具",
+        "Gradient Tool": "渐变工具",
+        "Paint Bucket Tool": "油漆桶工具",
+        "Blur Tool": "模糊工具",
+        "Sharpen Tool": "锐化工具",
+        "Smudge Tool": "涂抹工具",
+        "Dodge Tool": "减淡工具",
+        "Burn Tool": "加深工具",
+        "Sponge Tool": "海绵工具",
+        "Pen Tool": "钢笔工具",
+        "Freeform Pen Tool": "自由钢笔工具",
+        "Add Anchor Point Tool": "添加锚点工具",
+        "Delete Anchor Point Tool": "删除锚点工具",
+        "Convert Point Tool": "转换点工具",
+        "Horizontal Type Tool": "横排文字工具",
+        "Vertical Type Tool": "直排文字工具",
+        "Horizontal Type Mask Tool": "横排文字蒙版工具",
+        "Vertical Type Mask Tool": "直排文字蒙版工具",
+        "Path Selection Tool": "路径选择工具",
+        "Direct Selection Tool": "直接选择工具",
+        "Rectangle Tool": "矩形工具",
+        "Rounded Rectangle Tool": "圆角矩形工具",
+        "Ellipse Tool": "椭圆工具",
+        "Polygon Tool": "多边形工具",
+        "Line Tool": "直线工具",
+        "Custom Shape Tool": "自定形状工具",
+        "Hand Tool": "抓手工具",
+        "Rotate View Tool": "旋转视图工具",
+        "Zoom Tool": "缩放工具",
         "Adjustments applied": "已应用调整",
         "Already at the bottom layer": "已经是最底层图层",
         "Clone source set": "已设置仿制源",
@@ -12213,6 +12314,139 @@ self.onmessage = function(event) {
         }
         const count = this._setPixelSelectionMask(next, m.w, m.h, { coverage:true });
         this.toast('Selected similar: ' + count.toLocaleString() + ' px', 'info');
+    },
+
+    _selectionExchangePayload(name = 'Selection') {
+        const selection = this._selectionMask || this._maskFromMarqueeBounds();
+        if (!selection || !this._selectionBounds) return null;
+        const mask = this._encodeSelectionMask(selection);
+        if (!mask) return null;
+        return {
+            kind:'openshop-selection',
+            version:1,
+            name:this._safeText(name || 'Selection', 80) || 'Selection',
+            canvas:{ width:this.canvasW, height:this.canvasH },
+            bounds:{ ...this._selectionBounds },
+            mask
+        };
+    },
+    saveSelectionFile(name = 'Selection', deliver = null) {
+        const payload = this._selectionExchangePayload(name);
+        if (!payload) { this.toast('Create a selection before saving it', 'info'); return false; }
+        const base = this._safeText(name || 'selection', 80)
+            .replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'selection';
+        const blob = new Blob([JSON.stringify(payload)], { type:'application/vnd.openshop.selection+json' });
+        const saved = this._downloadBlob(blob, `${base}.openshop-selection`, deliver);
+        if (saved) this.toast(`Saved selection: ${payload.name}`, 'success');
+        else this.toast('Selection download was rejected by the browser', 'error');
+        return saved;
+    },
+    showSaveSelectionDialog() {
+        if (!this._selectionMask && !this._selectionBounds) {
+            this.toast('Create a selection before saving it', 'info');
+            return null;
+        }
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.innerHTML = `<div class="modal"><h3>Save Selection</h3>
+            <div class="modal-row"><label>Name</label><input id="selection-save-name" value="Selection" maxlength="80"></div>
+            <div class="modal-btns"><button class="btn" data-modal-close>Cancel</button>
+            <button class="btn btn-primary" data-modal-action>Save</button></div></div>`;
+        overlay.querySelector('[data-modal-action]').addEventListener('click', () => {
+            const name = overlay.querySelector('#selection-save-name').value.trim() || 'Selection';
+            if (this.saveSelectionFile(name)) overlay.remove();
+        });
+        document.body.appendChild(overlay);
+        requestAnimationFrame(() => overlay.classList.add('show'));
+        return overlay;
+    },
+    openSelectionFile() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.openshop-selection,application/vnd.openshop.selection+json,application/json';
+        input.setAttribute('aria-label', 'Load selection file');
+        input.addEventListener('change', () => {
+            const file = input.files?.[0];
+            if (file) void this.loadSelectionFile(file);
+        }, { once:true });
+        input.click();
+        return input;
+    },
+    async loadSelectionFile(file) {
+        try {
+            if (!file) throw new Error('Choose a selection file');
+            const maxBytes = Math.ceil(this._importLimits.maxImagePixels * 4 / 3) + 1024 * 1024;
+            if (Number(file.size) > maxBytes) throw new Error('Selection file exceeds the document mask limit');
+            const payload = JSON.parse(await file.text());
+            this._sanitizeProjectValue(payload, 0, { objects:0, layers:0 }, false);
+            if (payload?.kind !== 'openshop-selection' || Number(payload.version) !== 1) throw new Error('Unsupported selection file');
+            const width = Math.round(Number(payload.canvas?.width || 0));
+            const height = Math.round(Number(payload.canvas?.height || 0));
+            if (width !== this.canvasW || height !== this.canvasH) {
+                throw new Error(`Selection was saved for ${width} × ${height}, not ${this.canvasW} × ${this.canvasH}`);
+            }
+            const decoded = this._decodeSelectionMask(payload.mask);
+            if (!decoded || decoded.w !== width || decoded.h !== height) throw new Error('Selection dimensions are invalid');
+            const count = this._setPixelSelectionMask(decoded.mask, decoded.w, decoded.h, { coverage:true });
+            if (!count) throw new Error('Selection file is empty');
+            this.toast(`Loaded selection: ${this._safeText(payload.name || file.name, 80)}`, 'success');
+            return true;
+        } catch (error) {
+            this.toast(`Could not load selection: ${error.message}`, 'error');
+            return false;
+        }
+    },
+    transformSelection(spec = {}) {
+        const source = this._selectionMask || this._maskFromMarqueeBounds();
+        const bounds = this._selectionBounds;
+        if (!source || !bounds) { this.toast('Create a selection before transforming it', 'info'); return false; }
+        const width = Math.max(1, Math.round(this.canvasW));
+        const height = Math.max(1, Math.round(this.canvasH));
+        const values = [spec.x, spec.y, spec.w, spec.h].map(Number);
+        if (!values.every(Number.isFinite)) { this.toast('Selection transform values are invalid', 'error'); return false; }
+        const x = Math.max(0, Math.min(width - 1, Math.round(values[0])));
+        const y = Math.max(0, Math.min(height - 1, Math.round(values[1])));
+        const targetW = Math.max(1, Math.min(width - x, Math.round(values[2])));
+        const targetH = Math.max(1, Math.min(height - y, Math.round(values[3])));
+        const sourceX = Math.max(0, Math.min(source.w - 1, Math.round(bounds.x)));
+        const sourceY = Math.max(0, Math.min(source.h - 1, Math.round(bounds.y)));
+        const sourceW = Math.max(1, Math.min(source.w - sourceX, Math.round(bounds.w)));
+        const sourceH = Math.max(1, Math.min(source.h - sourceY, Math.round(bounds.h)));
+        const output = new Uint8Array(width * height);
+        for (let dy = 0; dy < targetH; dy++) {
+            const sy = sourceY + Math.min(sourceH - 1, Math.floor((dy + 0.5) * sourceH / targetH));
+            for (let dx = 0; dx < targetW; dx++) {
+                const sx = sourceX + Math.min(sourceW - 1, Math.floor((dx + 0.5) * sourceW / targetW));
+                output[(y + dy) * width + x + dx] = source.mask[sy * source.w + sx];
+            }
+        }
+        const count = this._setPixelSelectionMask(output, width, height, { coverage:true });
+        if (!count) { this.toast('Selection transform produced an empty result', 'error'); return false; }
+        this.toast(`Selection transformed to ${targetW} × ${targetH} at ${x}, ${y}`, 'success');
+        return true;
+    },
+    showTransformSelection() {
+        const bounds = this._selectionBounds;
+        if (!bounds) { this.toast('Create a selection before transforming it', 'info'); return null; }
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.innerHTML = `<div class="modal"><h3>Transform Selection</h3>
+            <div class="modal-row"><label>X</label><input id="selection-transform-x" type="number" min="0" max="${Math.max(0, this.canvasW - 1)}" value="${Math.round(bounds.x)}"></div>
+            <div class="modal-row"><label>Y</label><input id="selection-transform-y" type="number" min="0" max="${Math.max(0, this.canvasH - 1)}" value="${Math.round(bounds.y)}"></div>
+            <div class="modal-row"><label>Width</label><input id="selection-transform-w" type="number" min="1" max="${this.canvasW}" value="${Math.round(bounds.w)}"></div>
+            <div class="modal-row"><label>Height</label><input id="selection-transform-h" type="number" min="1" max="${this.canvasH}" value="${Math.round(bounds.h)}"></div>
+            <div class="modal-btns"><button class="btn" data-modal-close>Cancel</button>
+            <button class="btn btn-primary" data-modal-action>Apply</button></div></div>`;
+        overlay.querySelector('[data-modal-action]').addEventListener('click', () => {
+            const value = id => Number(overlay.querySelector(id).value);
+            if (this.transformSelection({
+                x:value('#selection-transform-x'), y:value('#selection-transform-y'),
+                w:value('#selection-transform-w'), h:value('#selection-transform-h')
+            })) overlay.remove();
+        });
+        document.body.appendChild(overlay);
+        requestAnimationFrame(() => overlay.classList.add('show'));
+        return overlay;
     },
 
     // Modify selection (expand, contract, feather, border, smooth)
@@ -20555,6 +20789,9 @@ self.onmessage = async function(e) {
             {label:'Color Range...',cat:'Select',fn:()=>this.showColorRange()},
             {label:'Grow Selection',cat:'Select',fn:()=>this.growSelection()},
             {label:'Similar',cat:'Select',fn:()=>this.similarSelection()},
+            {label:'Transform Selection...',cat:'Select',fn:()=>this.showTransformSelection()},
+            {label:'Save Selection...',cat:'Select',fn:()=>this.showSaveSelectionDialog()},
+            {label:'Load Selection...',cat:'Select',fn:()=>this.openSelectionFile()},
             {label:'Expand Selection...',cat:'Select',fn:()=>this.modifySelection('expand')},
             {label:'Contract Selection...',cat:'Select',fn:()=>this.modifySelection('contract')},
             {label:'Feather Selection...',cat:'Select',fn:()=>this.modifySelection('feather')},

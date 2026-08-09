@@ -244,6 +244,61 @@ test('keeps icon-led status feedback clear of document chrome @cross-browser', a
   expect(timelineClearance).toBeGreaterThanOrEqual(13);
 });
 
+test('transforms and round-trips portable selection files @cross-browser', async ({ page }, testInfo) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).evaluate(button => button.click());
+  await page.waitForFunction(() => getComputedStyle(document.getElementById('welcome-overlay')).display === 'none');
+
+  await page.locator('.menu-bar > .menu-item').filter({ hasText:/^Select/ }).click();
+  await expect(page.getByText('Transform Selection...', { exact:true })).toBeVisible();
+  await expect(page.getByText('Save Selection...', { exact:true })).toBeVisible();
+  await expect(page.getByText('Load Selection...', { exact:true })).toBeVisible();
+  if (testInfo.project.name === 'chromium') {
+    await expect(page).toHaveScreenshot('openshop-select-menu.png', {
+      animations:'disabled',
+      fullPage:false,
+      maxDiffPixelRatio:0.03
+    });
+  }
+  await page.keyboard.press('Escape');
+
+  await page.evaluate(() => {
+    OS.createNewDocument(8, 8, null, { resetProject:true, clean:true });
+    const mask = new Uint8Array(64);
+    for (let y = 1; y < 3; y++) for (let x = 1; x < 3; x++) mask[y * 8 + x] = 255;
+    OS._setPixelSelectionMask(mask, 8, 8, { coverage:true });
+  });
+
+  const transformed = await page.evaluate(() => {
+    const applied = OS.transformSelection({ x:3, y:2, w:4, h:3 });
+    return { applied, bounds:{ ...OS._selectionBounds }, count:OS._selectionMask.count };
+  });
+  expect(transformed).toEqual({ applied:true, bounds:{ x:3, y:2, w:4, h:3 }, count:12 });
+
+  const downloadPromise = page.waitForEvent('download');
+  expect(await page.evaluate(() => OS.saveSelectionFile('Subject selection'))).toBe(true);
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('Subject_selection.openshop-selection');
+
+  const loaded = await page.evaluate(async () => {
+    const payload = OS._selectionExchangePayload('Round trip');
+    OS.clearSelection();
+    const file = new File([JSON.stringify(payload)], 'round-trip.openshop-selection', {
+      type:'application/vnd.openshop.selection+json'
+    });
+    const success = await OS.loadSelectionFile(file);
+    return { success, bounds:{ ...OS._selectionBounds }, count:OS._selectionMask.count };
+  });
+  expect(loaded).toEqual({ success:true, bounds:{ x:3, y:2, w:4, h:3 }, count:12 });
+
+  expect(await page.evaluate(async () => {
+    const payload = OS._selectionExchangePayload('Wrong canvas');
+    payload.canvas.width = 9;
+    return OS.loadSelectionFile(new File([JSON.stringify(payload)], 'wrong.openshop-selection'));
+  })).toBe(false);
+  await expect(page.locator('#toast-container .toast.error').last()).toContainText('not 8 × 8');
+});
+
 test('turns the Motion workspace into a fitted frame timeline @cross-browser', async ({ page }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).evaluate(button => button.click());

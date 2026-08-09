@@ -31,8 +31,13 @@ All notable changes to Openshop will be documented in this file.
 - Lifted transient feedback above the document dock and gave success, info,
   warning, and error messages distinct icon-led treatments. Timeline messages
   now clear the open frame tray instead of covering its controls.
+- Completed the generated Select menu with a real selection transform and
+  portable Save/Load Selection workflows. Pixel and feather coverage round-trip
+  through bounded `.openshop-selection` files with canvas-size validation.
 
 ### Fixed
+- Restored Chinese coverage for the registry-generated tool rail, family
+  summaries, and Move options introduced by the studio redesign.
 - The seven top-level menu roots had only a 13px-high pointer target after the
   visual redesign; their interactive region now spans the full product bar.
 - Automatic narrow-screen and explicitly selected Mobile workspaces now share
