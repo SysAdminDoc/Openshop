@@ -200,6 +200,50 @@ test('frames desktop documents with persistent measured rulers @cross-browser', 
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('os_prefs')).rulersVisible)).toBe(true);
 });
 
+test('keeps icon-led status feedback clear of document chrome @cross-browser', async ({ page }) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).evaluate(button => button.click());
+  await page.evaluate(() => {
+    document.getElementById('toast-container').replaceChildren();
+    OS.toast('Saved locally', 'success');
+    OS.toast('Review compatibility', 'warning');
+    OS.toast('Could not export', 'error');
+    OS.toast('Workspace changed', 'info');
+  });
+
+  const feedback = await page.locator('#toast-container .toast').evaluateAll(elements => elements.map(element => ({
+    type:[...element.classList].find(value => value !== 'toast' && value !== 'show'),
+    text:element.textContent,
+    icon:getComputedStyle(element, '::before').content,
+    minHeight:getComputedStyle(element).minHeight
+  })));
+  expect(feedback).toEqual([
+    { type:'success', text:'Saved locally', icon:'"✓"', minHeight:'42px' },
+    { type:'warning', text:'Review compatibility', icon:'"!"', minHeight:'42px' },
+    { type:'error', text:'Could not export', icon:'"×"', minHeight:'42px' },
+    { type:'info', text:'Workspace changed', icon:'"i"', minHeight:'42px' }
+  ]);
+
+  const clearance = await page.evaluate(() => {
+    const toast = document.querySelector('#toast-container .toast:last-child').getBoundingClientRect();
+    const dock = document.getElementById('bottom-tabs').getBoundingClientRect();
+    return dock.top - toast.bottom;
+  });
+  expect(clearance).toBeGreaterThanOrEqual(13);
+
+  await page.evaluate(() => {
+    document.getElementById('toast-container').replaceChildren();
+    OS.setWorkspaceMode('motion', { announce:false });
+    OS.toast('Timeline ready', 'success');
+  });
+  const timelineClearance = await page.evaluate(() => {
+    const toast = document.querySelector('#toast-container .toast').getBoundingClientRect();
+    const timeline = document.getElementById('timeline-panel').getBoundingClientRect();
+    return timeline.top - toast.bottom;
+  });
+  expect(timelineClearance).toBeGreaterThanOrEqual(13);
+});
+
 test('turns the Motion workspace into a fitted frame timeline @cross-browser', async ({ page }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).evaluate(button => button.click());

@@ -1420,6 +1420,47 @@ input[type="range"]::-moz-range-thumb:hover{transform:scale(1.15)}
 }
 #statusbar .sep{background:var(--border-active);opacity:.85}
 #zoom-display{color:var(--text-secondary);min-width:48px;min-height:24px}
+/* Keep transient feedback above the document dock instead of covering it. */
+#toast-container{
+  bottom:calc(var(--statusbar-h) + var(--bottom-tabs-h) + 22px);
+  gap:8px;
+}
+html[data-os-bottom-tab="timeline"] #toast-container{
+  bottom:calc(var(--statusbar-h) + var(--bottom-tabs-h) + 174px);
+}
+body.fullscreen #toast-container{bottom:24px}
+.toast{
+  min-width:138px;
+  min-height:42px;
+  padding:8px 14px 8px 9px;
+  gap:9px;
+  border:1px solid var(--border-active);
+  border-radius:9px;
+  background:linear-gradient(180deg,rgba(18,30,47,.97),rgba(9,16,27,.97));
+  box-shadow:0 16px 38px rgba(0,0,0,.42),inset 0 1px rgba(255,255,255,.04);
+  font-size:12px;
+  font-weight:600;
+}
+.toast::before{
+  content:'i';
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:22px;
+  height:22px;
+  flex:0 0 22px;
+  border:1px solid color-mix(in srgb,var(--accent-hover) 58%,transparent);
+  border-radius:50%;
+  color:var(--accent-hover);
+  background:color-mix(in srgb,var(--accent) 12%,transparent);
+  font:700 11px/1 'JetBrains Mono',monospace;
+}
+.toast.success{border-color:color-mix(in srgb,var(--success) 52%,var(--border))}
+.toast.success::before{content:'✓';color:var(--success);border-color:color-mix(in srgb,var(--success) 58%,transparent);background:color-mix(in srgb,var(--success) 10%,transparent)}
+.toast.warning{border-color:color-mix(in srgb,var(--warning) 55%,var(--border))}
+.toast.warning::before{content:'!';color:var(--warning);border-color:color-mix(in srgb,var(--warning) 62%,transparent);background:color-mix(in srgb,var(--warning) 10%,transparent)}
+.toast.error{border-color:color-mix(in srgb,var(--danger) 58%,var(--border))}
+.toast.error::before{content:'×';color:var(--danger);border-color:color-mix(in srgb,var(--danger) 62%,transparent);background:color-mix(in srgb,var(--danger) 10%,transparent)}
 /* WCAG 2.2 target size: every pointer target is at least 24x24 CSS pixels. */
 .ready-state{
   display:flex;

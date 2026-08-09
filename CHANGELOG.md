@@ -28,6 +28,9 @@ All notable changes to Openshop will be documented in this file.
 - Made the mockup's measured canvas frame the desktop default. Rulers now sit
   between tool options and artwork, disappear for blank/compact workspaces, and
   remember the user's View-menu or Preferences choice.
+- Lifted transient feedback above the document dock and gave success, info,
+  warning, and error messages distinct icon-led treatments. Timeline messages
+  now clear the open frame tray instead of covering its controls.
 
 ### Fixed
 - The seven top-level menu roots had only a 13px-high pointer target after the
