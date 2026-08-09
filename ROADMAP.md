@@ -13,14 +13,12 @@ button was looked at — not that the tool works. See P0 below.
 ## P0 — the e2e suite is red at HEAD (found 2026-08-08)
 
 The Chromium suite had **10 failures at the v0.29.0 tree** before any of today's work.
-Six are fixed; the five below are open. None of them was caught before shipping,
+Eight are fixed; the two below are open. None of them was caught before shipping,
 which is the more interesting problem: a release went out on a red suite.
 
 | # | Test | What it reports |
 |---|------|-----------------|
 | 2 | `records validated commands and replays mixed edits as one atomic action` | Replay produces one entry more/less than the recording. Command-registry regression, likely from the tool-registry rebuild. |
-| 3 | `resolves one mobile layout rather than two blocks that fight each other` | Two competing layout blocks resolve at mobile width. |
-| 4 | `keeps one tablet block with the winning panel width` | Same class of defect at tablet width. |
 | 5 | `runs the Photon WASM backend for real on the operation it is allowed` | Photon parity check fails on the one allowlisted op. |
 
 Fixed on 2026-08-08 and kept here only as the record: WCAG contrast on the selected

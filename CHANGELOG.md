@@ -4,7 +4,18 @@ All notable changes to Openshop will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Reimagined the complete editor shell from image-generated design references,
+  including all seven top-menu states, command search in the product bar, a
+  synchronized floating canvas zoom HUD, denser inspector cards, split color
+  controls, and a more deliberate local-first status treatment. The approved
+  master, menu board, and Select-state mockups are retained under `design/`.
+
 ### Fixed
+- Automatic narrow-screen and explicitly selected Mobile workspaces now share
+  one bottom-dock geometry. The horizontal tool rail and timeline clear the
+  bottom tabs, tool families collapse to icon-only targets, and transient status
+  messages no longer cover the rail.
 - Storage-backed preferences, palettes, presets, imported assets, workspace settings,
   recent files, themes, plugin consent, and strict-offline state now detect quota
   failures, record diagnostics, and show an error instead of claiming persistence.

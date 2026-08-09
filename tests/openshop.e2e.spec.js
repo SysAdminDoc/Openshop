@@ -98,6 +98,25 @@ test('loads the editor shell and supports core UI interactions @cross-browser', 
   expect(pageErrors).toEqual([]);
 });
 
+test('opens command search and keeps both zoom readouts synchronized @cross-browser', async ({ page }) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).evaluate(button => button.click());
+
+  const commandButton = page.getByRole('button', { name: 'Open command palette' });
+  await expect(commandButton).toBeVisible();
+  await commandButton.evaluate(button => button.click());
+  await expect(page.locator('#cmd-palette')).toHaveClass(/visible/);
+  await expect(page.locator('#cmd-input')).toBeFocused();
+  await page.evaluate(() => OS.closeCmdPalette());
+
+  const before = await page.locator('#canvas-zoom-display').textContent();
+  await page.getByRole('button', { name: 'Zoom in' }).evaluate(button => button.click());
+  const canvasReadout = page.locator('#canvas-zoom-display');
+  const statusReadout = page.locator('#zoom-display');
+  await expect(canvasReadout).not.toHaveText(before);
+  await expect(statusReadout).toHaveText(await canvasReadout.textContent());
+});
+
 test('navigates Layers and History listboxes without a pointer @cross-browser', async ({ page }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).click();
@@ -6417,14 +6436,14 @@ test('resolves one mobile layout rather than two blocks that fight each other', 
   expect(layout.toolOptions.fontSize).toBe('10px');
   expect(layout.statusbarDisplay).toBe('none');
 
-  // The floating toolbar geometry wins over the old flush-bottom bar.
+  // The floating toolbar geometry clears the bottom panel tabs.
   expect(layout.toolbar.left).toBe(6);
   expect(layout.toolbar.right).toBe(6);
-  expect(layout.toolbar.bottom).toBe(6);
+  expect(layout.toolbar.bottom).toBe(46);
   expect(layout.toolbar.height).toBe(46);
 
-  // The timeline clears the floating toolbar instead of sitting under it.
-  expect(layout.timeline.bottom).toBe(58);
+  // The timeline clears both the floating toolbar and the bottom panel tabs.
+  expect(layout.timeline.bottom).toBe(98);
   expect(layout.timeline.left).toBe(6);
 });
 
@@ -6443,7 +6462,7 @@ test('keeps one tablet block with the winning panel width', async ({ page }) => 
 
   expect(tablet.blocks).toBe(1);
   expect(tablet.panelWidth).toBe('248px');
-  expect(tablet.toolbarWidth).toBe('58px');
+  expect(tablet.toolbarWidth).toBe('112px');
 });
 
 test('updates document language and direction when the locale changes @cross-browser', async ({ page }) => {
