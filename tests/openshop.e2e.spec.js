@@ -3734,6 +3734,22 @@ test('retains the positioned menu and managed-dialog fallback without CSS anchor
   await expect(file).toBeFocused();
 });
 
+test('matches tool shortcuts by physical key under a Cyrillic layout @cross-browser', async ({ page }) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).click();
+
+  const result = await page.evaluate(() => {
+    OS.setTool('select');
+    const event = new KeyboardEvent('keydown', {
+      key: 'с', code: 'KeyC', bubbles: true, cancelable: true
+    });
+    document.dispatchEvent(event);
+    return { tool: OS.state.tool, defaultPrevented: event.defaultPrevented };
+  });
+
+  expect(result).toEqual({ tool: 'crop', defaultPrevented: true });
+});
+
 test('drives the whole menubar from the keyboard with clean accessible names @cross-browser', async ({ page }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).click();

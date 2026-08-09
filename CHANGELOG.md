@@ -41,6 +41,10 @@ All notable changes to Openshop will be documented in this file.
   fullscreen now expose their current state visually and through `aria-checked`.
 
 ### Fixed
+- Resolve letter and digit shortcuts by physical key so Ctrl commands and tool
+  bindings continue to work under non-Latin layouts; shortcut surfaces now use
+  the browser's keyboard layout map when available and retain US labels as a
+  fallback.
 - Restored Chinese coverage for the registry-generated tool rail, family
   summaries, and Move options introduced by the studio redesign.
 - The seven top-level menu roots had only a 13px-high pointer target after the

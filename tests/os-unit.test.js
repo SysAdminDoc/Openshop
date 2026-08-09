@@ -650,6 +650,37 @@ describe('OpenShop core object', () => {
     expect(OS.setTool).toHaveBeenCalledWith('brush');
   });
 
+  it('uses the physical key code when the keyboard layout changes the key label', () => {
+    const OS = loadOpenShop();
+    OS.canvas = createCanvasMock();
+    quietUiMethods(OS);
+    OS.setTool = vi.fn();
+    OS.undo = vi.fn();
+
+    OS._initKeyboardShortcuts();
+    document.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'с', code: 'KeyC', bubbles: true
+    }));
+    document.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'з', code: 'KeyZ', ctrlKey: true, bubbles: true
+    }));
+
+    expect(OS.setTool).toHaveBeenCalledWith('crop');
+    expect(OS.undo).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders shortcut labels from the available keyboard layout map', () => {
+    const OS = loadOpenShop();
+    OS._keyboardLayoutMap = new Map([
+      ['KeyC', 'с'], ['KeyK', 'л'], ['Digit1', '&']
+    ]);
+
+    expect(OS._displayShortcut('Ctrl+C')).toBe('Ctrl+с');
+    expect(OS._displayShortcut('Ctrl+K')).toBe('Ctrl+л');
+    expect(OS._displayShortcut('Ctrl+1')).toBe('Ctrl+&');
+    expect(OS._displayShortcut('Ctrl++')).toBe('Ctrl++');
+  });
+
   it('mirrors canvas state into hidden accessibility nodes', () => {
     const OS = loadOpenShop();
     const canvasObject = { name: 'Subject', type: 'image' };

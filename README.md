@@ -100,7 +100,7 @@ Heavy filters (Oil Paint, Tilt Shift, Unsharp Mask, Posterize, Threshold, Vignet
 | **Context Menus** | Right-click for contextual actions |
 | **Rulers & Guides** | Draggable guides with snapping and pixel grid at high zoom |
 | **Grid Overlay** | Toggleable composition grid |
-| **Keyboard Shortcuts** | Full Photoshop-style shortcut set (40+ bindings) |
+| **Keyboard Shortcuts** | Full Photoshop-style shortcut set (40+ bindings), matched by physical key across keyboard layouts with layout-aware labels |
 | **Marching Ants** | Animated selection borders |
 | **Welcome Screen** | Template presets for common canvas sizes |
 | **Tab Toggle** | `Tab` hides all panels for distraction-free editing |

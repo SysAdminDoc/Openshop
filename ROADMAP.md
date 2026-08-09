@@ -61,13 +61,6 @@ button was looked at — not that the tool works. See the active items below.
 
 ### P1 — Trust, accessibility, and interoperability
 
-- [ ] P1 — Resolve keyboard shortcuts by physical key
-  Why: every shortcut goes through `e.key.toLowerCase()`. Under Cyrillic, Greek, Hebrew, Arabic or Thai layouts `e.key` is a non-Latin character, so the entire advertised "Photoshop-style shortcut set (40+ bindings)" — including Ctrl+Z, Ctrl+S and every single-letter tool key — is unreachable. Dvorak and Colemak shift it rather than break it. The project ships a `zh` locale and asks for more.
-  Evidence: `index.html:21163`, `21213`, `21287`; zero occurrences of `e.code`; https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/code
-  Touches: `index.html` global keydown handler, shortcut tables, the shortcut labels in menus and the command palette.
-  Acceptance: shortcuts match on `event.code` for letter/digit keys with `event.key` retained for punctuation and layout-specific keys; displayed labels use `navigator.keyboard.getLayoutMap()` where available and the US label otherwise; a Playwright test dispatching `KeyboardEvent` with a Cyrillic `key` and a Latin `code` selects the right tool.
-  Complexity: M
-
 - [ ] P1 — Remove the Google Fonts dependency
   Why: a blocking `<link rel="stylesheet">` to `fonts.googleapis.com` runs on every page view, with `fonts.gstatic.com` in `font-src`. It contradicts the "Nothing sent" privacy position that the status bar advertises, it is the first thing the network ledger records, it fails on the `file://` cold-offline lane (silently falling back to system fonts), and LG München 3 O 17493/20 awarded damages against a site operator for exactly this transfer.
   Evidence: `index.html:299-300`, CSP `style-src`/`font-src` at `index.html:12`, README "Privacy and Network Use" table; https://gdprhub.eu/index.php?section=3&title=LG_M%C3%BCnchen_-_3_O_17493%2F20

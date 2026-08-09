@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-KfYDxc9or9q9QbTwzl8IubfFlfo7+Z+kE/KAjR6K42o=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-y+8E33o0S3VSUJhRMX2JhmO7zGchOJ44KHHXuABEH7Y=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -11113,7 +11113,8 @@ self.onmessage = function(event) {
                 name.textContent = tool.label;
                 const shortcut = document.createElement('span');
                 shortcut.className = 'tool-shortcut';
-                shortcut.textContent = tool.shortcut || '';
+                if (tool.shortcut) shortcut.dataset.osShortcut = tool.shortcut;
+                shortcut.textContent = this._displayShortcut(tool.shortcut || '');
                 button.append(memberVisual, name, shortcut);
                 flyout.appendChild(button);
             });
@@ -20772,6 +20773,78 @@ self.onmessage = async function(e) {
     },
 
     // ====================== PHASE 8: COMMAND PALETTE ======================
+    _physicalShortcutKey(event) {
+        const code = String(event?.code || '');
+        const match = /^(?:Key([A-Z])|Digit([0-9])|Numpad([0-9]))$/.exec(code);
+        if (match) return (match[1] || match[2] || match[3]).toLowerCase();
+        return String(event?.key || '').toLowerCase();
+    },
+    _keyboardLayoutMap: null,
+    _keyboardLayoutDiscoveryStarted: false,
+    _startKeyboardLayoutDiscovery() {
+        if (this._keyboardLayoutDiscoveryStarted) return;
+        this._keyboardLayoutDiscoveryStarted = true;
+        const keyboard = typeof navigator !== 'undefined' ? navigator.keyboard : null;
+        if (typeof keyboard?.getLayoutMap !== 'function') return;
+        Promise.resolve().then(() => keyboard.getLayoutMap()).then(layout => {
+            if (!layout || typeof layout.get !== 'function') return;
+            this._keyboardLayoutMap = layout;
+            this._refreshShortcutLabels();
+        }).catch(() => {
+            // Layout discovery is an enhancement. The canonical US labels stay
+            // visible when a browser refuses the optional keyboard API.
+        });
+    },
+    _layoutShortcutToken(token) {
+        const value = String(token || '').trim();
+        if (!/^(?:[A-Za-z]|[0-9])$/.test(value) || !this._keyboardLayoutMap) return value;
+        const code = /^[A-Za-z]$/.test(value) ? `Key${value.toUpperCase()}` : `Digit${value}`;
+        const mapped = this._keyboardLayoutMap.get(code);
+        if (typeof mapped !== 'string' || !mapped) return value;
+        return /^[A-Za-z]$/.test(mapped) ? mapped.toUpperCase() : mapped;
+    },
+    _displayShortcut(shortcut) {
+        return String(shortcut || '').split(' / ').map(alternative => alternative.split('+').map(token => {
+            const trimmed = token.trim();
+            return trimmed ? this._layoutShortcutToken(trimmed) : '';
+        }).join('+')).join(' / ');
+    },
+    _refreshShortcutLabels() {
+        const update = (selector, read = element => element.textContent.trim()) => {
+            document.querySelectorAll(selector).forEach(element => {
+                const raw = element.dataset.osShortcut || read(element);
+                if (!raw) return;
+                element.dataset.osShortcut = raw;
+                element.textContent = this._displayShortcut(raw);
+            });
+        };
+        update('.dd-shortcut');
+        update('.tool-shortcut');
+        update('.shortcut-grid [data-os-shortcut]');
+        update('.cmd-shortcut');
+        update('.ctx-shortcut');
+        document.querySelectorAll('.dd-shortcut').forEach(shortcut => {
+            const item = shortcut.closest('.dd-item');
+            if (item) item.setAttribute('aria-keyshortcuts', this._displayShortcut(shortcut.dataset.osShortcut));
+        });
+
+        const commandShortcut = this._displayShortcut('Ctrl+K');
+        const commandLaunch = document.getElementById('command-launch');
+        if (commandLaunch) {
+            commandLaunch.title = `Open command palette (${commandShortcut})`;
+            const key = commandLaunch.querySelector('kbd');
+            if (key) key.textContent = commandShortcut.replace(/\+/g, ' ');
+        }
+        const launchShortcut = document.querySelector('.launch-shortcut');
+        if (launchShortcut) launchShortcut.textContent = commandShortcut.replace('+', ' + ');
+        const commandInput = document.getElementById('cmd-input');
+        if (commandInput) commandInput.placeholder = `Type a command... (${commandShortcut})`;
+
+        const palette = document.getElementById('cmd-palette');
+        if (palette?.classList.contains('visible')) {
+            this.filterCommands(commandInput?.value || '');
+        }
+    },
     _commands: null,
     _getCommands() {
         if (this._commands) return this._commands;
@@ -20910,8 +20983,9 @@ self.onmessage = async function(e) {
     initCmdPalette() {
         if (this._cmdPaletteReady) return;
         this._cmdPaletteReady = true;
+        this._startKeyboardLayoutDiscovery();
         document.addEventListener('keydown', e => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); this.toggleCmdPalette(); }
+            if ((e.ctrlKey || e.metaKey) && this._physicalShortcutKey(e) === 'k') { e.preventDefault(); this.toggleCmdPalette(); }
             if (e.key === 'Escape') {
                 this.closeCmdPalette();
                 const ctx = document.getElementById('context-menu'); if (ctx) ctx.classList.remove('visible');
@@ -20952,7 +21026,8 @@ self.onmessage = async function(e) {
             if (c.key) {
                 const shortcut = document.createElement('span');
                 shortcut.className = 'cmd-shortcut';
-                shortcut.textContent = this._safeText(c.key, 30);
+                shortcut.dataset.osShortcut = this._safeText(c.key, 30);
+                shortcut.textContent = this._displayShortcut(c.key);
                 item.appendChild(shortcut);
             }
             const cat = document.createElement('span');
@@ -21175,7 +21250,8 @@ self.onmessage = async function(e) {
                 if (it.key) {
                     const shortcut = document.createElement('span');
                     shortcut.className = 'ctx-shortcut';
-                    shortcut.textContent = this._safeText(it.key, 30);
+                    shortcut.dataset.osShortcut = this._safeText(it.key, 30);
+                    shortcut.textContent = this._displayShortcut(it.key);
                     item.appendChild(shortcut);
                 }
                 if (it.children) {
@@ -22512,9 +22588,12 @@ self.onmessage = async function(e) {
             ['S','Clone Stamp'],['I','Eyedropper'],['J','Healing'],['A','Arrow'],
             ['N','Sticky Note'],['Alt+Click','Set Clone Source'],
         ];
+        const escape = value => this._safeText(value, 40).replace(/[&<>"']/g, character => ({
+            '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+        }[character]));
         const o = document.createElement('div'); o.className = 'modal-overlay';
         o.innerHTML = `<div class="modal" style="min-width:400px"><h3>Keyboard Shortcuts</h3>
-            <dl class="shortcut-grid">${shortcuts.map(([k,v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+            <dl class="shortcut-grid">${shortcuts.map(([k,v]) => `<dt data-os-shortcut="${escape(k)}">${escape(this._displayShortcut(k))}</dt><dd>${escape(v)}</dd>`).join('')}</dl>
             <div class="modal-btns"><button class="btn" data-modal-close>Close</button></div></div>`;
         document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('show'));
     },
@@ -22523,9 +22602,11 @@ self.onmessage = async function(e) {
     _clipboard: null,
     _pixelClipboard: null,
     _initKeyboardShortcuts() {
+        this._startKeyboardLayoutDiscovery();
         document.addEventListener('keydown', e => {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
             const ctrl = e.ctrlKey || e.metaKey;
+            const shortcutKey = this._physicalShortcutKey(e);
 
             // WCAG 2.2 "Dragging Movements": moving, resizing, and reordering
             // must all have a keyboard path, not drag only. This runs before
@@ -22534,7 +22615,7 @@ self.onmessage = async function(e) {
 
             // === Ctrl/Cmd shortcuts ===
             if (ctrl) {
-                switch(e.key.toLowerCase()) {
+                switch(shortcutKey) {
                     case 'z':
                         e.preventDefault();
                         if (e.shiftKey) this.redo(); else this.undo();
@@ -22591,7 +22672,7 @@ self.onmessage = async function(e) {
                         e.preventDefault(); this.newImage(); return;
                 }
                 // Ctrl+Shift combos
-                if (e.shiftKey && e.key.toLowerCase() === 'i') {
+                if (e.shiftKey && shortcutKey === 'i') {
                     e.preventDefault();
                     this.invertSelection();
                     return;
@@ -22640,10 +22721,6 @@ self.onmessage = async function(e) {
                     e.preventDefault();
                     this.togglePanels();
                     return;
-                case 'F':
-                case 'f':
-                    if (!ctrl) { this.toggleFullscreen(); return; }
-                    return;
                 case '[':
                     this.state.brushSize = Math.max(1, this.state.brushSize - 2);
                     this.setBrushSize(this.state.brushSize);
@@ -22652,21 +22729,20 @@ self.onmessage = async function(e) {
                     this.state.brushSize = Math.min(200, this.state.brushSize + 2);
                     this.setBrushSize(this.state.brushSize);
                     return;
-                case 'x':
-                case 'X':
-                    this.swapColors(); return;
-                case 'd':
-                case 'D':
-                    this.setFgColor('#000000'); this.setBgColor('#ffffff');
-                    this.toast('Colors reset', 'info'); return;
+            }
+
+            if (shortcutKey === 'f' && !ctrl) { this.toggleFullscreen(); return; }
+            if (shortcutKey === 'x' && !ctrl) { this.swapColors(); return; }
+            if (shortcutKey === 'd' && !ctrl) {
+                this.setFgColor('#000000'); this.setBgColor('#ffffff');
+                this.toast('Colors reset', 'info'); return;
             }
 
             // Tool switch shortcuts (single letter)
             const map = {v:'select',b:'brush',e:'eraser',t:'text',g:'gradient',c:'crop',z:'zoom',h:'pan',
                 l:'line',r:'rect',o:'circle',p:'pen',m:'marquee-rect',w:'magic-wand',s:'clone',i:'eyedropper',
                 j:'healing',n:'note',a:'arrow',u:'rect',k:'polygon'};
-            const lower = e.key.toLowerCase();
-            if (map[lower] && !ctrl) { e.preventDefault(); this.setTool(map[lower]); }
+            if (map[shortcutKey] && !ctrl) { e.preventDefault(); this.setTool(map[shortcutKey]); }
         });
         // Space key release - exit temporary pan
         document.addEventListener('keyup', e => {
