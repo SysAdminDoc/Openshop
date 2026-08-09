@@ -5,6 +5,10 @@ All notable changes to Openshop will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Added versioned preference migration with forward-compatible unknown-key
+  preservation, plus a validated settings bundle for exporting and importing
+  preferences, palettes, brushes, gradients, presets, theme, and language.
+  Preferences can now be reset to defaults through a confirmed dialog.
 - Documented local system UI and monospace font stacks and removed the Google
   Fonts request from the standalone page, hosted shell, CSP, and runtime manifest.
 - Reimagined the complete editor shell from image-generated design references,

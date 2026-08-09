@@ -98,10 +98,62 @@ describe('OpenShop core object', () => {
 
     expect(OS._persistPreferences(null, { announce:false })).toBe(true);
     expect(JSON.parse(localStorage.getItem('os_prefs'))).toMatchObject({
-      version:1,
+      version:2,
       accent:'#4f72d8',
       rulersVisible:false
     });
+  });
+
+  it('migrates a v1 preference record through v2 without dropping unknown keys', () => {
+    const OS = loadOpenShop();
+    const migrated = OS._migratePreferences({ version:1, defaultW:'800', futureSetting:{ keep:true } });
+
+    expect(migrated).toMatchObject({
+      sourceVersion:1,
+      steps:['schema-1-to-2'],
+      state:{ version:2, futureSetting:{ keep:true } }
+    });
+    OS._applyPreferenceRecord(migrated.state);
+    OS._persistPreferences(null, { announce:false });
+    expect(JSON.parse(localStorage.getItem('os_prefs'))).toMatchObject({
+      version:2,
+      defaultW:800,
+      futureSetting:{ keep:true }
+    });
+  });
+
+  it('round-trips an imported settings bundle and resets all saved settings atomically', () => {
+    const OS = loadOpenShop();
+    OS.toast = vi.fn();
+    OS._renderSavedPalette = vi.fn();
+    OS._renderImportedBrushes = vi.fn();
+    OS._renderGradientPresets = vi.fn();
+    OS._syncRulerChrome = vi.fn();
+    OS._syncSessionWorkspace = vi.fn();
+    OS.setTheme = vi.fn((theme, { persist } = {}) => { OS._currentTheme = theme; expect(persist).toBe(false); });
+    OS.setLocale = vi.fn(language => { OS._lang = language; });
+    const bundle = {
+      kind:'openshop-settings', version:1,
+      prefs:{ version:1, defaultW:800, futureSetting:'preserve me' },
+      palette:['#ABCDEF', 'javascript:alert(1)'],
+      brushes:[], gradients:[], presets:[], theme:'midnight', language:'zh'
+    };
+
+    expect(OS._applySettingsBundle(bundle)).toBe(true);
+    expect(OS._settingsBundle()).toMatchObject({
+      kind:'openshop-settings', version:1, theme:'midnight', language:'zh',
+      prefs:{ version:2, defaultW:800, futureSetting:'preserve me' },
+      palette:['#abcdef']
+    });
+    expect(JSON.parse(localStorage.getItem('os_brushes'))).toEqual([]);
+    expect(localStorage.getItem('os_theme')).toBe('midnight');
+    expect(localStorage.getItem('os_lang')).toBe('zh');
+
+    expect(OS._resetPreferencesToDefaults()).toBe(true);
+    expect(JSON.parse(localStorage.getItem('os_prefs'))).toMatchObject({ version:2, defaultW:1920, gridSize:20 });
+    expect(JSON.parse(localStorage.getItem('os_palette'))).toEqual([]);
+    expect(localStorage.getItem('os_theme')).toBe('default');
+    expect(localStorage.getItem('os_lang')).toBe('en');
   });
 
   it('enables stylus pressure only after observing pressure variance', () => {

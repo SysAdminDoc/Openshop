@@ -6549,6 +6549,22 @@ test('persists preferences across a reload instead of only saying it did', async
   await page.getByRole('button', { name: 'Enter Studio' }).click();
 
   await page.evaluate(() => OS.showPreferences());
+  await expect(page.getByRole('button', { name: 'Export Settings' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Import Settings' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Reset to Defaults' })).toBeVisible();
+  const exported = await page.evaluate(() => {
+    let download = null;
+    OS._downloadBlob = (blob, filename) => { download = { filename, type: blob.type, size: blob.size }; };
+    const bundle = OS.exportSettings();
+    return { download, bundle };
+  });
+  expect(exported.download).toMatchObject({ filename: 'openshop-settings.json', type: 'application/json' });
+  expect(exported.bundle).toMatchObject({ kind: 'openshop-settings', version: 1, prefs: { version: 2 } });
+  await page.getByRole('button', { name: 'Reset to Defaults' }).click();
+  const resetOverlay = page.locator('.modal-overlay').filter({ hasText: 'Reset preferences?' });
+  await expect(resetOverlay.getByRole('heading', { name: 'Reset preferences?' })).toBeVisible();
+  await resetOverlay.getByRole('button', { name: 'Cancel' }).click();
+  await expect(resetOverlay).toHaveCount(0);
   await page.locator('#pref-dw').fill('1234');
   await page.locator('#pref-dh').fill('789');
   await page.locator('#pref-grid').fill('42');
@@ -6560,7 +6576,7 @@ test('persists preferences across a reload instead of only saying it did', async
 
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('os_prefs')));
   expect(stored).toMatchObject({
-    version: 1, defaultW: 1234, defaultH: 789, gridSize: 42, snapTolerance: 7, maxHistory: 120, accent: '#aa3355'
+    version: 2, defaultW: 1234, defaultH: 789, gridSize: 42, snapTolerance: 7, maxHistory: 120, accent: '#aa3355'
   });
 
   // The whole set has to come back, not just the language.

@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-QZpjfE+dsWCPfTMEOaIEzuA8DW7ID7CWndreaQ+noco=' 'sha256-y+8E33o0S3VSUJhRMX2JhmO7zGchOJ44KHHXuABEH7Y=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-QZpjfE+dsWCPfTMEOaIEzuA8DW7ID7CWndreaQ+noco=' 'sha256-+Kv3nVO0RmfflgPT5Hx/KLv1gopXZVQ/TPlbKZNJ/Gg=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -5287,7 +5287,17 @@ const OS = {
     _pressureSupported: false,
     _inputCapabilityObservations: { visualViewportResize:0, orientationChange:0 },
     _inputCapabilityObserversReady: false,
-    _prefs: { gridSize: 20, historyStates: 120, defaultW: 1920, defaultH: 1080, theme: 'dark', snapTolerance: 5, stackNewObjects: false, vectorStrokes: false, rulersVisible: true, accent: null },
+    _preferenceSchemaVersion: 2,
+    _preferenceMigrationRegistry: Object.freeze({
+        1: stored => ({ ...stored, version: 2 })
+    }),
+    _preferenceKnownKeys: Object.freeze([
+        'version', 'defaultW', 'defaultH', 'gridSize', 'snapTolerance', 'maxHistory',
+        'stackNewObjects', 'vectorStrokes', 'rulersVisible', 'toolOptions', 'panelSizes', 'accent'
+    ]),
+    _lastPreferenceMigrationReport: null,
+    _preferenceExtras: {},
+    _prefs: { gridSize: 20, historyStates: 120, defaultW: 1920, defaultH: 1080, theme: 'dark', snapTolerance: 5, maxHistory: 120, stackNewObjects: false, vectorStrokes: false, rulersVisible: true, accent: null, toolOptions: {}, panelSizes: [] },
     _importLimits: {
         maxJsonBytes: 10 * 1024 * 1024,
         maxImageBytes: 100 * 1024 * 1024,
@@ -19354,8 +19364,107 @@ self.onmessage = async function(event) {
     },
 
     // ====================== PREFERENCES ======================
+    _preferenceDefaults() {
+        return {
+            defaultW:1920, defaultH:1080, gridSize:20, snapTolerance:5, maxHistory:120,
+            stackNewObjects:false, vectorStrokes:false, rulersVisible:true,
+            toolOptions:{}, panelSizes:[]
+        };
+    },
+    _migratePreferences(record) {
+        if (!record || typeof record !== 'object' || Array.isArray(record)) throw new Error('Preference data is invalid');
+        const sourceVersion = Number(record.version ?? 1);
+        if (!Number.isInteger(sourceVersion) || sourceVersion < 1 || sourceVersion > this._preferenceSchemaVersion) {
+            throw new Error(`Unsupported OpenShop preference schema ${Number.isFinite(sourceVersion) ? sourceVersion : 'unknown'}`);
+        }
+        let state = { ...record };
+        const steps = [];
+        for (let version = sourceVersion; version < this._preferenceSchemaVersion; version += 1) {
+            const migrate = this._preferenceMigrationRegistry[version];
+            if (typeof migrate !== 'function') throw new Error(`OpenShop preference schema ${version} has no registered migration`);
+            state = migrate(state);
+            if (!state || typeof state !== 'object' || Array.isArray(state)) {
+                throw new Error(`OpenShop preference migration ${version} returned invalid data`);
+            }
+            state = { ...state, version:version + 1 };
+            steps.push(`schema-${version}-to-${version + 1}`);
+        }
+        return { state, sourceVersion, steps };
+    },
+    _preferenceExtrasFor(record) {
+        const known = new Set(this._preferenceKnownKeys);
+        return Object.fromEntries(Object.entries(record || {}).filter(([key]) => !known.has(key)).slice(0, 120));
+    },
+    _normalizePreferenceRecord(record) {
+        const defaults = this._preferenceDefaults();
+        const clamp = (value, min, max, fallback) => {
+            const number = Number(value);
+            return Number.isFinite(number) ? Math.min(max, Math.max(min, Math.round(number))) : fallback;
+        };
+        const normalized = { ...(record || {}), version:this._preferenceSchemaVersion };
+        const limit = this._importLimits.maxImageDimension;
+        normalized.defaultW = clamp(normalized.defaultW, 1, limit, defaults.defaultW);
+        normalized.defaultH = clamp(normalized.defaultH, 1, limit, defaults.defaultH);
+        normalized.gridSize = clamp(normalized.gridSize, 1, 500, defaults.gridSize);
+        normalized.snapTolerance = clamp(normalized.snapTolerance, 0, 100, defaults.snapTolerance);
+        normalized.maxHistory = clamp(normalized.maxHistory, 10, 200, defaults.maxHistory);
+        normalized.stackNewObjects = normalized.stackNewObjects === true;
+        normalized.vectorStrokes = normalized.vectorStrokes === true;
+        normalized.rulersVisible = normalized.rulersVisible === undefined
+            ? defaults.rulersVisible
+            : Boolean(normalized.rulersVisible);
+        normalized.toolOptions = normalized.toolOptions && typeof normalized.toolOptions === 'object' && !Array.isArray(normalized.toolOptions)
+            ? Object.fromEntries(Object.entries(normalized.toolOptions).slice(0, 120))
+            : {};
+        normalized.panelSizes = Array.isArray(normalized.panelSizes)
+            ? normalized.panelSizes.slice(0, 8).map(value => clamp(value, this._panelMinHeight, 2000, this._panelMinHeight))
+            : [];
+        if (/^#[0-9a-fA-F]{6}$/.test(String(normalized.accent || ''))) normalized.accent = String(normalized.accent).toLowerCase();
+        else delete normalized.accent;
+        return normalized;
+    },
+    _applyPreferenceRecord(record) {
+        const normalized = this._normalizePreferenceRecord(record);
+        this._preferenceExtras = this._preferenceExtrasFor(normalized);
+        this._prefs.defaultW = normalized.defaultW;
+        this._prefs.defaultH = normalized.defaultH;
+        this.gridSize = normalized.gridSize;
+        this._prefs.snapTolerance = normalized.snapTolerance;
+        this.maxHistory = normalized.maxHistory;
+        this._prefs.maxHistory = normalized.maxHistory;
+        this._prefs.stackNewObjects = normalized.stackNewObjects;
+        this._prefs.vectorStrokes = normalized.vectorStrokes;
+        this._prefs.rulersVisible = normalized.rulersVisible;
+        this._prefs.toolOptions = normalized.toolOptions;
+        this._prefs.panelSizes = normalized.panelSizes;
+        this._prefs.accent = normalized.accent || null;
+        this.rulersVisible = normalized.rulersVisible;
+        if (normalized.accent) document.documentElement.style.setProperty('--accent', normalized.accent);
+        else document.documentElement.style.removeProperty('--accent');
+        return normalized;
+    },
+    _preferencePayload(accent = null) {
+        const requestedAccent = accent ?? this._prefs.accent;
+        return this._normalizePreferenceRecord({
+            ...this._preferenceExtras,
+            defaultW:this._prefs.defaultW,
+            defaultH:this._prefs.defaultH,
+            gridSize:this.gridSize,
+            snapTolerance:this._prefs.snapTolerance,
+            maxHistory:this.maxHistory,
+            stackNewObjects:Boolean(this._prefs.stackNewObjects),
+            vectorStrokes:Boolean(this._prefs.vectorStrokes),
+            rulersVisible:this.rulersVisible !== false,
+            toolOptions:this._prefs.toolOptions,
+            panelSizes:this._prefs.panelSizes,
+            ...( /^#[0-9a-fA-F]{6}$/.test(String(requestedAccent || ''))
+                ? { accent:String(requestedAccent).toLowerCase() }
+                : {} )
+        });
+    },
     showPreferences() {
         const o = document.createElement('div'); o.className = 'modal-overlay';
+        o.dataset.modalStackHost = 'true';
         o.innerHTML = `<div class="modal" style="min-width:380px"><h3>Preferences</h3>
             <div class="pref-section">
                 <h4>Canvas</h4>
@@ -19382,6 +19491,11 @@ self.onmessage = async function(event) {
                 <div class="pref-row"><label>Show rulers on desktop</label><input id="pref-rulers" type="checkbox" ${this.rulersVisible ? 'checked' : ''}></div>
                 <div class="pref-row"><label>Language</label><select id="pref-lang"><option value="en" ${this._lang === 'en' ? 'selected' : ''}>English</option><option value="zh" ${this._lang === 'zh' ? 'selected' : ''}>简体中文</option></select></div>
             </div>
+            <div class="pref-actions" style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px">
+                <button class="btn" type="button" data-pref-export>Export Settings</button>
+                <button class="btn" type="button" data-pref-import>Import Settings</button>
+                <button class="btn btn-danger" type="button" data-pref-reset>Reset to Defaults</button>
+            </div>
             <div class="modal-btns"><button class="btn" data-modal-close>Cancel</button>
             <button class="btn btn-primary" data-modal-action>Apply</button></div></div>`;
         // Show the accent that is actually in effect, otherwise pressing Apply
@@ -19390,6 +19504,9 @@ self.onmessage = async function(event) {
         const activeAccent = this._themeColor('--accent', '#3978ff');
         if (/^#[0-9a-fA-F]{6}$/.test(activeAccent)) accentInput.value = activeAccent.toLowerCase();
         o.querySelector('[data-modal-action]').addEventListener('click', () => this._applyPreferences(o));
+        o.querySelector('[data-pref-export]').addEventListener('click', () => this.exportSettings());
+        o.querySelector('[data-pref-import]').addEventListener('click', () => this.importSettings());
+        o.querySelector('[data-pref-reset]').addEventListener('click', () => this.resetPreferences(o));
         document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('show'));
     },
     _applyPreferences(overlay) {
@@ -19437,56 +19554,197 @@ self.onmessage = async function(event) {
         return true;
     },
     _persistPreferences(accent = null, { announce = true } = {}) {
-        const payload = {
-            version: 1,
-            defaultW: this._prefs.defaultW,
-            defaultH: this._prefs.defaultH,
-            gridSize: this.gridSize,
-            snapTolerance: this._prefs.snapTolerance,
-            maxHistory: this.maxHistory,
-            stackNewObjects: Boolean(this._prefs.stackNewObjects),
-            vectorStrokes: Boolean(this._prefs.vectorStrokes),
-            rulersVisible: this.rulersVisible !== false,
-            toolOptions: this._prefs.toolOptions && typeof this._prefs.toolOptions === 'object'
-                ? Object.fromEntries(Object.entries(this._prefs.toolOptions).slice(0, 120))
-                : {},
-            panelSizes: Array.isArray(this._prefs.panelSizes) ? this._prefs.panelSizes.slice(0, 8) : []
-        };
-        const persistedAccent = /^#[0-9a-fA-F]{6}$/.test(String(accent || '')) ? accent : this._prefs.accent;
-        if (/^#[0-9a-fA-F]{6}$/.test(String(persistedAccent || ''))) payload.accent = String(persistedAccent).toLowerCase();
+        const payload = this._preferencePayload(accent);
         return this._persistLocal('os_prefs', JSON.stringify(payload), { label:'Preferences', announce });
     },
     _restorePreferences() {
         let stored = null;
         try { stored = JSON.parse(localStorage.getItem('os_prefs') || 'null'); }
         catch(e) { console.warn('Preferences restore failed:', e.message); return; }
-        if (!stored || stored.version !== 1) return;
-        const limit = this._importLimits.maxImageDimension;
-        // Clamp on the way in as well as on the way out: a hand-edited or
-        // corrupted store must not be able to disable undo or break the grid.
-        const clamp = (value, min, max, fallback) => {
-            const number = Number(value);
-            return Number.isFinite(number) ? Math.min(max, Math.max(min, Math.round(number))) : fallback;
-        };
-        this._prefs.defaultW = clamp(stored.defaultW, 1, limit, this._prefs.defaultW);
-        this._prefs.defaultH = clamp(stored.defaultH, 1, limit, this._prefs.defaultH);
-        this.gridSize = clamp(stored.gridSize, 1, 500, this.gridSize);
-        this._prefs.snapTolerance = clamp(stored.snapTolerance, 0, 100, this._prefs.snapTolerance);
-        this.maxHistory = clamp(stored.maxHistory, 10, 200, this.maxHistory);
-        this._prefs.stackNewObjects = Boolean(stored.stackNewObjects);
-        this._prefs.vectorStrokes = Boolean(stored.vectorStrokes);
-        this._prefs.rulersVisible = stored.rulersVisible === undefined ? this._prefs.rulersVisible : Boolean(stored.rulersVisible);
-        this.rulersVisible = this._prefs.rulersVisible;
-        this._prefs.toolOptions = stored.toolOptions && typeof stored.toolOptions === 'object'
-            ? Object.fromEntries(Object.entries(stored.toolOptions).slice(0, 120))
-            : {};
-        this._prefs.panelSizes = Array.isArray(stored.panelSizes)
-            ? stored.panelSizes.slice(0, 8).map(value => clamp(value, this._panelMinHeight, 2000, this._panelMinHeight))
-            : [];
-        if (/^#[0-9a-fA-F]{6}$/.test(String(stored.accent || ''))) {
-            this._prefs.accent = String(stored.accent).toLowerCase();
-            document.documentElement.style.setProperty('--accent', this._prefs.accent);
+        if (!stored) return;
+        try {
+            const migrated = this._migratePreferences(stored);
+            this._lastPreferenceMigrationReport = migrated;
+            this._applyPreferenceRecord(migrated.state);
+            if (migrated.steps.length) this._persistPreferences(null, { announce:false });
+        } catch (error) {
+            this._lastPreferenceMigrationReport = { accepted:false, error:error.message };
+            this.recordDiagnostic?.('warn', `Preferences restore failed: ${error.message}`, { code:'openshop.preference-migration' });
+            console.warn('Preferences restore failed:', error.message);
         }
+    },
+    _settingsStorageKeys() {
+        return ['os_prefs', 'os_palette', 'os_brushes', 'os_gradients', 'os_presets', 'os_theme', 'os_lang'];
+    },
+    _normalizeSettingsBundle(bundle) {
+        if (!bundle || typeof bundle !== 'object' || Array.isArray(bundle)
+            || bundle.kind !== 'openshop-settings' || Number(bundle.version) !== 1) {
+            throw new Error('Unsupported OpenShop settings bundle');
+        }
+        let serialized;
+        try { serialized = JSON.stringify(bundle); } catch (error) { throw new Error(`Settings bundle is not valid JSON: ${error.message}`); }
+        if (new Blob([serialized]).size > this._importLimits.maxJsonBytes) throw new Error('Settings bundle exceeds 10 MB limit');
+        if (!bundle.prefs || typeof bundle.prefs !== 'object' || Array.isArray(bundle.prefs)) throw new Error('Settings preferences are invalid');
+        for (const key of ['palette', 'brushes', 'gradients', 'presets']) {
+            if (!Array.isArray(bundle[key])) throw new Error(`Settings ${key} must be an array`);
+        }
+        const migrated = this._migratePreferences(bundle.prefs);
+        const prefs = this._normalizePreferenceRecord(migrated.state);
+        const gradients = bundle.gradients.slice(0, this._importLimits.maxPresets)
+            .map((preset, index) => this._sanitizeGradientPreset(preset, index)).filter(Boolean);
+        const language = Object.prototype.hasOwnProperty.call(this._locales, bundle.language) ? bundle.language : null;
+        if (!language) throw new Error('Settings language is unsupported');
+        if (!['default', 'midnight', 'oled'].includes(bundle.theme)) throw new Error('Settings theme is unsupported');
+        return {
+            prefs,
+            palette:this._sanitizePaletteColors(bundle.palette),
+            brushes:this._sanitizeImportedBrushes(bundle.brushes),
+            gradients,
+            presets:this._sanitizePresetList(bundle.presets),
+            theme:bundle.theme,
+            language,
+            preferenceMigration:migrated
+        };
+    },
+    _settingsStorageValues(prepared) {
+        return {
+            os_prefs:JSON.stringify(prepared.prefs),
+            os_palette:JSON.stringify(prepared.palette),
+            os_brushes:JSON.stringify(prepared.brushes),
+            os_gradients:JSON.stringify(prepared.gradients),
+            os_presets:JSON.stringify(prepared.presets),
+            os_theme:prepared.theme,
+            os_lang:prepared.language
+        };
+    },
+    _writeSettingsStorage(values) {
+        const previous = {};
+        try {
+            this._settingsStorageKeys().forEach(key => { previous[key] = localStorage.getItem(key); });
+        } catch (error) {
+            this._lastStorageError = { key:'settings', quota:false, message:'Settings could not be saved' };
+            this.recordDiagnostic?.('error', this._lastStorageError.message, { storageKey:'settings' });
+            this.toast('Settings could not be saved', 'error');
+            return false;
+        }
+        let failed = null;
+        for (const key of this._settingsStorageKeys()) {
+            if (!this._persistLocal(key, values[key], { label:'Settings', announce:false })) {
+                failed = this._lastStorageError?.message || `Could not save ${key}`;
+                break;
+            }
+        }
+        if (!failed) return true;
+        for (const key of this._settingsStorageKeys()) {
+            try {
+                if (previous[key] === null) localStorage.removeItem(key);
+                else localStorage.setItem(key, previous[key]);
+            } catch (error) {
+                this.recordDiagnostic?.('error', 'Settings rollback failed', { storageKey:key, message:error.message });
+            }
+        }
+        this.toast(failed, 'error');
+        return false;
+    },
+    _applySettingsData(prepared) {
+        this._applyPreferenceRecord(prepared.prefs);
+        this._savedPalette = prepared.palette.slice();
+        this._importedBrushes = prepared.brushes.slice();
+        this._gradientPresets = prepared.gradients.slice();
+        this._presets = prepared.presets.slice();
+        this.setTheme(prepared.theme, { silent:true, persist:false });
+        if (this._lang !== prepared.language) this.setLocale(prepared.language);
+        this._renderSavedPalette();
+        this._renderImportedBrushes();
+        this._renderGradientPresets();
+        this._syncRulerChrome({ fitDocument:true });
+        this._syncSessionWorkspace();
+        return true;
+    },
+    _settingsBundle() {
+        return {
+            kind:'openshop-settings',
+            version:1,
+            prefs:this._preferencePayload(),
+            palette:this._sanitizePaletteColors(this._savedPalette),
+            brushes:this._sanitizeImportedBrushes(this._importedBrushes),
+            gradients:this._gradientPresets.map((preset, index) => this._sanitizeGradientPreset(preset, index)).filter(Boolean),
+            presets:this._sanitizePresetList(this._presets),
+            theme:this._currentTheme,
+            language:this._locales[this._lang] ? this._lang : 'en'
+        };
+    },
+    exportSettings() {
+        const bundle = this._settingsBundle();
+        const blob = new Blob([JSON.stringify(bundle, null, 2)], { type:'application/json' });
+        this._downloadBlob(blob, 'openshop-settings.json');
+        this.toast('Settings exported', 'success');
+        return bundle;
+    },
+    importSettings() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json,.openshop-settings,application/json';
+        input.addEventListener('change', async event => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            try {
+                this._assertJsonFileBudget(file, 'Settings');
+                const text = typeof file.text === 'function'
+                    ? await file.text()
+                    : await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.onerror = () => reject(reader.error || new Error('Could not read settings file'));
+                        reader.readAsText(file);
+                    });
+                this._applySettingsBundle(JSON.parse(text));
+            } catch (error) {
+                this.toast(`Invalid settings file: ${error.message}`, 'error');
+            }
+        });
+        input.click();
+        return input;
+    },
+    _applySettingsBundle(bundle) {
+        const prepared = this._normalizeSettingsBundle(bundle);
+        if (!this._writeSettingsStorage(this._settingsStorageValues(prepared))) return false;
+        this._lastPreferenceMigrationReport = prepared.preferenceMigration;
+        this._applySettingsData(prepared);
+        this.toast('Settings imported', 'success');
+        return true;
+    },
+    _resetPreferencesToDefaults() {
+        const prepared = this._normalizeSettingsBundle({
+            kind:'openshop-settings', version:1, prefs:{ version:this._preferenceSchemaVersion },
+            palette:[], brushes:[], gradients:[], presets:[], theme:'default', language:'en'
+        });
+        if (!this._writeSettingsStorage(this._settingsStorageValues(prepared))) return false;
+        this._lastPreferenceMigrationReport = prepared.preferenceMigration;
+        this._applySettingsData(prepared);
+        this.toast('Preferences reset to defaults', 'success');
+        return true;
+    },
+    resetPreferences(sourceOverlay = null) {
+        const o = document.createElement('div'); o.className = 'modal-overlay';
+        o.dataset.modalNested = 'true';
+        const modal = document.createElement('div'); modal.className = 'modal';
+        const title = document.createElement('h3'); title.textContent = 'Reset preferences?';
+        const message = document.createElement('p');
+        message.style.cssText = 'font-size:12px;color:var(--text-secondary);margin:8px 0 16px';
+        message.textContent = 'This resets saved preferences, palettes, imported assets, presets, theme, and language. This cannot be undone.';
+        const buttons = document.createElement('div'); buttons.className = 'modal-btns';
+        const cancel = document.createElement('button'); cancel.className = 'btn'; cancel.textContent = 'Cancel';
+        const reset = document.createElement('button'); reset.className = 'btn btn-danger'; reset.textContent = 'Reset to Defaults';
+        cancel.addEventListener('click', () => o.remove());
+        reset.addEventListener('click', () => {
+            reset.disabled = true;
+            if (this._resetPreferencesToDefaults()) { sourceOverlay?.remove(); o.remove(); }
+            else reset.disabled = false;
+        });
+        buttons.append(cancel, reset); modal.append(title, message, buttons); o.appendChild(modal); document.body.appendChild(o);
+        requestAnimationFrame(() => { o.classList.add('show'); cancel.focus(); });
+        return o;
     },
 
     // ====================== LAYER DRAG REORDER ======================
@@ -21683,7 +21941,10 @@ self.onmessage = async function(e) {
     _configureNativeModal(overlay) {
         if (!this._nativePopoverUI || !overlay?.classList.contains('modal-overlay')) return false;
         const dismiss = overlay.querySelector('[data-modal-cancel],[data-modal-close]');
-        overlay.setAttribute('popover', dismiss ? 'auto' : 'manual');
+        // A destructive action launched from another dialog must not light-dismiss
+        // that parent when the confirmation enters the top layer.
+        const stacked = overlay.dataset.modalNested === 'true' || overlay.dataset.modalStackHost === 'true';
+        overlay.setAttribute('popover', stacked ? 'manual' : (dismiss ? 'auto' : 'manual'));
         overlay._osNativeModal = true;
         let opened = false;
         overlay.addEventListener('toggle', event => {
