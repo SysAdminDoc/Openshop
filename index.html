@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-NfEWr1c0waXnH0T4lc68DQ/n+SjOzBgCuh65ETof5OE=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-3E40Fs22CYolAwQheT4TFf9einAs5kyIyNGzoNMOmHU=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -2494,6 +2494,27 @@ html[data-os-bottom-tab="timeline"] body:not(.fullscreen) .ruler-v{
   border-color:color-mix(in srgb,var(--border-active) 62%,transparent);
   box-shadow:0 16px 36px rgba(0,0,0,.34),inset 0 1px rgba(255,255,255,.04);
 }
+#statusbar .status-spacer{flex:1;min-width:12px}
+#statusbar .status-document-meta{
+  color:var(--text-secondary);
+  white-space:nowrap;
+}
+#status-color-profile{
+  max-width:180px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+/* The selected tool is already named by the active rail face and options bar. */
+#tool-display{display:none}
+@media(max-width:1080px){
+  #status-color-profile,#statusbar .status-profile-sep{display:none}
+}
+@media(max-width:940px){
+  #offline-state,#statusbar .status-offline-sep{display:none}
+}
+@media(max-width:860px){
+  #object-count,#statusbar .status-object-sep{display:none}
+}
 #cmd-box{
   width:min(680px,calc(100vw - 32px));
   padding:8px;
@@ -3678,7 +3699,8 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
                     <dt>Layers</dt><dd id="info-layers">1</dd>
                     <dt>Objects</dt><dd id="info-objects">0</dd>
                     <dt>Zoom</dt><dd id="info-zoom">100%</dd>
-                    <dt>Color Mode</dt><dd>RGB 8bit</dd>
+                    <dt>Color Mode</dt><dd id="info-color-mode">RGB / 8 bit</dd>
+                    <dt>Profile</dt><dd id="info-color-profile">sRGB IEC61966-2.1</dd>
                     <dt>Cursor</dt><dd id="info-cursor">0, 0</dd>
                 </dl>
             </div>
@@ -3691,11 +3713,14 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
     <span id="canvas-dims">1920 x 1080</span><span class="sep"></span>
     <button type="button" id="zoom-display" title="Fit canvas to view" aria-label="Zoom level, activate to fit canvas to view" data-os-click="click-103">100%</button><span class="sep"></span>
     <span id="cursor-pos" aria-hidden="true">X: 0 Y: 0</span><span class="sep"></span>
-    <span id="tool-display">Select</span><span style="flex:1"></span>
-    <button type="button" class="ready-state offline-state" id="network-state" data-state="ready" aria-haspopup="dialog" aria-label="Outbound network activity" data-os-click="click-220"><i></i><span id="network-state-label">Nothing sent</span></button><span class="sep"></span>
-    <button type="button" class="ready-state offline-state" id="offline-state" data-state="limited" aria-haspopup="dialog" aria-label="Offline and install status" data-os-click="click-193"><i></i><span id="offline-state-label">Checking offline support</span></button><span class="sep"></span>
-    <span id="object-count">0 objects</span><span class="sep"></span>
-    <button type="button" id="diagnostics-badge" class="btn" style="display:none;font-size:10px;padding:3px 8px;min-height:24px" title="Errors this session — run Export Diagnostics from the command palette" data-os-click="click-diagnostics"></button><span class="ready-state" id="persistence-state" data-state="clean" aria-live="polite"><i></i><span id="persistence-state-label">All changes saved</span></span>
+    <span id="status-bit-depth" class="status-document-meta">8 bit</span><span class="sep status-profile-sep"></span>
+    <span id="status-color-profile" class="status-document-meta" title="sRGB IEC61966-2.1">sRGB IEC61966-2.1</span>
+    <span id="tool-display" aria-hidden="true">Select</span><span class="status-spacer"></span>
+    <span class="ready-state" id="persistence-state" data-state="clean" aria-live="polite"><i></i><span id="persistence-state-label">All changes saved</span></span><span class="sep status-network-sep"></span>
+    <button type="button" class="ready-state offline-state" id="network-state" data-state="ready" aria-haspopup="dialog" aria-label="Outbound network activity" data-os-click="click-220"><i></i><span id="network-state-label">Nothing sent</span></button><span class="sep status-offline-sep"></span>
+    <button type="button" class="ready-state offline-state" id="offline-state" data-state="limited" aria-haspopup="dialog" aria-label="Offline and install status" data-os-click="click-193"><i></i><span id="offline-state-label">Checking offline support</span></button><span class="sep status-object-sep"></span>
+    <span id="object-count">0 objects</span>
+    <button type="button" id="diagnostics-badge" class="btn" style="display:none;font-size:10px;padding:3px 8px;min-height:24px" title="Errors this session — run Export Diagnostics from the command palette" data-os-click="click-diagnostics"></button>
 </div>
 <div id="ai-progress" role="dialog" aria-modal="true" aria-label="Background processing" aria-live="polite">
     <div class="ai-box">
@@ -5260,6 +5285,7 @@ const OS = {
         document.getElementById('blank-workspace')?.classList.toggle('hidden', !blank);
         const dims = document.getElementById('canvas-dims');
         if (dims) dims.textContent = blank ? 'No document' : `${this.canvasW} x ${this.canvasH}`;
+        this._updateDocumentMetadataReadouts();
         this._renderZoomReadout(blank ? '—' : this.zoom);
         const layersEmpty = document.getElementById('layers-empty');
         if (layersEmpty) {
@@ -19222,6 +19248,7 @@ self.onmessage = async function(event) {
         if (el('info-layers')) el('info-layers').textContent = this.layers.length;
         if (el('info-objects')) el('info-objects').textContent = this.canvas ? this.canvas.getObjects().filter(o => o.name !== '__boundary__').length : 0;
         if (el('info-zoom')) el('info-zoom').textContent = this._hasActiveDocument() ? Math.round(this.zoom * 100) + '%' : '—';
+        this._updateDocumentMetadataReadouts();
     },
 
     // ====================== FILTER WORKER ======================
@@ -25446,6 +25473,26 @@ self.onmessage = async function(e) {
     _objectSummary() {
         const objs = this.canvas ? this.canvas.getObjects().filter(o => o.name !== '__boundary__' && !o._wandOverlay) : [];
         return `${objs.length} object${objs.length !== 1 ? 's' : ''}`;
+    },
+    _documentColorProfileLabel() {
+        const name = this._safeText(this._colorProfile?.name || 'sRGB', 120).trim() || 'sRGB';
+        return /^sRGB$/i.test(name) ? 'sRGB IEC61966-2.1' : name;
+    },
+    _updateDocumentMetadataReadouts() {
+        const active = this._hasActiveDocument();
+        const profile = active ? this._documentColorProfileLabel() : '—';
+        const values = {
+            'status-bit-depth':active ? '8 bit' : '—',
+            'status-color-profile':profile,
+            'info-color-mode':active ? 'RGB / 8 bit' : '—',
+            'info-color-profile':profile
+        };
+        Object.entries(values).forEach(([id, value]) => {
+            const element = document.getElementById(id);
+            if (!element) return;
+            element.textContent = value;
+            if (id.endsWith('color-profile')) element.title = active ? profile : 'No document open';
+        });
     },
     _renderAccessibilityTree() {
         const root = document.getElementById('canvas-a11y-tree');

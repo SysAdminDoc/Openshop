@@ -137,6 +137,40 @@ test('opens command search and keeps both zoom readouts synchronized @cross-brow
   await expect(statusReadout).toHaveText(await canvasReadout.textContent());
 });
 
+test('surfaces active document color metadata without stale blank-state values @cross-browser', async ({ page }) => {
+  await openApp(page);
+
+  await expect(page.locator('#status-bit-depth')).toHaveText('—');
+  await expect(page.locator('#status-color-profile')).toHaveText('—');
+  await page.getByRole('button', { name: 'Enter Studio' }).evaluate(button => button.click());
+  await expect(page.locator('#status-bit-depth')).toHaveText('8 bit');
+  await expect(page.locator('#status-color-profile')).toHaveText('sRGB IEC61966-2.1');
+  await expect(page.locator('#info-color-mode')).toHaveText('RGB / 8 bit');
+
+  await page.evaluate(() => {
+    OS._colorProfile = { name:'Display P3', sourceKind:'embedded', iccData:null };
+    OS.updateStatus();
+  });
+  await expect(page.locator('#status-color-profile')).toHaveText('Display P3');
+  await expect(page.locator('#info-color-profile')).toHaveText('Display P3');
+  await expect(page.locator('#status-color-profile')).toHaveAttribute('title', 'Display P3');
+
+  await page.setViewportSize({ width:820, height:900 });
+  await expect(page.locator('#status-bit-depth')).toBeVisible();
+  await expect(page.locator('#persistence-state')).toBeVisible();
+  await expect(page.locator('#network-state')).toBeVisible();
+  await expect(page.locator('#status-color-profile')).toBeHidden();
+  await expect(page.locator('#offline-state')).toBeHidden();
+  await expect(page.locator('#object-count')).toBeHidden();
+  expect(await page.locator('#statusbar').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+
+  await page.evaluate(() => OS.closeDocument({ force:true }));
+  await expect(page.locator('#status-bit-depth')).toHaveText('—');
+  await expect(page.locator('#status-color-profile')).toHaveText('—');
+  await expect(page.locator('#info-color-mode')).toHaveText('—');
+  await expect(page.locator('#info-color-profile')).toHaveText('—');
+});
+
 test('turns the Motion workspace into a fitted frame timeline @cross-browser', async ({ page }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).evaluate(button => button.click());

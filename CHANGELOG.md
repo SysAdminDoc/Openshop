@@ -22,6 +22,9 @@ All notable changes to Openshop will be documented in this file.
 - Elevated the intentional blank studio with a local-workspace launch card,
   keyboard and drop affordances, structured Layers/History empty states, and a
   current Chromium visual contract instead of the stale v0.27 snapshot.
+- Rebalanced the status bar around active-document information: bit depth and
+  color profile now follow blank, new, restored, and imported document state,
+  while save and network health occupy a consistent right-side cluster.
 
 ### Fixed
 - The seven top-level menu roots had only a 13px-high pointer target after the
