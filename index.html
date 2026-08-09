@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-QZpjfE+dsWCPfTMEOaIEzuA8DW7ID7CWndreaQ+noco=' 'sha256-+Kv3nVO0RmfflgPT5Hx/KLv1gopXZVQ/TPlbKZNJ/Gg=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-QZpjfE+dsWCPfTMEOaIEzuA8DW7ID7CWndreaQ+noco=' 'sha256-ca1hDqtCiHWZfts4/q5uZT52ek6KDsmvDvD9jO/vqmY=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -4667,10 +4667,7 @@ const OS = {
             const width = view.getUint32(typeOffset + 8, false);
             const height = view.getUint32(typeOffset + 12, false);
             if (width < 1 || height < 1) continue;
-            if (width > this._importLimits.maxImageDimension || height > this._importLimits.maxImageDimension
-                || width * height > this._importLimits.maxImagePixels) {
-                throw new Error('AVIF dimensions exceed import limits');
-            }
+            this._validateDecodedImage({ width, height });
             return { width, height };
         }
         throw new Error('AVIF dimensions are missing or invalid');
@@ -5298,6 +5295,9 @@ const OS = {
     _lastPreferenceMigrationReport: null,
     _preferenceExtras: {},
     _prefs: { gridSize: 20, historyStates: 120, defaultW: 1920, defaultH: 1080, theme: 'dark', snapTolerance: 5, maxHistory: 120, stackNewObjects: false, vectorStrokes: false, rulersVisible: true, accent: null, toolOptions: {}, panelSizes: [] },
+    _canvasCeilingStorageKey: 'openshop.canvas-ceiling.v1',
+    _canvasCeilingProbeVersion: 1,
+    _canvasCeiling: null,
     _importLimits: {
         maxJsonBytes: 10 * 1024 * 1024,
         maxImageBytes: 100 * 1024 * 1024,
@@ -5597,6 +5597,197 @@ const OS = {
         if (target === 'reference') return this._renderReferenceScene(scene);
         throw new Error(`Unknown document render target: ${this._safeText(target, 40)}`);
     },
+    _canvasProbeEnvironment(configured) {
+        const memory = Number(globalThis.navigator?.deviceMemory);
+        const workers = Number(globalThis.navigator?.hardwareConcurrency);
+        return {
+            userAgent:String(globalThis.navigator?.userAgent || ''),
+            platform:String(globalThis.navigator?.platform || ''),
+            devicePixelRatio:Math.round((Number(globalThis.devicePixelRatio) || 1) * 100) / 100,
+            deviceMemory:Number.isFinite(memory) && memory > 0 ? memory : null,
+            hardwareConcurrency:Number.isFinite(workers) && workers > 0 ? workers : null,
+            configuredDimension:configured.maxDimension,
+            configuredPixels:configured.maxPixels
+        };
+    },
+    _canvasProbeSurface(canvas, width, height) {
+        try {
+            canvas.width = width;
+            canvas.height = height;
+            if (canvas.width !== width || canvas.height !== height) return false;
+            const context = canvas.getContext('2d', { willReadFrequently:true });
+            if (!context) return false;
+            context.fillStyle = 'rgb(17,34,51)';
+            context.fillRect(0, 0, 1, 1);
+            const pixel = context.getImageData(0, 0, 1, 1).data;
+            return pixel[0] === 17 && pixel[1] === 34 && pixel[2] === 51 && pixel[3] === 255;
+        } catch (_) {
+            return false;
+        } finally {
+            // Release the backing store after every candidate. The probe is a
+            // startup safety check, not permission to retain a large surface.
+            canvas.width = 1;
+            canvas.height = 1;
+        }
+    },
+    _binaryCanvasProbe(maximum, canUse) {
+        let low = 1;
+        let high = Math.max(2, Math.round(maximum) + 1);
+        if (!canUse(low)) return 1;
+        while (high - low > 1) {
+            const middle = Math.floor((low + high) / 2);
+            if (canUse(middle)) low = middle;
+            else high = middle;
+        }
+        return low;
+    },
+    _canvasProbeAreaSize(area, maxDimension) {
+        const width = Math.max(1, Math.min(maxDimension, Math.floor(Math.sqrt(area))));
+        const height = Math.max(1, Math.min(maxDimension, Math.ceil(area / width)));
+        return { width, height };
+    },
+    _probeCanvasCeiling() {
+        const configured = {
+            maxDimension:Math.max(1, Math.round(Number(this._importLimits.maxImageDimension) || 30000)),
+            maxPixels:Math.max(1, Math.round(Number(this._importLimits.maxImagePixels) || 80 * 1000 * 1000))
+        };
+        const canvas = document.createElement('canvas');
+        const dimensionOk = value => this._canvasProbeSurface(canvas, value, 1);
+        const maxDimension = dimensionOk(configured.maxDimension)
+            ? configured.maxDimension
+            : this._binaryCanvasProbe(configured.maxDimension, dimensionOk);
+        const areaOk = area => {
+            const size = this._canvasProbeAreaSize(area, maxDimension);
+            return this._canvasProbeSurface(canvas, size.width, size.height);
+        };
+        const maxPixels = areaOk(configured.maxPixels)
+            ? configured.maxPixels
+            : this._binaryCanvasProbe(configured.maxPixels, areaOk);
+        return {
+            version:this._canvasCeilingProbeVersion,
+            maxDimension,
+            maxPixels,
+            measured:true,
+            source:'probe',
+            environment:this._canvasProbeEnvironment(configured),
+            measuredAt:new Date().toISOString(),
+            cappedByApplicationBudget: maxDimension === configured.maxDimension || maxPixels === configured.maxPixels
+        };
+    },
+    _readCanvasCeilingCache(configured) {
+        try {
+            const entry = JSON.parse(localStorage.getItem(this._canvasCeilingStorageKey) || 'null');
+            const environment = this._canvasProbeEnvironment(configured);
+            if (!entry || entry.version !== this._canvasCeilingProbeVersion
+                || JSON.stringify(entry.environment) !== JSON.stringify(environment)) return null;
+            const maxDimension = Math.round(Number(entry.maxDimension));
+            const maxPixels = Math.round(Number(entry.maxPixels));
+            if (maxDimension < 1 || maxDimension > configured.maxDimension
+                || maxPixels < 1 || maxPixels > configured.maxPixels) return null;
+            return { ...entry, maxDimension, maxPixels, measured:true, source:'cache', environment };
+        } catch (_) {
+            return null;
+        }
+    },
+    _writeCanvasCeilingCache(result) {
+        try { localStorage.setItem(this._canvasCeilingStorageKey, JSON.stringify(result)); } catch (_) { /* best effort */ }
+    },
+    _applyCanvasCeiling(result) {
+        const maxDimension = Math.max(1, Math.min(this._importLimits.maxImageDimension, Math.round(Number(result.maxDimension) || this._importLimits.maxImageDimension)));
+        const maxPixels = Math.max(1, Math.min(this._importLimits.maxImagePixels, Math.round(Number(result.maxPixels) || this._importLimits.maxImagePixels)));
+        this._importLimits.maxDimension = maxDimension;
+        this._importLimits.maxImagePixels = maxPixels;
+        if (this._psdLimits) {
+            this._psdLimits.maxDimension = Math.min(this._psdLimits.maxDimension, maxDimension);
+            this._psdLimits.maxPixels = Math.min(this._psdLimits.maxPixels, maxPixels);
+            this._psdLimits.maxLayerPixels = Math.min(this._psdLimits.maxLayerPixels, maxPixels);
+        }
+        this._canvasCeiling = {
+            ...result,
+            maxDimension,
+            maxPixels,
+            measured:Boolean(result.measured),
+            source:result.source || 'fallback'
+        };
+        return this._canvasCeiling;
+    },
+    _ensureCanvasCeiling() {
+        if (this._canvasCeiling) return this._canvasCeiling;
+        const configured = {
+            maxDimension:Math.max(1, Math.round(Number(this._importLimits.maxImageDimension) || 30000)),
+            maxPixels:Math.max(1, Math.round(Number(this._importLimits.maxImagePixels) || 80 * 1000 * 1000))
+        };
+        const cached = this._readCanvasCeilingCache(configured);
+        if (cached) return this._applyCanvasCeiling(cached);
+        try {
+            const measured = this._probeCanvasCeiling();
+            this._writeCanvasCeilingCache(measured);
+            return this._applyCanvasCeiling(measured);
+        } catch (error) {
+            this.recordDiagnostic?.('warn', `Canvas ceiling probe failed: ${error.message}`, { code:'openshop.canvas-ceiling-probe' });
+            return this._applyCanvasCeiling({
+                version:this._canvasCeilingProbeVersion,
+                maxDimension:configured.maxDimension,
+                maxPixels:configured.maxPixels,
+                measured:false,
+                source:'fallback',
+                environment:this._canvasProbeEnvironment(configured),
+                measuredAt:new Date().toISOString()
+            });
+        }
+    },
+    getCanvasCeiling() {
+        const ceiling = this._ensureCanvasCeiling();
+        return {
+            maxDimension:ceiling.maxDimension,
+            maxPixels:ceiling.maxPixels,
+            measured:Boolean(ceiling.measured),
+            source:ceiling.source
+        };
+    },
+    _canvasLimitSummary() {
+        const ceiling = this._canvasCeiling || {
+            maxDimension:this._importLimits.maxImageDimension,
+            maxPixels:this._importLimits.maxImagePixels,
+            measured:false
+        };
+        const pixels = Number(ceiling.maxPixels) >= 1000000
+            ? `${(Number(ceiling.maxPixels) / 1000000).toFixed(Number(ceiling.maxPixels) % 1000000 ? 1 : 0)} MP`
+            : `${Math.round(Number(ceiling.maxPixels))} pixels`;
+        return `${Number(ceiling.maxDimension).toLocaleString()} px per side / ${pixels} total`;
+    },
+    _canvasDimensionFailure(width, height) {
+        const w = Number(width), h = Number(height);
+        const ceiling = this._canvasCeiling || {
+            maxDimension:this._importLimits.maxImageDimension,
+            maxPixels:this._importLimits.maxImagePixels
+        };
+        if (!Number.isFinite(w) || !Number.isFinite(h) || w < 1 || h < 1) return { reason:'invalid', width:w, height:h };
+        const roundedW = Math.round(w), roundedH = Math.round(h);
+        if (roundedW > ceiling.maxDimension || roundedH > ceiling.maxDimension) {
+            return { reason:'dimension', width:roundedW, height:roundedH, ceiling };
+        }
+        if (roundedW > Math.floor(ceiling.maxPixels / Math.max(1, roundedH))) {
+            return { reason:'area', width:roundedW, height:roundedH, ceiling };
+        }
+        return null;
+    },
+    _canvasLimitMessage(width, height, label = 'Canvas') {
+        const failure = this._canvasDimensionFailure(width, height);
+        const name = this._canvasCeiling?.measured ? 'the measured browser canvas ceiling' : 'the canvas safety limit';
+        if (!failure) return '';
+        if (failure.reason === 'invalid') return `${label} dimensions are invalid.`;
+        if (failure.reason === 'dimension') return `${label} dimensions exceed ${name} (${this._canvasLimitSummary()}).`;
+        return `${label} pixel count exceeds ${name} (${this._canvasLimitSummary()}).`;
+    },
+    _assertCanvasDimensions(width, height, label = 'Canvas') {
+        const failure = this._canvasDimensionFailure(width, height);
+        if (!failure) return { width:Math.round(Number(width)), height:Math.round(Number(height)) };
+        const error = new Error(this._canvasLimitMessage(width, height, label));
+        error.code = 'openshop.canvas-ceiling';
+        error.ceiling = this.getCanvasCeiling();
+        throw error;
+    },
     _initializeBlankWorkspace({ preserveViewport = false } = {}) {
         const sessionViewport = preserveViewport
             ? {
@@ -5665,6 +5856,7 @@ const OS = {
             // that request one render at the end instead.
             renderOnAddRemove: false,
         });
+        this._ensureCanvasCeiling();
         this._initializeBlankWorkspace();
         this._initInputCapabilityObservers();
         this.canvas.on('mouse:move', e => this.onMouseMove(e));
@@ -6030,6 +6222,14 @@ const OS = {
             options = { background:options };
         }
         const { resetProject = false, clean = false, resetHistory = true, background = null } = options || {};
+        this._ensureCanvasCeiling();
+        const dimensions = this._canvasDimensionFailure(w, h);
+        if (dimensions) {
+            this.toast(this._canvasLimitMessage(w, h, 'Document'), 'error');
+            return false;
+        }
+        w = Math.round(Number(w));
+        h = Math.round(Number(h));
         this._blankWorkspace = false;
         if (resetProject) {
             const previousLineage = [this._documentId, ...(this._documentIdAliases || [])].filter(Boolean);
@@ -6086,6 +6286,7 @@ const OS = {
         this._captureBA();
         this._claimRecoveryOwnership();
         this._updateDocumentAvailability();
+        return true;
     },
     async closeDocument({ force = false } = {}) {
         if (!this._hasActiveDocument()) return true;
@@ -6151,6 +6352,7 @@ const OS = {
             <div class="modal-row"><label>Width</label><input id="ni-w" type="number" value="1920" min="1" max="8000"></div>
             <div class="modal-row"><label>Height</label><input id="ni-h" type="number" value="1080" min="1" max="8000"></div>
             <div class="modal-row"><label>Pixel size</label><span id="ni-pixels" class="opt-val">1920 x 1080 px</span></div>
+            <div class="modal-row"><label>Browser ceiling</label><span id="ni-ceiling" class="opt-val" aria-live="polite"></span></div>
             <div class="modal-row"><label>Background</label>
                 <select id="ni-bg-mode">
                     <option value="transparent">Transparent</option>
@@ -6168,9 +6370,16 @@ const OS = {
         const wInput = o.querySelector('#ni-w');
         const hInput = o.querySelector('#ni-h');
         const pixels = o.querySelector('#ni-pixels');
+        const ceilingHint = o.querySelector('#ni-ceiling');
+        wInput.max = String(this._importLimits.maxImageDimension);
+        hInput.max = String(this._importLimits.maxImageDimension);
+        ceilingHint.textContent = this._canvasLimitSummary();
         const refresh = () => {
             const size = this._documentPixelSize(wInput.value, hInput.value, unit.value, dpi.value);
-            pixels.textContent = `${size.width} x ${size.height} px`;
+            const failure = this._canvasDimensionFailure(size.width, size.height);
+            pixels.textContent = failure
+                ? `${size.width} x ${size.height} px — exceeds measured ceiling`
+                : `${size.width} x ${size.height} px`;
         };
         // Switching units converts what is already typed rather than
         // reinterpreting it, so 210mm does not silently become 210px.
@@ -6196,7 +6405,7 @@ const OS = {
         document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('show'));
     },
     async doNewImage(o) {
-        const limit = this._importLimits.maxImageDimension;
+        this._ensureCanvasCeiling();
         const unit = o.querySelector('#ni-unit')?.value || 'px';
         const ppi = this._readNumberInput(o.querySelector('#ni-dpi'), { min:1, max:2400, fallback:96 });
         const size = this._documentPixelSize(
@@ -6205,9 +6414,12 @@ const OS = {
             unit,
             ppi.value
         );
-        if (size.width < 1 || size.height < 1 || size.width > limit || size.height > limit) {
-            this.toast(`Canvas size must work out to between 1 and ${limit} pixels`, 'error');
-            return;
+        const failure = this._canvasDimensionFailure(size.width, size.height);
+        if (failure) {
+            const message = this._canvasLimitMessage(size.width, size.height, 'New Image');
+            o.querySelector('#ni-pixels').textContent = `${size.width} x ${size.height} px — ${message}`;
+            this.toast(message, 'error');
+            return false;
         }
         const w = size.width, h = size.height;
         const mode = o.querySelector('#ni-bg-mode')?.value || 'transparent';
@@ -6215,13 +6427,14 @@ const OS = {
             : mode === 'custom' ? (o.querySelector('#ni-bg')?.value || null)
             : null;
         if (!await this._confirmDiscardUnsaved('Creating a new document')) return;
-        this.createNewDocument(w,h,{resetProject:true, background});
+        if (this.createNewDocument(w,h,{resetProject:true, background}) === false) return false;
         // Carried into the PSD resolution resource and the PDF page size.
         this._documentResolution = size.resolution;
         this.trackRecentFile(this._docName, w, h);
         o.remove();
         const physical = unit === 'px' ? '' : ` (${o.querySelector('#ni-w')?.value}${unit} x ${o.querySelector('#ni-h')?.value}${unit} at ${size.resolution} PPI)`;
         this.toast(`Created ${w} × ${h} canvas${physical}`, 'success');
+        return true;
     },
 
     // ====================== FILE I/O ======================
@@ -6235,9 +6448,8 @@ const OS = {
     _validateDecodedImage(img) {
         const width = Number(img?.width || img?.naturalWidth || 0);
         const height = Number(img?.height || img?.naturalHeight || 0);
-        if (width < 1 || height < 1) throw new Error('Image dimensions are invalid');
-        if (width > this._importLimits.maxImageDimension || height > this._importLimits.maxImageDimension) throw new Error('Image dimensions exceed import limits');
-        if (width * height > this._importLimits.maxImagePixels) throw new Error('Image pixel count exceeds import limits');
+        const failure = this._canvasDimensionFailure(width, height);
+        if (failure) throw new Error(this._canvasLimitMessage(width, height, 'Image'));
         return { width, height };
     },
     // Number inputs only enforce min/max for the spinners, not typed text, so
@@ -6294,9 +6506,7 @@ const OS = {
         if (obj?._openShop) {
             const w = Math.round(Number(obj._openShop.w || 0));
             const h = Math.round(Number(obj._openShop.h || 0));
-            if (w < 1 || h < 1 || w > this._importLimits.maxImageDimension || h > this._importLimits.maxImageDimension || w * h > this._importLimits.maxImagePixels) {
-                throw new Error('Project dimensions exceed import limits');
-            }
+            if (this._canvasDimensionFailure(w, h)) throw new Error(this._canvasLimitMessage(w, h, 'Project'));
             obj._openShop.w = w;
             obj._openShop.h = h;
         }
@@ -6310,9 +6520,7 @@ const OS = {
             }
             const w = Math.round(Number(obj.canvas?.width || 0));
             const h = Math.round(Number(obj.canvas?.height || 0));
-            if (w < 1 || h < 1 || w > this._importLimits.maxImageDimension || h > this._importLimits.maxImageDimension || w * h > this._importLimits.maxImagePixels) {
-                throw new Error('Project dimensions exceed import limits');
-            }
+            if (this._canvasDimensionFailure(w, h)) throw new Error(this._canvasLimitMessage(w, h, 'Project'));
             if (!obj.canvas?.fabric || typeof obj.canvas.fabric !== 'object' || !Array.isArray(obj.canvas.fabric.objects)) {
                 throw new Error('Project canvas data is missing');
             }
@@ -7275,7 +7483,7 @@ const OS = {
             // Returns false when the user keeps their work, so callers that do
             // more than add the image — the GIF frame import — can stop too.
             if (!await this._confirmDiscardUnsaved(openAction)) return false;
-            this.createNewDocument(img.width, img.height, { resetProject:true });
+            if (this.createNewDocument(img.width, img.height, { resetProject:true }) === false) return false;
             this._docName = this._safeText(String(name || '').replace(/\.[^.]+$/, ''), 100) || 'Untitled';
             this._setPersistenceState('dirty');
             img.set({ left:0, top:0, selectable:true, name:this._safeText(name, 120) });
@@ -7848,9 +8056,7 @@ const OS = {
                 throw new Error(`GIF has ${count} frames, over the ${this._importLimits.maxGifFrames} frame import limit`);
             }
             const frameW = gif.width, frameH = gif.height;
-            if (frameW * frameH > this._importLimits.maxImagePixels) {
-                throw new Error('GIF frame dimensions exceed import limits');
-            }
+            this._validateDecodedImage({ width:frameW, height:frameH });
             if (frameW * frameH * 4 * count > this._importLimits.maxDecodedGifBytes) {
                 throw new Error('GIF exceeds the decoded size budget for animation import');
             }
@@ -7940,9 +8146,7 @@ const OS = {
         const width = Math.round(this.canvasW * scale);
         const height = Math.round(this.canvasH * scale);
         if (!Number.isFinite(quality) || !Number.isFinite(scale)) throw new Error('Export settings are invalid');
-        if (width < 1 || height < 1 || width > this._importLimits.maxImageDimension || height > this._importLimits.maxImageDimension || width * height > this._importLimits.maxImagePixels) {
-            throw new Error('Export dimensions exceed the 80 megapixel safety limit');
-        }
+        if (this._canvasDimensionFailure(width, height)) throw new Error(this._canvasLimitMessage(width, height, 'Export'));
         const matte = this._validHexColor(options.matte || '#ffffff');
         if (!matte) throw new Error('Export matte color is invalid');
         return {
@@ -9313,8 +9517,9 @@ const OS = {
             { code:'psd.unsupported-color-mode', path:'document.colorMode', feature:this._psdColorModeName(header.colorMode), fallback:'Import requires an 8-bit RGB document.' }
         );
         if (header.width < 1 || header.height < 1) throw new Error('PSD dimensions are invalid');
-        if (header.width > limits.maxDimension || header.height > limits.maxDimension) throw new Error('PSD dimensions exceed import limits');
-        if (header.width * header.height > limits.maxPixels) throw new Error('PSD pixel count exceeds import limits');
+        if (this._canvasDimensionFailure(header.width, header.height)) {
+            throw new Error(this._canvasLimitMessage(header.width, header.height, 'PSD'));
+        }
     },
     _makePSDCompatibilityError(message, loss) {
         const error = new Error(message);
@@ -9363,8 +9568,8 @@ const OS = {
             const height = Math.round(Number(pixels.height || 0));
             const buffer = pixels.buffer;
             const byteLength = buffer instanceof ArrayBuffer ? buffer.byteLength : ArrayBuffer.isView(buffer) ? buffer.byteLength : -1;
-            if (width < 1 || height < 1 || width > this._psdLimits.maxDimension || height > this._psdLimits.maxDimension || width * height > this._psdLimits.maxLayerPixels) {
-                throw new Error(`${label} dimensions exceed import limits`);
+            if (width < 1 || height < 1 || this._canvasDimensionFailure(width, height)) {
+                throw new Error(`${label} dimensions exceed ${this._canvasCeiling?.measured ? 'the measured browser canvas ceiling' : 'import limits'} (${this._canvasLimitSummary()}).`);
             }
             if (byteLength !== width * height * 4) throw new Error(`${label} pixel buffer is truncated`);
             transferredBytes += byteLength;
@@ -13113,7 +13318,7 @@ self.onmessage = function(event) {
         const cw = Math.min(rawW - (cx - rawX), docW - cx);
         const ch = Math.min(rawH - (cy - rawY), docH - cy);
         if (cw < 1 || ch < 1) { this.toast(this._t('Crop region too small'),'error'); return; }
-        if (cw * ch > this._importLimits.maxImagePixels) { this.toast('Crop region exceeds the maximum image size', 'error'); return; }
+        if (this._canvasDimensionFailure(cw, ch)) { this.toast(this._canvasLimitMessage(cw, ch, 'Crop region'), 'error'); return; }
         const command = this._makeCommand('canvas.crop', { x:cx, y:cy, width:cw, height:ch });
         const result = this._executeCommand(command);
         return Promise.resolve(result).then(success => {
@@ -13924,7 +14129,7 @@ self.onmessage = function(event) {
                 validate:args => {
                     const width = Math.round(finite(args?.width, 'Canvas width', 1, this._importLimits.maxImageDimension));
                     const height = Math.round(finite(args?.height, 'Canvas height', 1, this._importLimits.maxImageDimension));
-                    if (width * height > this._importLimits.maxImagePixels) throw new Error('Canvas pixel count exceeds limits');
+                    if (this._canvasDimensionFailure(width, height)) throw new Error(this._canvasLimitMessage(width, height));
                     return { width, height };
                 },
                 execute:args => {
@@ -14057,7 +14262,7 @@ self.onmessage = function(event) {
             const element = object.getElement?.();
             const width = Math.round(Number(element?.naturalWidth || element?.videoWidth || element?.width || 0));
             const height = Math.round(Number(element?.naturalHeight || element?.videoHeight || element?.height || 0));
-            if (!id || width < 1 || height < 1 || width * height > this._importLimits.maxImagePixels) return null;
+            if (!id || this._canvasDimensionFailure(width, height)) return null;
             const canvas = document.createElement('canvas');
             canvas.width = width; canvas.height = height;
             const context = canvas.getContext('2d', { willReadFrequently:true });
@@ -15913,15 +16118,12 @@ self.onmessage = function(event) {
         }
         const width = Math.round(Number(spec.width) || this._prefs.defaultW);
         const height = Math.round(Number(spec.height) || this._prefs.defaultH);
-        const limit = this._importLimits.maxImageDimension;
-        if (!(width >= 1 && width <= limit && height >= 1 && height <= limit)) {
-            throw new Error('Document size is outside the supported range');
-        }
+        if (this._canvasDimensionFailure(width, height)) throw new Error(this._canvasLimitMessage(width, height, 'Document'));
         this.dismissWelcome();
-        this.createNewDocument(width, height, {
+        if (this.createNewDocument(width, height, {
             resetProject:true,
             background:/^#[0-9a-fA-F]{6}$/.test(String(spec.background || '')) ? String(spec.background) : undefined
-        });
+        }) === false) return false;
         return true;
     },
     async _onEmbedMessage(event) {
@@ -26466,6 +26668,7 @@ self.onmessage = async function(e) {
                 serviceWorker:Boolean(navigator.serviceWorker?.controller),
                 input:this._buildInputCapabilityReport()
             },
+            canvasCeiling:this.getCanvasCeiling(),
             document:{
                 width:this.canvasW,
                 height:this.canvasH,

@@ -5,6 +5,9 @@ All notable changes to Openshop will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Added a cached browser canvas-ceiling probe that applies measured per-side
+  and total-pixel limits to new documents and every raster import path, with
+  explicit refusal messages and diagnostics when a document is too large.
 - Added versioned preference migration with forward-compatible unknown-key
   preservation, plus a validated settings bundle for exporting and importing
   preferences, palettes, brushes, gradients, presets, theme, and language.

@@ -3161,7 +3161,7 @@ test('encodes deterministic verified AVIF and reopens it @cross-browser', async 
       new DataView(oversized.buffer).setUint32(ispeOffset + 8, 30_001, false);
       let oversizedRejected = false;
       try { OS._readAvifDimensions(oversized); } catch (error) {
-        oversizedRejected = error.message === 'AVIF dimensions exceed import limits';
+        oversizedRejected = /canvas ceiling|dimensions exceed import limits/i.test(error.message);
       }
 
       await OS._loadRasterFile(new File([first], 'verified-fixture.avif', { type:'image/avif' }));
@@ -3599,6 +3599,36 @@ test('exposes onboarding and layer controls to the keyboard', async ({ page }) =
   await preset.focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('#ni-w')).toHaveValue('1920');
+});
+
+test('refuses documents above the measured canvas ceiling before allocation @cross-browser @mobile', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(async () => {
+    const ceiling = OS.getCanvasCeiling();
+    OS.newImage();
+    const overlay = document.querySelector('.modal-overlay');
+    const width = ceiling.maxDimension + 1;
+    overlay.querySelector('#ni-w').value = String(width);
+    overlay.querySelector('#ni-h').value = '1';
+    const created = await OS.doNewImage(overlay);
+    let importMessage = '';
+    try { OS._validateDecodedImage({ width, height:1 }); }
+    catch (error) { importMessage = error.message; }
+    return {
+      ceiling,
+      created,
+      blank:!OS._hasActiveDocument(),
+      importMessage,
+      toast:[...document.querySelectorAll('#toast-container .toast')].at(-1)?.textContent || ''
+    };
+  });
+
+  expect(result.ceiling.measured).toBe(true);
+  expect(result.created).toBe(false);
+  expect(result.blank).toBe(true);
+  expect(result.importMessage).toContain('measured browser canvas ceiling');
+  expect(result.toast).toContain('measured browser canvas ceiling');
 });
 
 test('progressively enhances menus and dialogs with anchored native popovers @cross-browser', async ({ page }) => {

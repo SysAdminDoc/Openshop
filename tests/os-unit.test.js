@@ -1297,6 +1297,31 @@ describe('OpenShop core object', () => {
     ]);
   });
 
+  it('caches a measured canvas ceiling and rejects both side and area overflow', () => {
+    const OS = loadOpenShop();
+    const configured = {
+      maxDimension:OS._importLimits.maxImageDimension,
+      maxPixels:OS._importLimits.maxImagePixels
+    };
+    const environment = OS._canvasProbeEnvironment(configured);
+    localStorage.setItem(OS._canvasCeilingStorageKey, JSON.stringify({
+      version:OS._canvasCeilingProbeVersion,
+      maxDimension:100,
+      maxPixels:1000,
+      measured:true,
+      source:'probe',
+      environment,
+      measuredAt:'2026-08-09T00:00:00.000Z'
+    }));
+
+    const ceiling = OS.getCanvasCeiling();
+    expect(ceiling).toMatchObject({ maxDimension:100, maxPixels:1000, measured:true, source:'cache' });
+    expect(OS._binaryCanvasProbe(32, value => value <= 17)).toBe(17);
+    expect(OS._canvasDimensionFailure(101, 1).reason).toBe('dimension');
+    expect(OS._canvasDimensionFailure(40, 26).reason).toBe('area');
+    expect(() => OS._validateDecodedImage({ width:101, height:1 })).toThrow(/measured browser canvas ceiling/);
+  });
+
   it('parses ASE-compatible asset palettes, ABR entries, and GRD v3 stops', () => {
     const OS = loadOpenShop();
     OS.toast = vi.fn();
