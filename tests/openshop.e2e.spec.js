@@ -299,6 +299,58 @@ test('transforms and round-trips portable selection files @cross-browser', async
   await expect(page.locator('#toast-container .toast.error').last()).toContainText('not 8 × 8');
 });
 
+test('exposes View settings as live menu checkboxes and radios @cross-browser', async ({ page }, testInfo) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).evaluate(button => button.click());
+
+  const view = page.locator('.menu-bar > .menu-item').filter({ hasText:/^View/ });
+  await view.click();
+  await page.getByRole('menuitem', { name:'Show', exact:true }).click();
+  const grid = page.locator('[data-os-menu-check="grid"]');
+  const rulers = page.locator('[data-os-menu-check="rulers"]');
+  await expect(grid).toHaveAttribute('role', 'menuitemcheckbox');
+  await expect(grid).toHaveAttribute('aria-checked', 'false');
+  await expect(rulers).toHaveAttribute('aria-checked', 'true');
+  expect(await rulers.evaluate(element => getComputedStyle(element, '::after').content)).toBe('"✓"');
+  if (testInfo.project.name === 'chromium') {
+    await expect(page).toHaveScreenshot('openshop-view-menu.png', {
+      animations:'disabled',
+      fullPage:false,
+      maxDiffPixelRatio:0.03
+    });
+  }
+
+  await grid.click();
+  await expect(grid).toHaveAttribute('aria-checked', 'true');
+  expect(await grid.evaluate(element => getComputedStyle(element, '::after').content)).toBe('"✓"');
+
+  const state = await page.evaluate(() => {
+    OS.setSymmetryMode('horizontal');
+    OS.setTheme('midnight');
+    OS.togglePixelGrid();
+    OS.toggleTimeline();
+    OS.toggleMacroPanel();
+    const checked = selector => document.querySelector(selector).getAttribute('aria-checked');
+    const values = {
+      symmetry:checked('[data-os-menu-radio="symmetry"][data-os-menu-value="horizontal"]'),
+      symmetryOff:checked('[data-os-menu-radio="symmetry"][data-os-menu-value="off"]'),
+      theme:checked('[data-os-menu-radio="theme"][data-os-menu-value="midnight"]'),
+      pixelGrid:checked('[data-os-menu-check="pixel-grid"]'),
+      timeline:checked('[data-os-menu-check="timeline"]'),
+      macros:checked('[data-os-menu-check="macros"]')
+    };
+    OS.toggleFullscreen();
+    values.fullscreen = checked('[data-os-menu-check="fullscreen"]');
+    OS.toggleFullscreen();
+    return values;
+  });
+  expect(state).toEqual({
+    symmetry:'true', symmetryOff:'false', theme:'true', pixelGrid:'true',
+    timeline:'true', macros:'true', fullscreen:'true'
+  });
+  await expect(page.locator('[data-os-menu-radio="theme"]').first()).toHaveAttribute('role', 'menuitemradio');
+});
+
 test('turns the Motion workspace into a fitted frame timeline @cross-browser', async ({ page }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).evaluate(button => button.click());

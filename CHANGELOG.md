@@ -34,6 +34,9 @@ All notable changes to Openshop will be documented in this file.
 - Completed the generated Select menu with a real selection transform and
   portable Save/Load Selection workflows. Pixel and feather coverage round-trip
   through bounded `.openshop-selection` files with canvas-size validation.
+- Turned View-menu settings into live menu checkboxes and radio groups. Grid,
+  rulers, snap, pixel grid, timeline and macro panels, symmetry, theme, and
+  fullscreen now expose their current state visually and through `aria-checked`.
 
 ### Fixed
 - Restored Chinese coverage for the registry-generated tool rail, family

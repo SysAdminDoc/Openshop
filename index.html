@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-IZ7oSzux/+x2vvxvQ348tIWBcVZvg9wzxkipaDFFcZA=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-pyBCtuNFLjri+8Sttj7T3e63mcVFLwDwe5gCfP9Tc84=' 'sha256-BKxczdV31L+S2p4Jxdn5sjk+RuSSEPwPh49oPu69JjY=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -2113,6 +2113,18 @@ body{
 }
 .dd-item[data-os-click="click-231"]::before{content:'↓'}
 .dd-item[data-os-click="click-232"]::before{content:'↑'}
+.dd-item[role="menuitemcheckbox"]::after,
+.dd-item[role="menuitemradio"]::after{
+  content:'';
+  width:15px;
+  margin-inline-start:auto;
+  color:var(--accent-hover);
+  font:700 12px/1 'JetBrains Mono',monospace;
+  text-align:center;
+}
+.dd-item[role="menuitemcheckbox"][aria-checked="true"]::after{content:'✓'}
+.dd-item[role="menuitemradio"]::after{content:'○';font-size:10px}
+.dd-item[role="menuitemradio"][aria-checked="true"]::after{content:'●';color:var(--success)}
 .dd-item[data-os-click="click-094"]::before,
 .dd-item[data-os-click="click-096"]::before,
 .dd-item[data-os-click="click-097"]::before,
@@ -3149,19 +3161,19 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
             </div>
             <div class="dd-sub dd-item">Show
                 <div class="menu-dropdown">
-                    <div class="dd-item" data-os-click="click-105">Toggle Grid</div>
-                    <div class="dd-item" data-os-click="click-106">Toggle Rulers</div>
-                    <div class="dd-item" data-os-click="click-107">Toggle Snap to Grid</div>
+                    <div class="dd-item" data-os-click="click-105" data-os-menu-check="grid">Toggle Grid</div>
+                    <div class="dd-item" data-os-click="click-106" data-os-menu-check="rulers">Toggle Rulers</div>
+                    <div class="dd-item" data-os-click="click-107" data-os-menu-check="snap">Toggle Snap to Grid</div>
                     <div class="dd-sub dd-item">Symmetry
                         <div class="menu-dropdown">
-                            <div class="dd-item" data-os-click="click-108">Off</div>
-                            <div class="dd-item" data-os-click="click-109">Horizontal</div>
-                            <div class="dd-item" data-os-click="click-110">Vertical</div>
-                            <div class="dd-item" data-os-click="click-111">Both Axes</div>
-                            <div class="dd-item" data-os-click="click-112">Radial (6-fold)</div>
+                            <div class="dd-item" data-os-click="click-108" data-os-menu-radio="symmetry" data-os-menu-value="off">Off</div>
+                            <div class="dd-item" data-os-click="click-109" data-os-menu-radio="symmetry" data-os-menu-value="horizontal">Horizontal</div>
+                            <div class="dd-item" data-os-click="click-110" data-os-menu-radio="symmetry" data-os-menu-value="vertical">Vertical</div>
+                            <div class="dd-item" data-os-click="click-111" data-os-menu-radio="symmetry" data-os-menu-value="both">Both Axes</div>
+                            <div class="dd-item" data-os-click="click-112" data-os-menu-radio="symmetry" data-os-menu-value="radial">Radial (6-fold)</div>
                         </div>
                     </div>
-                    <div class="dd-item" data-os-click="click-113">Pixel Grid</div>
+                    <div class="dd-item" data-os-click="click-113" data-os-menu-check="pixel-grid">Pixel Grid</div>
                 </div>
             </div>
             <div class="dd-sub dd-item">Guides
@@ -3175,19 +3187,19 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
             <div class="dd-sep"></div>
             <div class="dd-sub dd-item">Panels
                 <div class="menu-dropdown">
-                    <div class="dd-item" data-os-click="click-117">Animation Timeline</div>
-                    <div class="dd-item" data-os-click="click-118">Actions / Macros</div>
+                    <div class="dd-item" data-os-click="click-117" data-os-menu-check="timeline">Animation Timeline</div>
+                    <div class="dd-item" data-os-click="click-118" data-os-menu-check="macros">Actions / Macros</div>
                 </div>
             </div>
             <div class="dd-sub dd-item">Theme
                 <div class="menu-dropdown">
-                    <div class="dd-item" data-os-click="click-119">Dark (Default)</div>
-                    <div class="dd-item" data-os-click="click-120">Midnight</div>
-                    <div class="dd-item" data-os-click="click-121">OLED Black</div>
+                    <div class="dd-item" data-os-click="click-119" data-os-menu-radio="theme" data-os-menu-value="default">Dark (Default)</div>
+                    <div class="dd-item" data-os-click="click-120" data-os-menu-radio="theme" data-os-menu-value="midnight">Midnight</div>
+                    <div class="dd-item" data-os-click="click-121" data-os-menu-radio="theme" data-os-menu-value="oled">OLED Black</div>
                 </div>
             </div>
             <div class="dd-sep"></div>
-            <div class="dd-item" data-os-click="click-122">Fullscreen Mode</div>
+            <div class="dd-item" data-os-click="click-122" data-os-menu-check="fullscreen">Fullscreen Mode</div>
             <div class="dd-item" data-os-click="click-123">Keyboard Shortcuts...</div>
         </div>
     </div>
@@ -15519,6 +15531,7 @@ self.onmessage = function(event) {
         this.gridVisible = !this.gridVisible;
         document.getElementById('grid-overlay').classList.toggle('visible', this.gridVisible);
         if (this.gridVisible) this.drawGrid();
+        this._syncViewMenuState();
         this.toast(this.gridVisible ? 'Grid on' : 'Grid off', 'info');
     },
     drawGrid() {
@@ -15557,6 +15570,7 @@ self.onmessage = function(event) {
         this.rulersVisible = !this.rulersVisible;
         this._prefs.rulersVisible = this.rulersVisible;
         this._syncRulerChrome({ fitDocument:true });
+        this._syncViewMenuState();
         const saved = this._persistPreferences(null, { announce:false });
         this.toast(
             `${this.rulersVisible ? 'Rulers on' : 'Rulers off'}${saved ? '' : ' (preference not saved)'}`,
@@ -15622,6 +15636,7 @@ self.onmessage = function(event) {
     // ====================== SNAP ======================
     toggleSnap() {
         this.snapEnabled = !this.snapEnabled;
+        this._syncViewMenuState();
         this.toast(this.snapEnabled ? `Snap on (${this.gridSize}px grid)` : 'Snap off', 'info');
     },
 
@@ -15629,6 +15644,7 @@ self.onmessage = function(event) {
     toggleFullscreen() {
         document.body.classList.toggle('fullscreen');
         const fs = document.body.classList.contains('fullscreen');
+        this._syncViewMenuState();
         this.resizeCanvas();
         this.toast(fs ? 'Fullscreen (click View > Fullscreen to exit)' : 'Normal view', 'info');
         if (!fs) { this.drawGrid(); this.drawRulers(); }
@@ -21284,9 +21300,28 @@ self.onmessage = async function(e) {
         }
         entry?.click();
     },
+    _syncViewMenuState() {
+        const checks = {
+            grid:Boolean(this.gridVisible),
+            rulers:Boolean(this.rulersVisible),
+            snap:Boolean(this.snapEnabled),
+            'pixel-grid':Boolean(this._pixelGridVisible),
+            timeline:Boolean(document.getElementById('timeline-panel')?.classList.contains('visible')),
+            macros:Boolean(document.getElementById('macro-panel')?.classList.contains('visible')),
+            fullscreen:Boolean(document.body.classList.contains('fullscreen'))
+        };
+        document.querySelectorAll('[data-os-menu-check]').forEach(item => {
+            item.setAttribute('aria-checked', checks[item.dataset.osMenuCheck] ? 'true' : 'false');
+        });
+        const radios = { symmetry:this._symmetryMode || 'off', theme:this._currentTheme || 'default' };
+        document.querySelectorAll('[data-os-menu-radio]').forEach(item => {
+            item.setAttribute('aria-checked', radios[item.dataset.osMenuRadio] === item.dataset.osMenuValue ? 'true' : 'false');
+        });
+    },
     _openMenuPopup(item) {
         const popup = this._menuPopup(item);
         if (!popup) return null;
+        this._syncViewMenuState();
         // Siblings at this level close, so only one branch is ever open.
         [...(item.parentElement?.children || [])].forEach(sibling => {
             if (sibling !== item) this._closeMenuPopup(sibling);
@@ -21364,7 +21399,11 @@ self.onmessage = async function(e) {
             note.setAttribute('role', 'note');
         });
         bar.querySelectorAll('.dd-item').forEach(item => {
-            item.setAttribute('role', 'menuitem');
+            const role = item.dataset.osMenuCheck
+                ? 'menuitemcheckbox'
+                : item.dataset.osMenuRadio ? 'menuitemradio' : 'menuitem';
+            item.setAttribute('role', role);
+            if (role !== 'menuitem') item.setAttribute('aria-checked', 'false');
             item.setAttribute('tabindex', '-1');
             const label = this._menuOwnText(item);
             if (label) item.setAttribute('aria-label', label);
@@ -21384,6 +21423,7 @@ self.onmessage = async function(e) {
             const label = this._menuOwnText(root);
             if (label) root.setAttribute('aria-label', label);
         });
+        this._syncViewMenuState();
 
         // Opening on :hover alone means the menu closes the instant the pointer
         // is over neither the title nor the dropdown — which is every diagonal
@@ -22822,6 +22862,7 @@ self.onmessage = async function(e) {
     // ====================== SYMMETRY ======================
     setSymmetryMode(mode) {
         this._symmetryMode = mode;
+        this._syncViewMenuState();
         this.toast(mode === 'off' ? 'Symmetry off' : `Symmetry: ${mode}`, 'info');
     },
     // Issue #3: a brush stroke stayed a selectable, draggable Fabric path
@@ -22958,6 +22999,7 @@ self.onmessage = async function(e) {
         document.documentElement.classList.remove('theme-midnight', 'theme-oled');
         if (next !== 'default') document.documentElement.classList.add('theme-' + next);
         this._currentTheme = next;
+        this._syncViewMenuState();
         if (this.session?.preferences) this.session.preferences.theme = next;
         if (persist) {
             this._persistLocal('os_theme', next, { label:'Theme preference' });
@@ -23375,6 +23417,7 @@ self.onmessage = async function(e) {
     // ====================== PIXEL GRID ======================
     togglePixelGrid() {
         this._pixelGridVisible = !this._pixelGridVisible;
+        this._syncViewMenuState();
         this.toast(this._pixelGridVisible ? 'Pixel grid on (visible at high zoom)' : 'Pixel grid off', 'info');
         this._drawPixelGrid();
     },
@@ -23413,6 +23456,7 @@ self.onmessage = async function(e) {
             button.setAttribute('aria-selected', selected ? 'true' : 'false');
         });
         document.documentElement.dataset.osBottomTab = next;
+        this._syncViewMenuState();
     },
     toggleTimeline() {
         const p = document.getElementById('timeline-panel');
@@ -23712,6 +23756,7 @@ self.onmessage = async function(e) {
     // ====================== ACTION / MACRO RECORDING ======================
     toggleMacroPanel() {
         document.getElementById('macro-panel').classList.toggle('visible');
+        this._syncViewMenuState();
     },
     toggleMacroRec() {
         this._macroRecording = !this._macroRecording;
