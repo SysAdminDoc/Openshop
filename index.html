@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10" id="theme-color-meta">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-ZB8neXbx9BhBNIJ/2ch8K4wePWGf0wVHHQMHpU19f/Q=' 'sha256-eUfH6uFCDukf5hkjr2geUSMosPZ4r+JSu8Qp4nHWv/Y=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-S9c7v2IJbrEeDoc/sOSveX4z8TFAAdzWFzko8G81BLo=' 'sha256-dbE7nsY5qJiPpbByUPl7JMqw2YNOhBC4TgrVSIo/xgM=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // OpenShop-specific Fabric configuration. The editor uses Fabric 7's native
@@ -21,7 +21,7 @@ const configureFabric = () => {
 
     api.FabricObject.ownDefaults.originX = 'left';
     api.FabricObject.ownDefaults.originY = 'top';
-    api.FabricObject.customProperties = ['name', 'excludeFromExport', '_openShopObjectId', '_hasMask', '_isArrow', '_openShopAdjustmentBaseSrc', '_openShopAdjustmentLayers', '_openShopLayerMask', '_openShopMaskBaseSrc', '_openShopSmartObject', '_openShopTextFeatures', '_openShopOriginalText', '_openShopTextOnPath'];
+    api.FabricObject.customProperties = ['name', 'excludeFromExport', '_openShopObjectId', '_hasMask', '_isArrow', '_openShopAdjustmentBaseSrc', '_openShopAdjustmentLayers', '_openShopLayerMask', '_openShopMaskBaseSrc', '_openShopSmartObject', '_openShopTextFeatures', '_openShopOriginalText', '_openShopTextOnPath', '_openShopTextDirection'];
 };
 
 // Every hosted competitor puts a credit meter in the corner of the editor.
@@ -3494,6 +3494,11 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
         </select>
         <label>Size</label><input type="number" id="text-size" value="24" min="8" max="200" data-os-change="change-008">
         <label>Color</label><input type="color" id="text-color" value="#ffffff" data-os-change="change-009">
+        <label for="text-direction">Direction</label>
+        <select id="text-direction" data-os-change="change-049" aria-label="Text direction">
+            <option value="ltr" data-i18n="Left to right">Left to right</option>
+            <option value="rtl" data-i18n="Right to left">Right to left</option>
+        </select>
         <label><input type="checkbox" id="text-bold" data-os-change="change-010"> B</label>
         <label><input type="checkbox" id="text-italic" data-os-change="change-011"> I</label>
         <label><input type="checkbox" id="text-underline" data-os-change="change-038"> U</label>
@@ -4344,10 +4349,11 @@ const OS_EVENT_HANDLERS = Object.freeze({
         "change-043": function(event) { OS.setWorkspaceMode(this.value) },
         "change-044": function(event) { OS.selectGradientPreset(this.value) },
         "change-045": function(event) { OS.setAutoSelect(this.checked) },
-        "change-046": function(event) { OS.setTransformControls(this.checked) },
-        "change-047": function(event) { OS.setTiltDynamics(this.checked) },
-        "change-048": function(event) { OS.setPixelZoomSnap(this.checked); }
-    }),
+         "change-046": function(event) { OS.setTransformControls(this.checked) },
+         "change-047": function(event) { OS.setTiltDynamics(this.checked) },
+         "change-048": function(event) { OS.setPixelZoomSnap(this.checked); },
+         "change-049": function(event) { OS.setTextDirection(this.value) }
+     }),
     input: Object.freeze({
         "input-001": function(event) { OS.setBrushSize(this.value) },
         "input-002": function(event) { OS.setBrushOpacity(this.value) },
@@ -4938,6 +4944,7 @@ const OS = {
         "Dash": "虚线",
         "Delete": "删除",
         "Density": "密度",
+        "Direction": "方向",
         "Depth Map": "深度图",
         "Deselect": "取消选择",
         "Detect Objects": "检测对象",
@@ -5116,6 +5123,8 @@ const OS = {
         "Star": "星形",
         "Sticky Note": "便签",
         "Text (T)": "文字 (T)",
+        "Text Direction: Left to Right": "文字方向：从左到右",
+        "Text Direction: Right to Left": "文字方向：从右到左",
         "Triangle": "三角形",
         "Zoom (Z)": "缩放 (Z)",
         "Auto-select": "自动选择",
@@ -5220,7 +5229,9 @@ const OS = {
         "Select an object first": "请先选择对象",
         "Selective color applied": "已应用可选颜色",
         "Shadows/Highlights applied": "已应用阴影/高光",
-        "Vibrance applied": "已应用自然饱和度"
+        "Vibrance applied": "已应用自然饱和度",
+        "Left to right": "从左到右",
+        "Right to left": "从右到左"
     } },
     _lang: 'en',
     _i18nSource: globalThis.document?.currentScript?.textContent || '',
@@ -5260,8 +5271,8 @@ const OS = {
         const body = String(text).replace(/[a-zA-Z]/g, ch => map[ch] || ch);
         return `⟦${body}⟧`;
     },
-    // Direction comes from the locale itself, so a locale added later needs no
-    // further code. Intl.Locale#textInfo is the authority where it exists.
+    // Interface direction comes from the locale itself, so a locale added later
+    // needs no further code. Intl.Locale#textInfo is the authority where it exists.
     _localeDirection(lang) {
         if (lang === 'pseudo') return 'ltr';
         try {
@@ -5286,10 +5297,14 @@ const OS = {
             btn.dataset.i18nTip = btn.dataset.tip;
         });
     },
+    _normalizeTextDirection(direction) {
+        return direction === 'rtl' ? 'rtl' : 'ltr';
+    },
     _applyDirectionToObject(object) {
         const textTypes = ['text', 'i-text', 'textbox'];
-        if (object && textTypes.includes(object.type) && this._textDirection === 'rtl') {
-            object.set({ direction: 'rtl' });
+        if (object && textTypes.includes(object.type)) {
+            const direction = this._normalizeTextDirection(this._artworkTextDirection);
+            object.set({ direction, _openShopTextDirection: direction });
             object.initDimensions?.();
         }
         return object;
@@ -5303,8 +5318,7 @@ const OS = {
         const direction = this._localeDirection(lang);
         document.documentElement.setAttribute('lang', lang === 'pseudo' ? 'en-x-pseudo' : lang);
         document.documentElement.setAttribute('dir', direction);
-        this._textDirection = direction;
-        this._applyTextDirection(direction);
+        this._interfaceDirection = direction;
         document.querySelectorAll('[data-i18n]').forEach(el => {
             const key = el.dataset.i18n;
             // Fall back to the key itself (the original English text) so
@@ -5323,19 +5337,10 @@ const OS = {
                 : (lang === 'pseudo' ? this._pseudoTranslate(key) : key);
             el.dataset.tip = val; el.setAttribute('aria-label', val);
         });
+        this._syncTextDirectionControl?.();
     },
-    _textDirection: 'ltr',
-    // Fabric text has no bidi contract of its own: without an explicit
-    // direction, Arabic or Hebrew mixed with Latin and digits reorders wrongly.
-    _applyTextDirection(direction) {
-        const textTypes = ['text', 'i-text', 'textbox'];
-        this.canvas?.getObjects?.().forEach(object => {
-            if (!textTypes.includes(object.type)) return;
-            object.set({ direction });
-            object.initDimensions?.();
-        });
-        this.canvas?.requestRenderAll?.();
-    },
+    _interfaceDirection: 'ltr',
+    _artworkTextDirection: 'ltr',
     // Every locale key the UI can currently reach, so parity with a translation
     // map is measurable rather than assumed.
     // The reachable string surface, not just the part stamped into the DOM.
@@ -5443,7 +5448,7 @@ const OS = {
         return Boolean(id) && (id === this._documentId || this._documentIdAliases.includes(id));
     },
     _idSequence: 0,
-    _fabricDocumentProperties: ['name', 'excludeFromExport', 'globalCompositeOperation', '_openShopObjectId', '_openShopBaseOpacity', '_hasMask', '_isArrow', '_openShopAdjustmentBaseSrc', '_openShopAdjustmentLayers', '_openShopLayerMask', '_openShopMaskBaseSrc', '_openShopSmartObject', '_openShopTextFeatures', '_openShopOriginalText', '_openShopTextOnPath'],
+    _fabricDocumentProperties: ['name', 'excludeFromExport', 'globalCompositeOperation', '_openShopObjectId', '_openShopBaseOpacity', '_hasMask', '_isArrow', '_openShopAdjustmentBaseSrc', '_openShopAdjustmentLayers', '_openShopLayerMask', '_openShopMaskBaseSrc', '_openShopSmartObject', '_openShopTextFeatures', '_openShopOriginalText', '_openShopTextOnPath', '_openShopTextDirection'],
     _isDirty: false,
     _persistenceState: 'clean',
     _documentRevision: 0,
@@ -5622,7 +5627,7 @@ const OS = {
         autoSelect: true, showTransformControls: true,
         brushSize: 8, brushOpacity: 100, brushPreset: 'round',
         shapeFill: '#6c8cff', shapeStroke: '#ffffff', shapeStrokeWidth: 2, shapeFilled: true,
-        textFont: 'DM Sans', textSize: 24, textColor: '#ffffff', textBold: false, textItalic: false,
+        textFont: 'DM Sans', textSize: 24, textColor: '#ffffff', textDirection: 'ltr', textBold: false, textItalic: false,
     textUnderline: false, textOverline: false, textLinethrough: false,
     textDecorationColor: '#ffffff', textDecorationThickness: 100,
         gradFrom: '#6c8cff', gradTo: '#000000', gradType: 'linear', gradientPreset: '',
@@ -6166,7 +6171,7 @@ const OS = {
         });
         this.canvas.on('selection:created', () => this.updateStatus());
         this.canvas.on('selection:cleared', () => { this.exitGradientStops(); this.updateStatus(); });
-        this.canvas.on('selection:updated', () => this.exitGradientStops());
+        this.canvas.on('selection:updated', () => { this.exitGradientStops(); this._syncTextDirectionControl(); });
         this.canvas.on('mouse:wheel', opt => this.onMouseWheel(opt));
         // Every zoom and pan path ends in a render, so re-place the screen-space
         // selection box here rather than chasing each caller.
@@ -8065,6 +8070,13 @@ const OS = {
         const usedObjectIds = new Set();
         const objectsById = new Map();
         objects.forEach(object => {
+            if (this._isTextObject(object)) {
+                const direction = this._normalizeTextDirection(
+                    object._openShopTextDirection ?? object.direction
+                );
+                object.set({ direction, _openShopTextDirection: direction });
+                object.initDimensions?.();
+            }
             const id = this._ensureObjectId(object, usedObjectIds);
             if (object.clipPath) object._hasMask = true;
             if (object._openShopLayerMask) {
@@ -14214,7 +14226,7 @@ self.onmessage = function(event) {
             sponge: schema('opt-sponge', true, ['sponge-size', 'sponge-flow', 'sponge-mode']),
             smudge: schema('opt-smudge', true, ['smudge-size', 'smudge-str']),
             pen: schema('opt-pen', true, ['pen-stroke', 'pen-width', 'pen-filled']),
-            type: schema('opt-text', true, ['text-font', 'text-size', 'text-color', 'text-bold', 'text-italic']),
+            type: schema('opt-text', true, ['text-font', 'text-size', 'text-color', 'text-direction', 'text-bold', 'text-italic']),
             shape: schema('opt-shape', true, ['shape-fill', 'shape-stroke', 'shape-stroke-w', 'shape-filled', 'shape-dash']),
             polygon: schema('opt-polygon', true, ['poly-sides', 'poly-fill', 'poly-stroke', 'poly-filled']),
             star: schema('opt-star', true, ['star-points', 'star-inner', 'star-fill', 'star-filled']),
@@ -14447,6 +14459,7 @@ self.onmessage = function(event) {
         this._applyLayerInteractionState({ render:false });
         const toolNames = {'marquee-rect':'Rect Marquee','marquee-ellipse':'Ellipse Marquee','magic-wand':'Magic Wand','quick-selection':'Quick Selection','ai-segment':'AI Segment','spot-healing':'Spot Healing','perspective-crop':'Perspective Crop'};
         document.getElementById('tool-display').textContent = toolNames[tool] || tool.charAt(0).toUpperCase()+tool.replace(/-/g,' ').slice(1);
+        this._syncTextDirectionControl();
         this._syncSessionWorkspace();
         this._renderAccessibilityTree();
         return true;
@@ -23123,6 +23136,41 @@ self.onmessage = async function(event) {
         }
         return this._isTextObject(active) ? [active] : [];
     },
+    _applyTextDirection(direction, targets = this._activeTextObjects()) {
+        const normalized = this._normalizeTextDirection(direction);
+        targets.forEach(object => {
+            object.set({ direction: normalized, _openShopTextDirection: normalized });
+            object.initDimensions?.();
+        });
+        return normalized;
+    },
+    _syncTextDirectionControl() {
+        const control = document.getElementById('text-direction');
+        if (!control) return;
+        const targets = this._activeTextObjects();
+        const directions = [...new Set(targets.map(object => this._normalizeTextDirection(
+            object._openShopTextDirection ?? object.direction
+        )))];
+        const selected = directions.length === 1
+            ? directions[0]
+            : this._normalizeTextDirection(this._artworkTextDirection);
+        if (control.value !== selected) control.value = selected;
+    },
+    setTextDirection(direction, { recordHistory = true } = {}) {
+        const normalized = this._normalizeTextDirection(direction);
+        this.state.textDirection = normalized;
+        this._artworkTextDirection = normalized;
+        const targets = this._activeTextObjects();
+        const changed = targets.some(object => object.direction !== normalized
+            || object._openShopTextDirection !== normalized);
+        if (changed) {
+            this._applyTextDirection(normalized, targets);
+            this.canvas?.requestRenderAll?.();
+            if (recordHistory) this.saveHistory('Text Direction');
+        }
+        this._syncTextDirectionControl();
+        return true;
+    },
     _textDecorationProps() {
         return {
             underline:Boolean(this.state.textUnderline),
@@ -26391,6 +26439,8 @@ self.onmessage = async function(e) {
             {label:'Enlarge 2x (resample)',cat:'Image',fn:()=>this.aiUpscale(2)},
             {label:'Enlarge 4x (resample)',cat:'Image',fn:()=>this.aiUpscale(4)},
             {label:'Curved Text',cat:'Edit',fn:()=>this.showCurvedText()},
+            {label:'Text Direction: Left to Right',cat:'Edit',fn:()=>this.setTextDirection('ltr')},
+            {label:'Text Direction: Right to Left',cat:'Edit',fn:()=>this.setTextDirection('rtl')},
             {label:'Animation Timeline',cat:'View',fn:()=>this.toggleTimeline()},
             {label:'Actions / Macros',cat:'View',fn:()=>this.toggleMacroPanel()},
             {label:'Pixel Grid',cat:'View',fn:()=>this.togglePixelGrid()},
@@ -31673,6 +31723,7 @@ self.onmessage = async function(e) {
         const objs=this.canvas.getObjects().filter(o=>o.name!=='__boundary__');
         document.getElementById('object-count').textContent=`${objs.length} object${objs.length!==1?'s':''}`;
         this.updateInfoPanel();
+        this._syncTextDirectionControl();
         this._renderAccessibilityTree();
     },
     // For destructive actions that canvas history cannot reach, the toast

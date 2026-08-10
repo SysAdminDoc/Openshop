@@ -7656,33 +7656,94 @@ test('updates document language and direction when the locale changes @cross-bro
   expect(result.ltrDirections).toEqual(['ltr', 'ltr', 'ltr', 'ltr']);
 });
 
-test('gives canvas text a direction so mixed scripts and numerals stay ordered', async ({ page }) => {
+test('keeps interface locale direction separate from explicit artwork text direction', async ({ page }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).click();
 
-  const result = await page.evaluate(() => {
-    const text = new fabric.IText('مرحبا OpenShop 2026', { left: 10, top: 10, fontSize: 20 });
+  const result = await page.evaluate(async () => {
+    const text = OS._applyDirectionToObject(new fabric.IText('مرحبا OpenShop 2026', { left: 10, top: 10, fontSize: 20 }));
     OS.canvas.add(text);
     OS.layers[OS.activeLayerIdx].objects.push(text);
+    OS.canvas.setActiveObject(text);
 
-    const before = text.direction;
+    const baseline = {
+      project: JSON.stringify(OS._captureDocumentState()),
+      history: OS.history.length,
+      pixels: OS.canvas.toDataURL('image/png'),
+      direction: text.direction,
+      marker: text._openShopTextDirection
+    };
+
     OS.setLocale('ar');
-    const afterRtl = text.direction;
+    const arabicLocale = {
+      htmlDirection: document.documentElement.dir,
+      textDirection: text.direction,
+      project: JSON.stringify(OS._captureDocumentState()),
+      history: OS.history.length,
+      pixels: OS.canvas.toDataURL('image/png')
+    };
 
-    // Text created while an RTL locale is active is born with the direction.
+    OS.setLocale('pseudo');
     const fresh = OS._applyDirectionToObject(new fabric.IText('نص جديد 42', { left: 10, top: 60 }));
-    const freshDirection = fresh.direction;
+    const pseudoLocale = {
+      htmlDirection: document.documentElement.dir,
+      textDirection: text.direction,
+      freshDirection: fresh.direction,
+      freshMarker: fresh._openShopTextDirection
+    };
 
+    const historyBeforeCommand = OS.history.length;
+    const directionControl = document.getElementById('text-direction');
+    directionControl.value = 'rtl';
+    directionControl.dispatchEvent(new Event('change', { bubbles: true }));
+    const project = OS._captureDocumentState();
+    const serializedObject = project.canvas.fabric.objects.find(object => object._openShopObjectId === text._openShopObjectId);
+    const afterCommand = {
+      direction: text.direction,
+      marker: text._openShopTextDirection,
+      historyDelta: OS.history.length - historyBeforeCommand,
+      serializedDirection: serializedObject?.direction,
+      serializedMarker: serializedObject?._openShopTextDirection,
+      control: document.getElementById('text-direction').value
+    };
+
+    const objectId = text._openShopObjectId;
+    await OS._applyDocumentState(project, { trusted: true });
+    const restored = OS.canvas.getObjects().find(object => object._openShopObjectId === objectId);
     OS.setLocale('en');
-    const afterLtr = text.direction;
-    return { before, afterRtl, freshDirection, afterLtr, rendered: text.text };
+    return {
+      baseline,
+      arabicLocale,
+      pseudoLocale,
+      afterCommand,
+      restored: {
+        direction: restored?.direction,
+        marker: restored?._openShopTextDirection,
+        text: restored?.text
+      }
+    };
   });
 
-  expect(result.afterRtl).toBe('rtl');
-  expect(result.freshDirection).toBe('rtl');
-  expect(result.afterLtr).toBe('ltr');
-  // The string itself is never rewritten — only its resolved direction.
-  expect(result.rendered).toBe('مرحبا OpenShop 2026');
+  expect(result.baseline.direction).toBe('ltr');
+  expect(result.baseline.marker).toBe('ltr');
+  expect(result.arabicLocale.htmlDirection).toBe('rtl');
+  expect(result.arabicLocale.textDirection).toBe('ltr');
+  expect(result.arabicLocale.project).toBe(result.baseline.project);
+  expect(result.arabicLocale.history).toBe(result.baseline.history);
+  expect(result.arabicLocale.pixels).toBe(result.baseline.pixels);
+  expect(result.pseudoLocale.htmlDirection).toBe('ltr');
+  expect(result.pseudoLocale.textDirection).toBe('ltr');
+  expect(result.pseudoLocale.freshDirection).toBe('ltr');
+  expect(result.pseudoLocale.freshMarker).toBe('ltr');
+  expect(result.afterCommand.direction).toBe('rtl');
+  expect(result.afterCommand.marker).toBe('rtl');
+  expect(result.afterCommand.historyDelta).toBe(1);
+  expect(result.afterCommand.serializedDirection).toBe('rtl');
+  expect(result.afterCommand.serializedMarker).toBe('rtl');
+  expect(result.afterCommand.control).toBe('rtl');
+  expect(result.restored.direction).toBe('rtl');
+  expect(result.restored.marker).toBe('rtl');
+  expect(result.restored.text).toBe('مرحبا OpenShop 2026');
 });
 
 test('mirrors menu chrome instead of stranding it on the wrong edge', async ({ page }) => {

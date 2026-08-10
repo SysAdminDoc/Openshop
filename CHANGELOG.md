@@ -5,6 +5,7 @@ All notable changes to Openshop will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Added independent interface and artwork text directions: locale changes now affect DOM chrome only, while explicit LTR/RTL text commands persist per-object through `.openshop` history and serialization.
 - Added validated number fields beside every range slider, plus a persisted Zoom-tool Pixel-perfect mode with reciprocal/integer snapping and nearest-neighbour sampling above 100%.
 - Added document-backed EXIF/XMP import metadata, Image Information reporting, and export choices for Preserve, Strip, or Strip location only (the privacy-preserving default); JPEG export reattaches selected APP1 fields after pixel encoding and reports unsupported-format losses.
 - Added a worker-backed Refine Edge selection workflow with checkerboard matte preview and soft alpha coverage, plus Telea fast-marching Spot Healing with selection-aware brush masks, cancellation, and one history commit per stroke.
