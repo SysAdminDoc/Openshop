@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10" id="theme-color-meta">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-6lzH46X+/hTrZozIawA7KVrXrggTy1EkOvn6jZ3l40Y=' 'sha256-Cf+uyFpBXpzWRtrrU4amjzxSVcpKtEIsLq/pljQjkr0=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-6lzH46X+/hTrZozIawA7KVrXrggTy1EkOvn6jZ3l40Y=' 'sha256-C06UFm3sz/BEs6eFBfnNFKrFg1yQw1J+vtgJrioWPII=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -5281,12 +5281,34 @@ const OS = {
         "Vibrance applied": "已应用自然饱和度"
     } },
     _lang: 'en',
+    _i18nSource: globalThis.document?.currentScript?.textContent || '',
+    _i18nSeenKeys: new Set(),
+    _i18nSourceKeys() {
+        const keys = new Set();
+        const source = String(this._i18nSource || '');
+        const decode = value => value
+            .replace(/\\(['"`\\])/g, '$1')
+            .replace(/\\n/g, '\n')
+            .trim();
+        const collect = (pattern, allowDynamic = false) => {
+            for (const match of source.matchAll(pattern)) {
+                const key = decode(match[1]);
+                if (key && (allowDynamic || !key.includes('${'))) keys.add(key);
+            }
+        };
+        collect(/\b(?:toast|_t|_toastWithAction|_toastWithUndo)\s*\(\s*'((?:\\.|[^'\\\r\n])*)'/g);
+        collect(/\b(?:toast|_t|_toastWithAction|_toastWithUndo)\s*\(\s*"((?:\\.|[^"\\\r\n])*)"/g);
+        collect(/\b(?:toast|_t|_toastWithAction|_toastWithUndo)\s*\(\s*`((?:\\.|[^`\\])*)`/g);
+        return keys;
+    },
     _t(key) {
+        const normalized = String(key ?? '');
+        if (normalized) this._i18nSeenKeys.add(normalized);
         const dict = this._locales[this._lang] || {};
-        if (Object.prototype.hasOwnProperty.call(dict, key)) return dict[key];
+        if (Object.prototype.hasOwnProperty.call(dict, normalized)) return dict[normalized];
         // The pseudo-locale exists so untranslated strings are obvious: anything
         // still plain ASCII on screen never went through _t or data-i18n.
-        return this._lang === 'pseudo' ? this._pseudoTranslate(key) : key;
+        return this._lang === 'pseudo' ? this._pseudoTranslate(normalized) : normalized;
     },
     // Accent every letter and pad the string so both missing translations and
     // layouts that cannot survive longer text show up immediately.
@@ -5382,6 +5404,8 @@ const OS = {
         document.querySelectorAll('[data-i18n]').forEach(el => keys.add(el.dataset.i18n));
         document.querySelectorAll('[data-i18n-tip]').forEach(el => keys.add(el.dataset.i18nTip));
         (this._getCommands?.() || []).forEach(command => { if (command.label) keys.add(command.label); });
+        this._i18nSourceKeys().forEach(key => keys.add(key));
+        this._i18nSeenKeys.forEach(key => keys.add(key));
         return [...keys];
     },
     missingLocaleKeys(lang) {
@@ -30225,7 +30249,7 @@ self.onmessage = async function(e) {
     },
     _announceAccessibility(msg) {
         const live = document.getElementById('canvas-a11y-live');
-        if (live) live.textContent = msg || '';
+        if (live) live.textContent = msg ? this._t(msg) : '';
         this._renderAccessibilityTree();
     },
     updateStatus() {
@@ -30242,11 +30266,11 @@ self.onmessage = async function(e) {
         const t = document.createElement('div');
         t.className = 'toast info';
         const text = document.createElement('span');
-        text.textContent = msg;
+        text.textContent = this._t(msg);
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'btn toast-undo';
-        button.textContent = 'Undo';
+        button.textContent = this._t('Undo');
         const dismiss = () => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); };
         const timer = setTimeout(dismiss, duration);
         button.addEventListener('click', () => { clearTimeout(timer); dismiss(); onUndo(); });
