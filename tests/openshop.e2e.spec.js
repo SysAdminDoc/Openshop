@@ -5812,6 +5812,97 @@ test('enables the highest-value parity tools with real selection, vector, shape,
   expect(result.customShape).toBe(true);
 });
 
+test('runs Refine Edge and Telea inpainting through the cancellable filter worker', async ({ page }) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).click();
+
+  const result = await page.evaluate(async () => {
+    const width = 9, height = 9;
+    const source = new ImageData(width, height);
+    const mask = new Uint8Array(width * height);
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const pixel = (y * width + x) * 4;
+      source.data[pixel] = 100; source.data[pixel + 1] = 150; source.data[pixel + 2] = 200; source.data[pixel + 3] = 255;
+      if (x < 4) mask[y * width + x] = 255;
+    }
+    const refined = await OS._runFilterInWorker('refineEdge', source, width, height, { mask, radius:2 });
+    const softAlpha = [...refined.data].filter((value, index) => index % 4 === 3 && value > 0 && value < 255).length;
+
+    const damaged = new ImageData(width, height);
+    const damageMask = new Uint8Array(width * height);
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const pixel = (y * width + x) * 4;
+      damaged.data[pixel] = 100; damaged.data[pixel + 1] = 150; damaged.data[pixel + 2] = 200; damaged.data[pixel + 3] = 255;
+    }
+    for (let y = 3; y <= 5; y++) for (let x = 3; x <= 5; x++) {
+      const pixel = (y * width + x) * 4;
+      damaged.data[pixel] = 255; damaged.data[pixel + 1] = 0; damaged.data[pixel + 2] = 0;
+      damageMask[y * width + x] = 255;
+    }
+    const healed = await OS._runFilterInWorker('teleaInpaint', damaged, width, height, { mask:damageMask, radius:3 });
+    const center = [...healed.data.slice((4 * width + 4) * 4, (4 * width + 4) * 4 + 4)];
+    return { softAlpha, center, activeJobs:OS._computeJobs.size };
+  });
+
+  expect(result.softAlpha).toBeGreaterThan(0);
+  expect(result.center).toEqual([100, 150, 200, 255]);
+  expect(result.activeJobs).toBe(0);
+});
+
+test('previews and applies Refine Edge, then commits one Spot Healing history step', async ({ page }) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).click();
+
+  await page.evaluate(() => {
+    OS.createNewDocument(32, 32, '#ffffff');
+    const mask = new Uint8Array(32 * 32);
+    for (let y = 4; y < 28; y++) for (let x = 4; x < 16; x++) mask[y * 32 + x] = 255;
+    OS._setPixelSelectionMask(mask, 32, 32, { coverage:true, combine:'replace' });
+    OS.showRefineEdge();
+  });
+  await page.waitForFunction(() => Boolean(OS._refineEdgeResult));
+  const refined = await page.evaluate(async () => {
+    const applied = await OS._applyRefineEdge();
+    const partial = OS._selectionMask?.mask.filter(value => value > 0 && value < 255).length || 0;
+    await new Promise(resolve => setTimeout(resolve, 220));
+    return { applied, partial, panel:Boolean(document.getElementById('refine-edge-overlay')) };
+  });
+  expect(refined).toEqual({ applied:true, partial:expect.any(Number), panel:false });
+  expect(refined.partial).toBeGreaterThan(0);
+
+  const healing = await page.evaluate(async () => {
+    const source = document.createElement('canvas');
+    source.width = 32; source.height = 32;
+    const sourceContext = source.getContext('2d');
+    sourceContext.fillStyle = 'rgb(100,150,200)'; sourceContext.fillRect(0, 0, 32, 32);
+    sourceContext.fillStyle = 'rgb(255,0,0)'; sourceContext.fillRect(14, 14, 4, 4);
+    const target = await new Promise(resolve => {
+      const element = new Image();
+      element.onload = () => resolve(new fabric.Image(element, { left:0, top:0, originX:'left', originY:'top' }));
+      element.src = source.toDataURL();
+    });
+    OS.canvas.add(target); OS.layers[OS.activeLayerIdx].objects.push(target); OS.canvas.setActiveObject(target);
+    const mask = new Uint8Array(32 * 32);
+    for (let y = 13; y < 19; y++) for (let x = 13; x < 19; x++) mask[y * 32 + x] = 255;
+    const before = OS.history.length;
+    const committed = await OS._commitSpotHealing({
+      target,
+      oc:source,
+      mask,
+      guard:{ generation:OS._documentGeneration, revision:OS._documentRevision, targetId:OS._ensureObjectId(target) }
+    });
+    const active = OS.canvas.getActiveObject();
+    const check = document.createElement('canvas'); check.width = 32; check.height = 32;
+    check.getContext('2d').drawImage(active.getElement(), 0, 0);
+    const center = [...check.getContext('2d').getImageData(16, 16, 1, 1).data];
+    return { committed, historyEntries:OS.history.length - before, center, activeJobs:OS._computeJobs.size };
+  });
+  expect(healing.committed).toBe(true);
+  expect(healing.historyEntries).toBe(1);
+  expect(healing.center.slice(0, 3)).toEqual([100, 150, 200]);
+  expect(healing.activeJobs).toBe(0);
+});
+
 test('the panel stack resizes by drag and by keyboard @cross-browser', async ({ page }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).click();

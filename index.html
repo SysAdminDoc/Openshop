@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10" id="theme-color-meta">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-6lzH46X+/hTrZozIawA7KVrXrggTy1EkOvn6jZ3l40Y=' 'sha256-MKUeXOVbA0DFJA49t/10RxEE9292kW4TUHxBGCgmpP0=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-6lzH46X+/hTrZozIawA7KVrXrggTy1EkOvn6jZ3l40Y=' 'sha256-DwL/oUCXz9NJVKQJcji+SLlRWt4UFEChgaOEZn8HXwQ=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -3204,6 +3204,7 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
                     <div class="dd-item" data-os-click="click-032">Expand...</div>
                     <div class="dd-item" data-os-click="click-033">Contract...</div>
                     <div class="dd-item" data-os-click="click-034">Feather...</div>
+                    <div class="dd-item" data-os-click="click-234">Refine Edge...</div>
                     <div class="dd-item" data-os-click="click-035">Border...</div>
                     <div class="dd-item" data-os-click="click-036">Smooth</div>
                 </div>
@@ -4155,6 +4156,7 @@ const OS_EVENT_HANDLERS = Object.freeze({
         "click-032": function(event) { OS.modifySelection('expand') },
         "click-033": function(event) { OS.modifySelection('contract') },
         "click-034": function(event) { OS.modifySelection('feather') },
+        "click-234": function(event) { OS.showRefineEdge() },
         "click-035": function(event) { OS.modifySelection('border') },
         "click-036": function(event) { OS.modifySelection('smooth') },
         "click-037": function(event) { OS.growSelection() },
@@ -14802,6 +14804,8 @@ self.onmessage = function(event) {
 
     // ====================== MAGIC WAND ======================
     _selectionMask: null, _selectionBounds: null,
+    _refineEdgeSource: null, _refineEdgeResult: null, _refineEdgeJob: null,
+    _refineEdgePreviewTimer: null, _refineEdgeApplying: false,
     _doMagicWand(ptr) {
         // Sample the document, not the viewport: the old screen-space pass
         // built the mask at whatever resolution the current zoom happened to
@@ -15122,6 +15126,123 @@ self.onmessage = function(event) {
         document.body.appendChild(overlay);
         requestAnimationFrame(() => overlay.classList.add('show'));
         return overlay;
+    },
+
+    // Refine Edge uses the current selection as a trimap and keeps the
+    // expensive matte pass in the same cancellable worker used by filters.
+    showRefineEdge() {
+        const sourceMask = this._selectionMask || this._maskFromMarqueeBounds();
+        if (!sourceMask) { this.toast('Create a selection before refining its edge', 'info'); return false; }
+        let imageData;
+        try { imageData = this._readDocumentImageData(); }
+        catch (error) {
+            this._reportFailure('Refine Edge', error, { key:'refine-edge-read' });
+            return false;
+        }
+        if (imageData.width !== sourceMask.w || imageData.height !== sourceMask.h) {
+            this.toast('Selection does not match the document', 'info');
+            return false;
+        }
+        this._refineEdgeSource = {
+            imageData,
+            mask:new Uint8Array(sourceMask.mask),
+            width:imageData.width,
+            height:imageData.height
+        };
+        this._refineEdgeResult = null;
+        const body = `<div style="max-width:460px">
+            <canvas id="refine-edge-preview" width="1" height="1" style="display:block;width:100%;max-height:300px;object-fit:contain;border:1px solid var(--border);background:repeating-conic-gradient(var(--bg-depth-2) 0 25%,var(--bg-depth-3) 0 50%) 0/16px 16px"></canvas>
+            <p id="refine-edge-status" style="color:var(--text-muted);font-size:11px;margin:8px 0">Previewing the soft matte against a checkerboard.</p>
+            <div class="modal-row"><label>Edge radius</label><input id="refine-edge-radius" type="range" min="1" max="32" value="4"><span class="opt-val" id="refine-edge-radius-val">4 px</span></div>
+        </div>`;
+        this._openFilterPanel('refine-edge-overlay', 'Refine Edge', body,
+            () => this._cancelRefineEdge(), () => this._applyRefineEdge());
+        const panel = document.getElementById('refine-edge-overlay');
+        const radius = panel?.querySelector('#refine-edge-radius');
+        radius?.addEventListener('input', () => {
+            const value = Math.max(1, Math.min(32, Math.round(Number(radius.value) || 4)));
+            const label = panel.querySelector('#refine-edge-radius-val');
+            if (label) label.textContent = value + ' px';
+            clearTimeout(this._refineEdgePreviewTimer);
+            this._refineEdgePreviewTimer = setTimeout(() => { void this._runRefineEdgePreview(value); }, 90);
+        });
+        void this._runRefineEdgePreview(4);
+        return true;
+    },
+    async _runRefineEdgePreview(radius = 4) {
+        const source = this._refineEdgeSource;
+        if (!source) return false;
+        const job = this._startComputeJob('Refine Edge', { group:'image-processing' });
+        this._refineEdgeJob = job;
+        const status = document.querySelector('#refine-edge-overlay #refine-edge-status');
+        if (status) status.textContent = 'Computing a soft alpha matte in the filter worker…';
+        try {
+            const result = await this._runFilterJob(
+                { backend:'worker', op:'refineEdge' },
+                source.imageData, source.width, source.height,
+                { mask:source.mask, radius }, job
+            );
+            if (this._refineEdgeJob !== job || !this._refineEdgeSource) return false;
+            this._assertComputeJobCurrent(job);
+            this._refineEdgeResult = new Uint8Array(source.width * source.height);
+            for (let i = 0; i < this._refineEdgeResult.length; i++) this._refineEdgeResult[i] = result.data[i * 4 + 3];
+            this._drawRefineEdgePreview(result);
+            if (status) status.textContent = 'Soft matte ready. Apply to replace the current selection edge.';
+            return true;
+        } catch (error) {
+            if (!this._isComputeAbort(error)) {
+                this._reportFailure('Refine Edge', error, { key:'refine-edge-worker' });
+                if (status) status.textContent = 'Refine Edge could not produce a preview.';
+            }
+            return false;
+        }
+    },
+    _drawRefineEdgePreview(imageData) {
+        const preview = document.getElementById('refine-edge-preview');
+        const source = this._refineEdgeSource;
+        if (!preview || !source || !imageData) return;
+        const scale = Math.min(1, 440 / Math.max(source.width, source.height));
+        const width = Math.max(1, Math.round(source.width * scale));
+        const height = Math.max(1, Math.round(source.height * scale));
+        preview.width = width; preview.height = height;
+        const work = document.createElement('canvas'); work.width = source.width; work.height = source.height;
+        work.getContext('2d').putImageData(imageData, 0, 0);
+        const ctx = preview.getContext('2d');
+        ctx.clearRect(0, 0, width, height);
+        const tile = Math.max(4, Math.round(12 * scale));
+        for (let y = 0; y < height; y += tile) for (let x = 0; x < width; x += tile) {
+            ctx.fillStyle = ((x / tile + y / tile) % 2) ? '#d0d0d0' : '#f7f7f7';
+            ctx.fillRect(x, y, tile, tile);
+        }
+        ctx.drawImage(work, 0, 0, width, height);
+    },
+    _cancelRefineEdge() {
+        clearTimeout(this._refineEdgePreviewTimer);
+        if (this._refineEdgeJob) this._cancelComputeJob(this._refineEdgeJob, 'Refine Edge cancelled');
+        this._refineEdgeJob = null; this._refineEdgeSource = null; this._refineEdgeResult = null;
+        this._removeFilterPanel('refine-edge-overlay');
+        return true;
+    },
+    async _applyRefineEdge() {
+        if (this._refineEdgeApplying || !this._refineEdgeSource) return false;
+        this._refineEdgeApplying = true;
+        try {
+            if (!this._refineEdgeResult) {
+                const radius = Number(document.querySelector('#refine-edge-radius')?.value) || 4;
+                if (!await this._runRefineEdgePreview(radius)) return false;
+            }
+            const source = this._refineEdgeSource;
+            const count = this._setPixelSelectionMask(this._refineEdgeResult, source.width, source.height, {
+                coverage:true, combine:'replace'
+            });
+            if (!count) { this.toast('Refine Edge produced an empty selection', 'info'); return false; }
+            this._refineEdgeJob = null; this._refineEdgeSource = null; this._refineEdgeResult = null;
+            this._removeFilterPanel('refine-edge-overlay');
+            this.toast(`Refine Edge applied: ${count.toLocaleString()} px`, 'success');
+            return true;
+        } finally {
+            this._refineEdgeApplying = false;
+        }
     },
 
     // Modify selection (expand, contract, feather, border, smooth)
@@ -21698,7 +21819,8 @@ self.onmessage = async function(event) {
     },
 
     // ====================== HEALING BRUSH ======================
-    _healOC: null, _healTarget: null, _healTool: 'healing',
+    _healOC: null, _healTarget: null, _healTool: 'healing', _healMask: null,
+    _healPoints: null, _healGuard: null, _healJob: null, _healCommitFn: null,
     _healStart(ptr, evt) {
         let target = this.canvas.getActiveObject();
         if (!target || target.type !== 'image') {
@@ -21712,19 +21834,33 @@ self.onmessage = async function(event) {
         oc.width = el.naturalWidth || el.width; oc.height = el.naturalHeight || el.height;
         oc.getContext('2d').drawImage(el, 0, 0);
         this._healOC = oc; this._healTarget = target; this._healTool = this.state.tool === 'spot-healing' ? 'spot-healing' : 'healing';
+        this._healGuard = {
+            generation:this._documentGeneration,
+            revision:this._documentRevision,
+            targetId:this._ensureObjectId(target)
+        };
+        this._healMask = this._healTool === 'spot-healing' ? new Uint8Array(oc.width * oc.height) : null;
+        this._healPoints = this._healTool === 'spot-healing' ? [] : null;
         this._healStroke(ptr);
         const commitFn = () => {
             document.removeEventListener('mouseup', commitFn);
-            if (this._healOC && this._healTarget) {
-                const history = this._healTool === 'spot-healing' ? 'Spot Healing' : 'Healing Brush';
-                this._replaceActiveImage(this._healTarget, this._healOC.toDataURL(), history);
-                this._healOC = null; this._healTarget = null;
-            }
+            this._healCommitFn = null;
+            if (!this._healOC || !this._healTarget) return;
+            const state = {
+                target:this._healTarget, oc:this._healOC, tool:this._healTool,
+                mask:this._healMask, guard:this._healGuard
+            };
+            this._healOC = null; this._healTarget = null; this._healMask = null;
+            this._healPoints = null; this._healGuard = null;
+            if (state.tool === 'spot-healing') void this._commitSpotHealing(state);
+            else void this._replaceActiveImage(state.target, state.oc.toDataURL(), 'Healing Brush', state.guard);
         };
+        this._healCommitFn = commitFn;
         document.addEventListener('mouseup', commitFn);
     },
     _healStroke(ptr) {
         if (!this._healOC || !this._healTarget) return;
+        if (this._healTool === 'spot-healing') return this._spotHealingStroke(ptr);
         const oc = this._healOC, ctx = oc.getContext('2d'), target = this._healTarget;
         const matrix = target.calcTransformMatrix();
         const inv = fabric.util.invertTransform(matrix);
@@ -21765,6 +21901,64 @@ self.onmessage = async function(event) {
             }
         } catch(e) {
             this._reportFailure('Heal stroke', e, { key:'heal-stroke' });
+        }
+    },
+    _spotHealingStroke(ptr) {
+        const oc = this._healOC, target = this._healTarget, mask = this._healMask;
+        if (!oc || !target || !mask) return false;
+        const matrix = target.calcTransformMatrix();
+        const inv = fabric.util.invertTransform(matrix);
+        const local = fabric.util.transformPoint(ptr, inv);
+        const lx = local.x + oc.width / 2, ly = local.y + oc.height / 2;
+        const size = Math.max(1, Number(this.state.healingSize) || 15);
+        const scaleX = Math.max(0.001, Math.hypot(matrix[0] || 1, matrix[1] || 0));
+        const scaleY = Math.max(0.001, Math.hypot(matrix[2] || 0, matrix[3] || 1));
+        const rx = Math.ceil(size / (2 * scaleX)), ry = Math.ceil(size / (2 * scaleY));
+        const selectionMask = this._selectionMask || (this._selectionBounds ? this._maskFromMarqueeBounds() : null);
+        const documentWidth = Math.max(1, Math.round(this.canvasW || this.canvas.width || oc.width));
+        const documentHeight = Math.max(1, Math.round(this.canvasH || this.canvas.height || oc.height));
+        const x0 = Math.max(0, Math.floor(lx - rx)), y0 = Math.max(0, Math.floor(ly - ry));
+        const x1 = Math.min(oc.width, Math.ceil(lx + rx)), y1 = Math.min(oc.height, Math.ceil(ly + ry));
+        for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+            const dx = (x + 0.5 - lx) * scaleX, dy = (y + 0.5 - ly) * scaleY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance >= size / 2) continue;
+            const localX = x + 0.5 - oc.width / 2, localY = y + 0.5 - oc.height / 2;
+            const documentPoint = fabric.util.transformPoint({ x:localX, y:localY }, matrix);
+            const selection = selectionMask
+                ? this._selectionCoverageAt(selectionMask, Math.floor(documentPoint.x), Math.floor(documentPoint.y), documentWidth, documentHeight)
+                : 255;
+            if (!selection) continue;
+            const edge = 1 - distance / Math.max(1, size / 2);
+            const coverage = Math.round(Math.max(0, Math.min(1, edge * edge)) * selection);
+            const index = y * oc.width + x;
+            if (coverage > mask[index]) mask[index] = coverage;
+        }
+        if (this._healPoints && this._healPoints.length < 20000) this._healPoints.push({ x:ptr.x, y:ptr.y });
+        return true;
+    },
+    async _commitSpotHealing({ target, oc, mask, guard }) {
+        if (!target || !oc || !mask || !mask.some(value => value)) return false;
+        const ctx = oc.getContext('2d');
+        const imageData = ctx.getImageData(0, 0, oc.width, oc.height);
+        const job = this._startComputeJob('Spot Healing', { target, group:'image-processing' });
+        this._healJob = job;
+        try {
+            const result = await this._runFilterJob(
+                { backend:'worker', op:'teleaInpaint' }, imageData, oc.width, oc.height,
+                { mask, radius:Math.max(2, Math.round((Number(this.state.healingSize) || 15) / 3)) }, job
+            );
+            if (!result) return false;
+            this._assertComputeJobCurrent(job);
+            ctx.putImageData(result, 0, 0);
+            const committed = await this._replaceActiveImage(target, oc.toDataURL(), 'Spot Healing', guard);
+            if (committed) this.toast('Spot Healing applied', 'success');
+            return committed;
+        } catch (error) {
+            if (!this._isComputeAbort(error)) this._reportFailure('Spot Healing', error, { key:'spot-healing-worker' });
+            return false;
+        } finally {
+            if (this._healJob === job) this._healJob = null;
         }
     },
 
@@ -24121,6 +24315,176 @@ const filterOps = {
     },
     emboss(d, w, h) {
         this._convolution(d, w, h, [-2, -1, 0, -1, 1, 1, 0, 1, 2]);
+    },
+    // Telea's fast-marching inpaint: fill the nearest unknown pixels first,
+    // then reconstruct each pixel from the already-known neighbourhood. The
+    // mask is coverage (rather than a boolean flag), so a selection edge can
+    // blend the reconstructed colour without a second main-thread pass.
+    teleaInpaint(d, w, h, p) {
+        const rawMask = p?.mask;
+        const mask = rawMask instanceof Uint8Array
+            ? rawMask
+            : new Uint8Array(rawMask?.buffer || rawMask || 0);
+        const total = w * h;
+        if (mask.length < total) return;
+        const radius = Math.max(1, Math.min(16, Math.round(Number(p?.radius) || 4)));
+        const original = new Uint8ClampedArray(d);
+        const filled = new Uint8Array(total);
+        const distance = new Float32Array(total);
+        distance.fill(Infinity);
+        const heap = [];
+        const push = (index, value) => {
+            heap.push([index, value]);
+            let child = heap.length - 1;
+            while (child > 0) {
+                const parent = Math.floor((child - 1) / 2);
+                if (heap[parent][1] <= value) break;
+                heap[child] = heap[parent]; child = parent;
+            }
+            heap[child] = [index, value];
+        };
+        const pop = () => {
+            if (!heap.length) return null;
+            const first = heap[0], last = heap.pop();
+            if (heap.length && last) {
+                let parent = 0;
+                while (true) {
+                    const left = parent * 2 + 1, right = left + 1;
+                    if (left >= heap.length) break;
+                    let child = left;
+                    if (right < heap.length && heap[right][1] < heap[left][1]) child = right;
+                    if (heap[child][1] >= last[1]) break;
+                    heap[parent] = heap[child]; parent = child;
+                }
+                heap[parent] = last;
+            }
+            return first;
+        };
+        const neighbours = (index, callback) => {
+            const x = index % w, y = Math.floor(index / w);
+            if (x > 0) callback(index - 1);
+            if (x + 1 < w) callback(index + 1);
+            if (y > 0) callback(index - w);
+            if (y + 1 < h) callback(index + w);
+        };
+        for (let i = 0; i < total; i++) if (!mask[i]) filled[i] = 1;
+        for (let i = 0; i < total; i++) {
+            if (filled[i]) continue;
+            let boundary = false;
+            neighbours(i, neighbour => { if (filled[neighbour]) boundary = true; });
+            if (boundary) { distance[i] = 1; push(i, 1); }
+        }
+        while (heap.length) {
+            const current = pop();
+            if (!current) break;
+            const [index, priority] = current;
+            if (filled[index] || priority !== distance[index]) continue;
+            const x = index % w, y = Math.floor(index / w);
+            let sumR = 0, sumG = 0, sumB = 0, sumA = 0, weightSum = 0;
+            for (let dy = -radius; dy <= radius; dy++) for (let dx = -radius; dx <= radius; dx++) {
+                if (dx * dx + dy * dy > radius * radius) continue;
+                const sx = x + dx, sy = y + dy;
+                if (sx < 0 || sy < 0 || sx >= w || sy >= h || (dx === 0 && dy === 0)) continue;
+                const sample = sy * w + sx;
+                if (!filled[sample]) continue;
+                const length = Math.sqrt(dx * dx + dy * dy) || 1;
+                // The inverse-distance term is Telea's core contribution;
+                // this directional term keeps broad, straight edges stable.
+                const weight = (1 + Math.abs(dx) / length + Math.abs(dy) / length) / (length * length);
+                const si = sample * 4;
+                sumR += d[si] * weight; sumG += d[si + 1] * weight;
+                sumB += d[si + 2] * weight; sumA += d[si + 3] * weight;
+                weightSum += weight;
+            }
+            if (weightSum > 0) {
+                const output = index * 4;
+                d[output] = sumR / weightSum; d[output + 1] = sumG / weightSum;
+                d[output + 2] = sumB / weightSum; d[output + 3] = sumA / weightSum;
+            }
+            filled[index] = 1;
+            neighbours(index, neighbour => {
+                if (filled[neighbour] || !mask[neighbour]) return;
+                const next = priority + 1;
+                if (next < distance[neighbour]) { distance[neighbour] = next; push(neighbour, next); }
+            });
+        }
+        // A mask that is completely enclosed by another mask can have no
+        // initial front. Leave it unchanged rather than inventing colour.
+        for (let i = 0; i < total; i++) {
+            const coverage = mask[i] / 255;
+            if (coverage >= 1 || !filled[i]) continue;
+            const output = i * 4, source = output;
+            d[output] = original[source] * (1 - coverage) + d[output] * coverage;
+            d[output + 1] = original[source + 1] * (1 - coverage) + d[output + 1] * coverage;
+            d[output + 2] = original[source + 2] * (1 - coverage) + d[output + 2] * coverage;
+            d[output + 3] = original[source + 3] * (1 - coverage) + d[output + 3] * coverage;
+        }
+    },
+    // Refine a binary/coverage selection into a soft matte. The hard mask is
+    // the trimap supplied by the selection tools; a colour-line estimate and
+    // signed distance from its boundary provide the unknown band.
+    refineEdge(d, w, h, p) {
+        const rawMask = p?.mask;
+        const mask = rawMask instanceof Uint8Array
+            ? rawMask
+            : new Uint8Array(rawMask?.buffer || rawMask || 0);
+        const total = w * h;
+        if (mask.length < total) return;
+        const radius = Math.max(1, Math.min(32, Math.round(Number(p?.radius) || 4)));
+        const foreground = new Uint8Array(total);
+        const boundary = new Uint8Array(total);
+        const distance = new Int16Array(total);
+        distance.fill(-1);
+        const queue = new Int32Array(total);
+        let head = 0, tail = 0, fgCount = 0, bgCount = 0;
+        let fgR = 0, fgG = 0, fgB = 0, bgR = 0, bgG = 0, bgB = 0;
+        for (let i = 0; i < total; i++) {
+            const isForeground = mask[i] >= 128;
+            foreground[i] = isForeground ? 1 : 0;
+            const pixel = i * 4;
+            if (isForeground) { fgR += d[pixel]; fgG += d[pixel + 1]; fgB += d[pixel + 2]; fgCount++; }
+            else { bgR += d[pixel]; bgG += d[pixel + 1]; bgB += d[pixel + 2]; bgCount++; }
+        }
+        if (!fgCount || !bgCount) return;
+        fgR /= fgCount; fgG /= fgCount; fgB /= fgCount;
+        bgR /= bgCount; bgG /= bgCount; bgB /= bgCount;
+        const visit = (index, callback) => {
+            const x = index % w, y = Math.floor(index / w);
+            if (x > 0) callback(index - 1);
+            if (x + 1 < w) callback(index + 1);
+            if (y > 0) callback(index - w);
+            if (y + 1 < h) callback(index + w);
+        };
+        for (let i = 0; i < total; i++) {
+            let edge = false;
+            visit(i, neighbour => { if (foreground[neighbour] !== foreground[i]) edge = true; });
+            if (edge) { boundary[i] = 1; distance[i] = 0; queue[tail++] = i; }
+        }
+        while (head < tail) {
+            const index = queue[head++];
+            const nextDistance = distance[index] + 1;
+            if (nextDistance > radius) continue;
+            visit(index, neighbour => {
+                if (distance[neighbour] >= 0) return;
+                distance[neighbour] = nextDistance;
+                queue[tail++] = neighbour;
+            });
+        }
+        const vr = fgR - bgR, vg = fgG - bgG, vb = fgB - bgB;
+        const lengthSquared = vr * vr + vg * vg + vb * vb || 1;
+        for (let i = 0; i < total; i++) {
+            const pixel = i * 4;
+            const colorAlpha = Math.max(0, Math.min(1, ((d[pixel] - bgR) * vr + (d[pixel + 1] - bgG) * vg + (d[pixel + 2] - bgB) * vb) / lengthSquared));
+            let alpha = mask[i] / 255;
+            const dist = distance[i];
+            if (dist >= 0 && dist <= radius) {
+                const positionAlpha = foreground[i]
+                    ? 0.5 + 0.5 * dist / radius
+                    : 0.5 - 0.5 * dist / radius;
+                alpha = positionAlpha * 0.65 + colorAlpha * 0.35;
+            }
+            d[pixel + 3] = Math.max(0, Math.min(255, Math.round(alpha * 255)));
+        }
     },
     posterize(d, w, h, p) {
         const levels = Math.max(2, Math.min(32, Number(p.levels) || 6));
