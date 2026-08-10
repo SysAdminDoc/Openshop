@@ -2750,6 +2750,55 @@ describe('history eviction, coalescing, and commit guards', () => {
     expect(restored.canvas.fabric.objects[0].src).toBe('data:image/png;base64,REBUILT');
   });
 
+  it('does not capture raster pixels for metadata history entries', () => {
+    const OS = primeHistory(loadOpenShop());
+    OS._captureHistoryPixelSurfaces = vi.fn(() => ({}));
+
+    OS.__state = 'renamed';
+    expect(OS.saveHistory('Rename Layer')).toBe(true);
+    expect(OS._captureHistoryPixelSurfaces).not.toHaveBeenCalled();
+    expect(OS.history[0].pixelEdit).toBe(false);
+
+    OS.__state = 'painted';
+    expect(OS.saveHistory('Paint', { pixelEdit:true })).toBe(true);
+    expect(OS._captureHistoryPixelSurfaces).toHaveBeenCalledTimes(1);
+    expect(OS._captureHistoryPixelSurfaces).toHaveBeenCalledWith({ dirtyRects:null });
+    expect(OS.history[1].pixelEdit).toBe(true);
+  });
+
+  it('reads only dirty tiles and reuses matching hashes without re-encoding them', () => {
+    const OS = loadOpenShop();
+    const source = document.createElement('canvas');
+    source.width = 128; source.height = 128;
+    source.getContext('2d').fillRect(0, 0, 128, 128);
+    const image = {
+      type:'image',
+      _openShopObjectId:'image-dirty',
+      width:128,
+      height:128,
+      getElement:() => source
+    };
+    const otherImage = {
+      ...image,
+      _openShopObjectId:'image-untouched',
+      getElement:() => source
+    };
+    OS.canvas = createCanvasMock([image, otherImage]);
+    OS._historyTileSize = 64;
+    const initial = OS._captureHistoryPixelSurfaces({ forceFull:true });
+    OS._historyPixelState = initial;
+    OS._historyBasePixelState = initial;
+    const encode = vi.spyOn(OS, '_encodeHistoryBytes');
+
+    const next = OS._captureHistoryPixelSurfaces({
+      dirtyRects:{ 'image-dirty': [{ x:0, y:0, width:2, height:2 }] }
+    });
+
+    expect(next).toEqual(initial);
+    expect(OS._historyCaptureMetrics).toMatchObject({ mode:'dirty', tilesRead:1, tilesReused:8, tilesEncoded:0 });
+    expect(encode).not.toHaveBeenCalled();
+  });
+
   it('discards a filter result when the document moved on, without touching the canvas', () => {
     const OS = loadOpenShop();
     const active = { name: 'Photo', type: 'image' };

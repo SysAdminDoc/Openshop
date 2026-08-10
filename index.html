@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-Iphj+dlfPNtLO2ZMmxzeA03pLZhYAslrXhEvlGmKXqk=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-XJgdJI8nP8n+eL0MFaqYPgvAAvR6rMcHKqeUMacFm8g=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -5357,6 +5357,7 @@ const OS = {
     _historySchemaVersion: 2,
     _historyTileSize: 64,
     _historyTileDebug: false,
+    _historyCaptureMetrics: null,
     _historyBaseSnapshot: null,
     _historyBasePixelState: null,
     _historyPixelState: null,
@@ -7607,7 +7608,7 @@ const OS = {
             this._setPersistenceState('dirty');
             img.set({ left:0, top:0, selectable:true, name:this._safeText(name, 120) });
             this.canvas.add(img); this.layers[this.activeLayerIdx].objects.push(img);
-            this.zoomFit(); this.saveHistory('Open Image'); this.updateLayersPanel();
+            this.zoomFit(); this.saveHistory('Open Image', { pixelEdit:true, dirtyRects:this._historyDirtyRectsForImage(img) }); this.updateLayersPanel();
             this.trackRecentFile(this._docName, img.width, img.height);
             this.toast(`Opened: ${this._safeText(name, 80)}`, 'success');
             return true;
@@ -7616,7 +7617,7 @@ const OS = {
         img.set({ left:50, top:50, selectable:true, name:this._safeText(name, 120) });
         if (this.layers[this.activeLayerIdx]?.kind === 'adjustment') this._addObjectAsLayer(img, name);
         else { this.canvas.add(img); this.layers[this.activeLayerIdx].objects.push(img); }
-        this.canvas.setActiveObject(img); this.saveHistory(mode === 'paste' ? 'Paste Image' : 'Drop Image'); this.updateLayersPanel();
+        this.canvas.setActiveObject(img); this.saveHistory(mode === 'paste' ? 'Paste Image' : 'Drop Image', { pixelEdit:true, dirtyRects:this._historyDirtyRectsForImage(img) }); this.updateLayersPanel();
         this.toast(mode === 'paste' ? 'Image pasted from clipboard' : `Added: ${this._safeText(name, 80)}`, 'success');
         return true;
     },
@@ -7920,7 +7921,7 @@ const OS = {
             this.canvas.renderAll();
             this.zoomFit();
             this._lastImportExif = null;
-            this.saveHistory('Open PDF');
+            this.saveHistory('Open PDF', { pixelEdit:true });
             this.updateLayersPanel();
             this.trackRecentFile(this._docName, canvasW, canvasH);
             this.toast(`Opened ${pageCount} PDF page${pageCount === 1 ? '' : 's'} as layers`, 'success');
@@ -8700,7 +8701,7 @@ const OS = {
         this.canvas.setActiveObject(image);
         this.canvas.renderAll();
         this.zoomFit();
-        this.saveHistory('Batch Image');
+        this.saveHistory('Batch Image', { pixelEdit:true, dirtyRects:this._historyDirtyRectsForImage(image) });
         this.updateLayersPanel();
         return image;
     },
@@ -10879,6 +10880,7 @@ self.onmessage = function(event) {
             this._enforceLayerInvariants();
             this.updateLayersPanel();
             this.saveHistory(`Add ${this._adjustmentLayerName(adjustment.type)} Adjustment Layer`, {
+                pixelEdit:true,
                 command:this._makeCommand('layer.adjustment.add', { layerId:layer.id, afterLayerId, adjustment })
             });
             this.toast(`${this._adjustmentLayerName(adjustment.type)} adjustment layer added`, 'success');
@@ -10900,6 +10902,7 @@ self.onmessage = function(event) {
             await this._rebuildAdjustmentLayers();
             this.updateLayersPanel();
             this.saveHistory(`Update ${this._adjustmentLayerName(layer.adjustment.type)} Adjustment`, {
+                pixelEdit:true,
                 command:this._makeCommand('layer.adjustment.update', { layerId:this._ensureLayerId(layer), adjustment:layer.adjustment })
             });
             return true;
@@ -10925,7 +10928,7 @@ self.onmessage = function(event) {
         this.activeLayerIdx = Math.max(0, Math.min(this.activeLayerIdx, this.layers.length - 1));
         this._enforceLayerInvariants();
         this.updateLayersPanel();
-        this.saveHistory('Apply Adjustment Stack', { command:this._makeCommand('layer.adjustment.apply') });
+        this.saveHistory('Apply Adjustment Stack', { pixelEdit:true, command:this._makeCommand('layer.adjustment.apply') });
         this.toast('Adjustment stack applied to pixel layers', 'success');
         return true;
     },
@@ -10968,13 +10971,13 @@ self.onmessage = function(event) {
             this.activeLayerIdx++;
             this._enforceLayerInvariants();
             this.updateLayersPanel();
-            this.saveHistory('Duplicate Adjustment Layer');
+            this.saveHistory('Duplicate Adjustment Layer', { pixelEdit:true });
             return;
         }
         const toClone = src.objects.filter(o => o.name !== '__boundary__');
         if (toClone.length === 0) {
             this.layers.splice(this.activeLayerIdx+1, 0, nl); this.activeLayerIdx++;
-            this._enforceLayerInvariants(); this.updateLayersPanel(); this.saveHistory('Duplicate Layer');
+            this._enforceLayerInvariants(); this.updateLayersPanel(); this.saveHistory('Duplicate Layer', { pixelEdit:false });
             return;
         }
         // Settling every clone before touching the layer table: the counter
@@ -10996,7 +10999,7 @@ self.onmessage = function(event) {
             this.layers.splice(this.activeLayerIdx + 1, 0, nl); this.activeLayerIdx++;
             this._enforceLayerInvariants();
             this.updateLayersPanel();
-            this.saveHistory('Duplicate Layer');
+            this.saveHistory('Duplicate Layer', { pixelEdit:cloned.some(({ clone }) => clone?.type === 'image') });
             const failed = results.length - cloned.length;
             if (failed) this.toast(`Duplicated the layer without ${failed} object${failed === 1 ? '' : 's'} that could not be copied`, 'warning');
         });
@@ -11014,7 +11017,7 @@ self.onmessage = function(event) {
         }
         upper.objects.forEach(o => lower.objects.push(o));
         this.layers.splice(this.activeLayerIdx, 1); this.activeLayerIdx--;
-        this._enforceLayerInvariants(); this.updateLayersPanel(); this.saveHistory('Merge Down');
+        this._enforceLayerInvariants(); this.updateLayersPanel(); this.saveHistory('Merge Down', { pixelEdit:upper.objects.some(object => object?.type === 'image') || lower.objects.some(object => object?.type === 'image') });
     },
     selectLayer(idx) {
         if (!this.layers[idx]) return;
@@ -11048,7 +11051,7 @@ self.onmessage = function(event) {
         document.getElementById('layer-opacity-val').textContent = opacity;
         this.canvas.renderAll();
         const command = this._makeCommand('layer.opacity.set', { layerId:this._ensureLayerId(l), opacity });
-        if (recordHistory) this.saveHistory('Layer Opacity', { command });
+        if (recordHistory) this.saveHistory('Layer Opacity', { pixelEdit:false, command });
         else this._layerOpacityPending = command;
         return true;
     },
@@ -11056,7 +11059,7 @@ self.onmessage = function(event) {
         if (!this._layerOpacityPending) return false;
         const command = this._layerOpacityPending;
         this._layerOpacityPending = false;
-        this.saveHistory('Layer Opacity', { command });
+        this.saveHistory('Layer Opacity', { pixelEdit:false, command });
         return true;
     },
     setLayerBlend(mode) {
@@ -11066,6 +11069,7 @@ self.onmessage = function(event) {
         l.objects.forEach(o => { if (o.name !== '__boundary__') o.globalCompositeOperation = mode; });
         this.canvas.renderAll();
         this.saveHistory('Blend: '+mode, {
+            pixelEdit:false,
             command:this._makeCommand('layer.blend.set', { layerId:this._ensureLayerId(l), blend:mode })
         });
         return true;
@@ -11081,6 +11085,7 @@ self.onmessage = function(event) {
         layer.name = name;
         this.updateLayersPanel();
         this.saveHistory('Rename Layer', {
+            pixelEdit:false,
             command:this._makeCommand('layer.rename', { layerId:this._ensureLayerId(layer), name })
         });
         return true;
@@ -11140,7 +11145,7 @@ self.onmessage = function(event) {
         const img = await fabric.Image.fromURL(dataUrl);
         this._validateDecodedImage(img);
         this.createNewDocument(width, height, { resetHistory:false });
-        img.set({ left:0, top:0, selectable:true, name });
+        img.set({ left:0, top:0, selectable:true, name, _openShopObjectId:this._newDocumentId('object') });
         this.canvas.add(img);
         this.layers[this.activeLayerIdx].objects.push(img);
         this.canvas.setActiveObject(img);
@@ -11986,7 +11991,7 @@ self.onmessage = function(event) {
             image._openShopABRStamp = { assetId:asset.id, stampCount:raster.stampCount, width:raster.width, height:raster.height };
             this._addObjectAsLayer(image, `ABR: ${asset.name}`);
             this.canvas.renderAll();
-            this.saveHistory('ABR Brush Stroke');
+            this.saveHistory('ABR Brush Stroke', { pixelEdit:true, dirtyRects:this._historyDirtyRectsForImage(image) });
             this.updateLayersPanel();
             return true;
         } catch (error) {
@@ -13610,6 +13615,8 @@ self.onmessage = function(event) {
         const values = this._readAdjustmentValues();
         this._applyImageAdjustmentsRaw(active, values);
         this.saveHistory('Adjustments Applied', {
+            pixelEdit:true,
+            dirtyRects:this._historyDirtyRectsForImage(active),
             command:this._makeCommand('image.adjust', { objectId:this._ensureObjectId(active), ...values })
         });
         this.toast(this._t('Adjustments applied'), 'success');
@@ -13780,11 +13787,12 @@ self.onmessage = function(event) {
     },
     _filterApply() {
         const name = this._filterName || 'Applied';
+        const filterTarget = this._filterTarget;
         this._filterPreviewFlush();
-        if (this._filterTarget?.type === 'image') {
-            this._applyImageFilters(this._filterTarget, this._filterTarget.filters || this._filterBackupRaw || []);
+        if (filterTarget?.type === 'image') {
+            this._applyImageFilters(filterTarget, filterTarget.filters || this._filterBackupRaw || []);
         }
-        this.saveHistory('Filter: ' + name);
+        this.saveHistory('Filter: ' + name, { pixelEdit:true, dirtyRects:this._historyDirtyRectsForImage(filterTarget) });
         this.toast(`Applied ${name}`, 'success');
         this._lastFilter = name;
         this._removeFilterPanel('filter-dialog-overlay');
@@ -13841,6 +13849,8 @@ self.onmessage = function(event) {
             active.applyFilters();
             this.canvas.renderAll();
             this.saveHistory('Filter: '+name, {
+                pixelEdit:true,
+                dirtyRects:this._historyDirtyRectsForImage(active),
                 command:this._makeCommand('filter.apply', { objectId:this._ensureObjectId(active), name })
             });
             this.toast(`Applied ${name}`,'success');
@@ -13852,7 +13862,7 @@ self.onmessage = function(event) {
     clearFilters() {
         const active=this.canvas.getActiveObject();
         if(!active||active.type!=='image') { this.toast(this._t('Select an image first'),'info'); return; }
-        active.filters=[]; active.applyFilters(); this.canvas.renderAll(); this.saveHistory('Clear Filters'); this.toast(this._t('Filters cleared'),'success');
+        active.filters=[]; active.applyFilters(); this.canvas.renderAll(); this.saveHistory('Clear Filters', { pixelEdit:true, dirtyRects:this._historyDirtyRectsForImage(active) }); this.toast(this._t('Filters cleared'),'success');
     },
 
     // ====================== COPY / PASTE ======================
@@ -14108,6 +14118,7 @@ self.onmessage = function(event) {
             }],
             ['layer.adjustment.add', {
                 label:'Add Adjustment Layer',
+                touchesPixels:true,
                 validate:args => ({
                     layerId:requiredId(args?.layerId, 'Layer ID'),
                     afterLayerId:args?.afterLayerId ? requiredId(args.afterLayerId, 'Layer ID') : null,
@@ -14120,6 +14131,7 @@ self.onmessage = function(event) {
             }],
             ['layer.adjustment.update', {
                 label:'Update Adjustment Layer',
+                touchesPixels:true,
                 validate:args => ({
                     ...layerTarget(args),
                     adjustment:this._normalizeAdjustment(args?.adjustment)
@@ -14128,6 +14140,7 @@ self.onmessage = function(event) {
             }],
             ['layer.adjustment.apply', {
                 label:'Apply Adjustment Stack',
+                touchesPixels:true,
                 validate:noArgs,
                 execute:() => this.applyAdjustmentLayers()
             }],
@@ -14252,6 +14265,7 @@ self.onmessage = function(event) {
             }],
             ['filter.apply', {
                 label:'Apply Filter',
+                touchesPixels:true,
                 validate:args => {
                     const name = this._safeText(args?.name, 40);
                     if (!['Grayscale','Invert','Sepia','BlackWhite','Sharpen','Emboss'].includes(name)) throw new Error('Unsupported replayable filter');
@@ -14264,6 +14278,7 @@ self.onmessage = function(event) {
             }],
             ['image.adjust', {
                 label:'Adjust Image',
+                touchesPixels:true,
                 validate:args => ({
                     ...objectTarget(args),
                     brightness:finite(args?.brightness, 'Brightness', -100, 100),
@@ -14297,11 +14312,13 @@ self.onmessage = function(event) {
             }],
             ['canvas.flatten', {
                 label:'Flatten',
+                touchesPixels:true,
                 validate:noArgs,
                 execute:() => this._flattenImageRaw()
             }],
             ['canvas.crop', {
                 label:'Crop',
+                touchesPixels:true,
                 validate:args => ({
                     x:finite(args?.x, 'Crop x', -this._importLimits.maxImageDimension, this._importLimits.maxImageDimension),
                     y:finite(args?.y, 'Crop y', -this._importLimits.maxImageDimension, this._importLimits.maxImageDimension),
@@ -14312,6 +14329,7 @@ self.onmessage = function(event) {
             }],
             ['canvas.rotate', {
                 label:'Rotate Canvas',
+                touchesPixels:true,
                 validate:args => {
                     const degrees = finite(args?.degrees, 'Canvas rotation', -270, 270);
                     if (![90,-90,180,-180].includes(degrees)) throw new Error('Canvas rotation must be 90 or 180 degrees');
@@ -14321,6 +14339,7 @@ self.onmessage = function(event) {
             }],
             ['canvas.flip', {
                 label:'Flip Canvas',
+                touchesPixels:true,
                 validate:args => {
                     if (args?.axis !== 'h' && args?.axis !== 'v') throw new Error('Flip axis must be horizontal or vertical');
                     return { axis:args.axis };
@@ -14383,6 +14402,11 @@ self.onmessage = function(event) {
         const definition = this._getCommandRegistry().get(command?.id);
         return definition ? this._t(definition.labelKey || definition.label || command?.id) : command?.id || 'Edit';
     },
+    _commandTouchesPixels(command) {
+        if (!command) return false;
+        if (command.id === 'macro.sequence') return (command.args?.commands || []).some(item => this._commandTouchesPixels(item));
+        return this._getCommandRegistry().get(command.id)?.touchesPixels === true;
+    },
     _encodeHistoryBytes(bytes) {
         const view = bytes instanceof Uint8Array
             ? bytes
@@ -14392,6 +14416,22 @@ self.onmessage = function(event) {
         let binary = '';
         for (let offset = 0; offset < view.length; offset += 0x8000) binary += String.fromCharCode(...view.subarray(offset, offset + 0x8000));
         return btoa(binary);
+    },
+    _historyTileHash(bytes) {
+        const view = bytes instanceof Uint8Array
+            ? bytes
+            : ArrayBuffer.isView(bytes)
+                ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+                : new Uint8Array(bytes || []);
+        let hash = 2166136261;
+        for (const byte of view) hash = Math.imul(hash ^ byte, 16777619);
+        return (hash >>> 0).toString(16).padStart(8, '0');
+    },
+    _historyTileHashValue(tile) {
+        if (tile?.hash) return String(tile.hash);
+        if (!tile?.data) return null;
+        try { return this._historyTileHash(this._decodeHistoryBytes(tile.data)); }
+        catch (_) { return null; }
     },
     _decodeHistoryBytes(encoded) {
         const binary = atob(String(encoded || ''));
@@ -14410,39 +14450,152 @@ self.onmessage = function(event) {
         });
         return clone;
     },
-    _captureHistoryPixelSurfaces() {
+    _historyDirtyRectForObject(image, rect, padding = 2) {
+        if (!image || !rect) return null;
+        const element = image.getElement?.();
+        const width = Math.round(Number(element?.naturalWidth || element?.videoWidth || element?.width || image.width || 0));
+        const height = Math.round(Number(element?.naturalHeight || element?.videoHeight || element?.height || image.height || 0));
+        if (!width || !height) return null;
+        const matrix = image.calcTransformMatrix?.();
+        const fabricAvailable = typeof fabric !== 'undefined';
+        if (!matrix || !fabricAvailable || !fabric.util?.invertTransform) {
+            const x = Math.max(0, Math.floor(Number(rect.x ?? rect.left) || 0) - padding);
+            const y = Math.max(0, Math.floor(Number(rect.y ?? rect.top) || 0) - padding);
+            return {
+                x, y,
+                width:Math.max(0, Math.min(width - x, Math.ceil(Number(rect.width ?? rect.w) || width) + padding * 2)),
+                height:Math.max(0, Math.min(height - y, Math.ceil(Number(rect.height ?? rect.h) || height) + padding * 2))
+            };
+        }
+        const inverse = fabric.util.invertTransform(matrix);
+        const left = Number(rect.left ?? rect.x ?? 0);
+        const top = Number(rect.top ?? rect.y ?? 0);
+        const rectWidth = Number(rect.width ?? rect.w ?? width);
+        const rectHeight = Number(rect.height ?? rect.h ?? height);
+        const corners = [
+            { x:left, y:top },
+            { x:left + rectWidth, y:top },
+            { x:left, y:top + rectHeight },
+            { x:left + rectWidth, y:top + rectHeight }
+        ].map(point => fabric.util.transformPoint(point, inverse));
+        const minX = Math.floor(Math.min(...corners.map(point => point.x)) + width / 2) - padding;
+        const minY = Math.floor(Math.min(...corners.map(point => point.y)) + height / 2) - padding;
+        const maxX = Math.ceil(Math.max(...corners.map(point => point.x)) + width / 2) + padding;
+        const maxY = Math.ceil(Math.max(...corners.map(point => point.y)) + height / 2) + padding;
+        const x = Math.max(0, Math.min(width, minX));
+        const y = Math.max(0, Math.min(height, minY));
+        return {
+            x, y,
+            width:Math.max(0, Math.min(width - x, maxX - x)),
+            height:Math.max(0, Math.min(height - y, maxY - y))
+        };
+    },
+    _historyDirtyRectsForImage(image, rect = null) {
+        if (!image) return null;
+        const id = this._ensureObjectId(image);
+        const element = image.getElement?.();
+        const width = Math.round(Number(element?.naturalWidth || element?.videoWidth || element?.width || image.width || 0));
+        const height = Math.round(Number(element?.naturalHeight || element?.videoHeight || element?.height || image.height || 0));
+        const dirty = rect ? this._historyDirtyRectForObject(image, rect) : { x:0, y:0, width, height };
+        return id && dirty ? { [id]: [dirty] } : null;
+    },
+    _historyDirtyRectForObjects(image, objects = []) {
+        const rects = (Array.isArray(objects) ? objects : []).map(object => {
+            try { return object?.getBoundingRect?.(true, true) || object?.getBoundingRect?.(); }
+            catch (_) { return null; }
+        }).filter(Boolean).map(rect => this._historyDirtyRectForObject(image, rect)).filter(rect => rect?.width > 0 && rect?.height > 0);
+        if (!rects.length) return this._historyDirtyRectsForImage(image);
+        const left = Math.min(...rects.map(rect => rect.x));
+        const top = Math.min(...rects.map(rect => rect.y));
+        const right = Math.max(...rects.map(rect => rect.x + rect.width));
+        const bottom = Math.max(...rects.map(rect => rect.y + rect.height));
+        const id = this._ensureObjectId(image);
+        return id ? { [id]: [{ x:left, y:top, width:right - left, height:bottom - top }] } : null;
+    },
+    _captureHistoryPixelSurfaces({ dirtyRects = null, forceFull = false } = {}) {
+        const clock = typeof performance !== 'undefined' && typeof performance.now === 'function' ? () => performance.now() : () => Date.now();
+        const started = clock();
         const objects = this.canvas?.getObjects?.() || [];
         const surfaces = {};
+        const previous = forceFull ? null : (this._historyPixelState || this._historyBasePixelState);
+        const metrics = {
+            mode:dirtyRects && !forceFull ? 'dirty' : 'full',
+            images:0,
+            tilesRead:0,
+            tilesReused:0,
+            tilesEncoded:0,
+            durationMs:0
+        };
+        const captureTile = (element, left, top, width, height) => {
+            const tileCanvas = document.createElement('canvas');
+            tileCanvas.width = width; tileCanvas.height = height;
+            const tileContext = tileCanvas.getContext('2d', { willReadFrequently:true });
+            if (!tileContext) return null;
+            try {
+                tileContext.drawImage(element, left, top, width, height, 0, 0, width, height);
+                const bytes = new Uint8Array(tileContext.getImageData(0, 0, width, height).data);
+                return { bytes, hash:this._historyTileHash(bytes) };
+            } catch (_) { return null; }
+        };
         for (const object of objects) {
             if (object?.type !== 'image') continue;
+            metrics.images++;
             const id = object._openShopObjectId;
             const element = object.getElement?.();
             const width = Math.round(Number(element?.naturalWidth || element?.videoWidth || element?.width || 0));
             const height = Math.round(Number(element?.naturalHeight || element?.videoHeight || element?.height || 0));
             if (!id || this._canvasDimensionFailure(width, height)) return null;
-            const canvas = document.createElement('canvas');
-            canvas.width = width; canvas.height = height;
-            const context = canvas.getContext('2d', { willReadFrequently:true });
-            if (!context) return null;
-            try { context.drawImage(element, 0, 0, width, height); } catch (_) { return null; }
-            let imageData;
-            try { imageData = context.getImageData(0, 0, width, height); } catch (_) { return null; }
-            const tiles = {};
             const size = this._historyTileSize;
+            const oldSurface = previous?.[id];
+            const oldDimensionsMatch = oldSurface?.width === width && oldSurface?.height === height;
+            const hasDirtyPlan = dirtyRects && typeof dirtyRects === 'object';
+            const addressed = hasDirtyPlan && Object.prototype.hasOwnProperty.call(dirtyRects, id);
+            const requested = Array.isArray(dirtyRects?.[id]) ? dirtyRects[id] : null;
+            const preserveUnmentioned = !forceFull && hasDirtyPlan && !addressed && oldDimensionsMatch;
+            const useDirty = !forceFull && addressed && requested && oldDimensionsMatch;
+            const tiles = (preserveUnmentioned || useDirty) ? { ...(oldSurface.tiles || {}) } : {};
+            const wanted = (left, top, tileWidth, tileHeight) => {
+                if (preserveUnmentioned) return false;
+                if (!useDirty) return true;
+                return requested.some(rect => {
+                    const x = Number(rect?.x ?? rect?.left ?? 0);
+                    const y = Number(rect?.y ?? rect?.top ?? 0);
+                    const w = Number(rect?.width ?? rect?.w ?? 0);
+                    const h = Number(rect?.height ?? rect?.h ?? 0);
+                    return w > 0 && h > 0 && left < x + w && left + tileWidth > x && top < y + h && top + tileHeight > y;
+                });
+            };
             for (let top = 0; top < height; top += size) {
                 for (let left = 0; left < width; left += size) {
                     const tileWidth = Math.min(size, width - left);
                     const tileHeight = Math.min(size, height - top);
-                    const tile = new Uint8Array(tileWidth * tileHeight * 4);
-                    for (let row = 0; row < tileHeight; row++) {
-                        const source = imageData.data.subarray(((top + row) * width + left) * 4, ((top + row) * width + left + tileWidth) * 4);
-                        tile.set(source, row * tileWidth * 4);
+                    if (!wanted(left, top, tileWidth, tileHeight)) {
+                        metrics.tilesReused++;
+                        continue;
                     }
-                    tiles[`${left}:${top}`] = { width:tileWidth, height:tileHeight, data:this._encodeHistoryBytes(tile) };
+                    const captured = captureTile(element, left, top, tileWidth, tileHeight);
+                    if (!captured) return null;
+                    metrics.tilesRead++;
+                    const key = `${left}:${top}`;
+                    const old = oldSurface?.tiles?.[key];
+                    if (old && old.width === tileWidth && old.height === tileHeight && this._historyTileHashValue(old) === captured.hash) {
+                        tiles[key] = old.hash ? old : { ...old, hash:captured.hash };
+                        metrics.tilesReused++;
+                    } else {
+                        tiles[key] = {
+                            width:tileWidth,
+                            height:tileHeight,
+                            hash:captured.hash,
+                            data:this._encodeHistoryBytes(captured.bytes)
+                        };
+                        metrics.tilesEncoded++;
+                    }
                 }
             }
             surfaces[id] = { width, height, tiles };
         }
+        metrics.durationMs = clock() - started;
+        this._historyCaptureMetrics = metrics;
         return surfaces;
     },
     _historyPixelDelta(before, after) {
@@ -14454,9 +14607,12 @@ self.onmessage = function(event) {
             const changed = !old || old.width !== surface.width || old.height !== surface.height;
             const tiles = [];
             Object.entries(surface.tiles || {}).forEach(([key, tile]) => {
-                if (changed || old.tiles?.[key]?.data !== tile.data || old.tiles?.[key]?.width !== tile.width || old.tiles?.[key]?.height !== tile.height) {
+                const oldTile = old?.tiles?.[key];
+                if (changed || this._historyTileHashValue(oldTile) !== this._historyTileHashValue(tile) || oldTile?.width !== tile.width || oldTile?.height !== tile.height) {
                     const [x, y] = key.split(':').map(Number);
-                    tiles.push({ x, y, width:tile.width, height:tile.height, data:tile.data });
+                    const next = { x, y, width:tile.width, height:tile.height, data:tile.data };
+                    if (tile.hash) next.hash = tile.hash;
+                    tiles.push(next);
                 }
             });
             if (tiles.length || changed) changes.push({ id, width:surface.width, height:surface.height, tiles });
@@ -14550,7 +14706,7 @@ self.onmessage = function(event) {
         this.historyIdx = -1;
         this._historyBaseLabel = this._safeText(label, 100) || 'Document Baseline';
         const snapshot = JSON.stringify(this._captureDocumentState());
-        const pixels = this._captureHistoryPixelSurfaces();
+        const pixels = this._captureHistoryPixelSurfaces({ forceFull:true });
         const prepared = this._prepareHistorySnapshot(snapshot, pixels, null);
         this._historyBaseSnapshot = prepared.snapshot;
         this._historyBasePixelState = prepared.pixelState;
@@ -14561,18 +14717,19 @@ self.onmessage = function(event) {
         this.updateHistoryPanel();
         this.updateStatus();
     },
-    _pushHistoryEntry(action, snapshot, { markDirty = true, command = null, coalesceKey = null, recordMacro = true, beforeSnapshot = null } = {}) {
-        const pixelState = this._captureHistoryPixelSurfaces();
+    _pushHistoryEntry(action, snapshot, { markDirty = true, command = null, coalesceKey = null, recordMacro = true, beforeSnapshot = null, pixelEdit = true, dirtyRects = null } = {}) {
+        const previousSnapshot = this._currentHistorySnapshot();
+        if (!pixelEdit && snapshot === previousSnapshot) return false;
+        const pixelState = pixelEdit ? this._captureHistoryPixelSurfaces({ dirtyRects }) : null;
         const prepared = this._prepareHistorySnapshot(snapshot, pixelState, this._historyPixelState);
         snapshot = prepared.snapshot;
+        if (snapshot === previousSnapshot) return false;
         const packedBeforeSnapshot = beforeSnapshot && prepared.packed
             ? this._stripHistoryPixelSources(beforeSnapshot)
             : beforeSnapshot;
-        const previousSnapshot = this._currentHistorySnapshot();
         const indexedPreviousSnapshot = this.historyIdx >= 0
             ? this.history[this.historyIdx]?.snapshot
             : this._historyBaseSnapshot;
-        if (snapshot === previousSnapshot) return false;
         if (this.historyIdx < this.history.length - 1) {
             // Editing after an undo used to throw the rest of the line away.
             // Keep it as a branch instead, so the other future is still there.
@@ -14588,6 +14745,7 @@ self.onmessage = function(event) {
             coalesceKey:coalesceKey ? this._safeText(coalesceKey, 80) : null,
             beforeSnapshot:packedBeforeSnapshot && packedBeforeSnapshot !== indexedPreviousSnapshot ? packedBeforeSnapshot : null,
             snapshot,
+            pixelEdit:Boolean(pixelEdit),
             pixelDelta:prepared.pixelDelta,
             fullSnapshot:prepared.fullSnapshot
         };
@@ -14662,10 +14820,12 @@ self.onmessage = function(event) {
             this.updateHistogram();
         });
     },
-    saveHistory(action, { markDirty = true, command = null, coalesceKey = null } = {}) {
+    // History callers opt into raster capture. Object/layer metadata keeps its
+    // full document source in the snapshot and must not pay for a pixel read.
+    saveHistory(action, { markDirty = true, command = null, coalesceKey = null, pixelEdit = false, dirtyRects = null } = {}) {
         if (this._historyTransaction || !this._hasDocumentStateForEditing()) return false;
         const snapshot = JSON.stringify(this._captureDocumentState());
-        const result = this._pushHistoryEntry(action, snapshot, { markDirty, command, coalesceKey });
+        const result = this._pushHistoryEntry(action, snapshot, { markDirty, command, coalesceKey, pixelEdit, dirtyRects });
         if (result) this._scheduleCollabStateBroadcast();
         return result;
     },
@@ -14674,6 +14834,7 @@ self.onmessage = function(event) {
         const normalizedCommand = this._normalizeCommand(command);
         this._historyTransaction = {
             command:normalizedCommand,
+            pixelEdit:this._commandTouchesPixels(normalizedCommand),
             label:label || this._commandLabel(normalizedCommand),
             markDirty,
             recordMacro,
@@ -14700,7 +14861,8 @@ self.onmessage = function(event) {
             markDirty:transaction.markDirty,
             command:transaction.command,
             recordMacro:transaction.recordMacro,
-            beforeSnapshot:transaction.beforeSnapshot
+            beforeSnapshot:transaction.beforeSnapshot,
+            pixelEdit:transaction.pixelEdit
         });
     },
     async _rollbackHistoryTransaction(error) {
@@ -15155,7 +15317,7 @@ self.onmessage = function(event) {
             this.layers.push({ name: 'Layer ' + idx + ' (copy)', visible: true, locked: false, opacity: 100, blend: 'source-over', objects: [c] });
             this.canvas.add(c); this.activeLayerIdx = idx;
             this.canvas.setActiveObject(c); this.canvas.renderAll();
-            this.saveHistory('Layer Via Copy'); this.updateLayersPanel();
+            this.saveHistory('Layer Via Copy', { pixelEdit:c?.type === 'image' }); this.updateLayersPanel();
             this.toast('Layer via copy', 'success');
         });
     },
@@ -15174,7 +15336,7 @@ self.onmessage = function(event) {
             this.layers.push({ name: 'Layer ' + idx + ' (cut)', visible: true, locked: false, opacity: 100, blend: 'source-over', objects: [c] });
             this.canvas.add(c); this.activeLayerIdx = idx;
             this.canvas.setActiveObject(c); this.canvas.renderAll();
-            this.saveHistory('Layer Via Cut'); this.updateLayersPanel();
+            this.saveHistory('Layer Via Cut', { pixelEdit:c?.type === 'image' }); this.updateLayersPanel();
             this.toast('Layer via cut', 'success');
         });
     },
@@ -15195,7 +15357,7 @@ self.onmessage = function(event) {
     duplicateSelected() {
         const active=this.canvas.getActiveObject(); if(!active) return;
         if (!this._guardObjectEdit(active) || !this._guardActiveLayerEdit()) return;
-        active.clone(c=>{ c.set({left:active.left+15,top:active.top+15}); this.canvas.add(c); this.layers[this.activeLayerIdx].objects.push(c); this.canvas.setActiveObject(c); this.canvas.renderAll(); this.saveHistory('Duplicate'); this.updateLayersPanel(); });
+        active.clone(c=>{ c.set({left:active.left+15,top:active.top+15}); this.canvas.add(c); this.layers[this.activeLayerIdx].objects.push(c); this.canvas.setActiveObject(c); this.canvas.renderAll(); this.saveHistory('Duplicate', { pixelEdit:active.type === 'image' }); this.updateLayersPanel(); });
     },
     flipH() {
         const active = this.canvas.getActiveObject();
@@ -18716,7 +18878,7 @@ self.onmessage = async function(event) {
             const lut = this._levelsLUT(this._readLevelsParams(panel));
             this._swapImageElement(this._lvlTarget, this._renderLevels(this._lvlSnap, lut));
         }
-        this.saveHistory('Levels');
+        this.saveHistory('Levels', { pixelEdit:true, dirtyRects:this._historyDirtyRectsForImage(this._lvlTarget) });
         this.toast('Levels applied', 'success');
         this._removeFilterPanel('levels-dialog-overlay');
         this._lvlSnap = null; this._lvlProxy = null; this._lvlTarget = null;
@@ -18765,7 +18927,7 @@ self.onmessage = async function(event) {
             const params = this._readColorBalanceParams(panel);
             this._swapImageElement(this._cbTarget, this._renderColorBalance(this._cbSnap, params));
         }
-        this.saveHistory('Color Balance');
+        this.saveHistory('Color Balance', { pixelEdit:true, dirtyRects:this._historyDirtyRectsForImage(this._cbTarget) });
         this.toast('Color balance applied', 'success');
         this._removeFilterPanel('cb-dialog-overlay');
         this._cbSnap = null; this._cbProxy = null; this._cbTarget = null;
@@ -18793,16 +18955,17 @@ self.onmessage = async function(event) {
         info.imgData = result;
         await this._commitImageData(info, 'Auto Enhance', { success:'Auto enhance applied' });
     },
-    async _replaceActiveImage(active, dataUrl, histName, editGuard = null) {
+    async _replaceActiveImage(active, dataUrl, histName, editGuard = null, { historyDirtyRect = null } = {}) {
         if (active?._openShopSmartObject) {
             this.toast('Edit the Smart Object source instead of applying a destructive pixel edit', 'info');
             return false;
         }
         if (!this._guardObjectEdit(active)) return false;
+        const objectId = this._ensureObjectId(active);
         const guard = editGuard || {
             generation:this._documentGeneration,
             revision:this._documentRevision,
-            targetId:this._ensureObjectId(active)
+            targetId:objectId
         };
         try {
             const newImg = await fabric.Image.fromURL(dataUrl);
@@ -18832,11 +18995,17 @@ self.onmessage = async function(event) {
             if (active._openShopLayerMask) newImg._openShopMaskBaseSrc = dataUrl;
             else if (active._openShopMaskBaseSrc) newImg._openShopMaskBaseSrc = active._openShopMaskBaseSrc;
             if (active.psd) newImg.psd = active.psd;
+            newImg._openShopObjectId = objectId;
             const li = this.layers.findIndex(l => l.objects.includes(active));
             if (li >= 0) { const idx = this.layers[li].objects.indexOf(active); this.layers[li].objects[idx] = newImg; }
             this.canvas.remove(active); this.canvas.add(newImg); this.canvas.setActiveObject(newImg);
             if (newImg._openShopLayerMask) await this._rebuildLayerMasks();
-            this.canvas.renderAll(); this.saveHistory(histName); this.updateLayersPanel();
+            const dirtyRects = historyDirtyRect
+                ? { [objectId]: [historyDirtyRect] }
+                : this._historyDirtyRectsForImage(newImg);
+            this.canvas.renderAll();
+            this.saveHistory(histName, { pixelEdit:true, dirtyRects });
+            this.updateLayersPanel();
             return true;
         } catch (error) {
             console.error('Image edit commit failed:', error);
@@ -23752,7 +23921,7 @@ self.onmessage = async function(e) {
             this.layers[this.activeLayerIdx].objects.push(image);
             this.canvas.setActiveObject(image);
             this.canvas.requestRenderAll();
-            this.saveHistory('Paste Selection');
+            this.saveHistory('Paste Selection', { pixelEdit:true, dirtyRects:this._historyDirtyRectsForImage(image) });
             this.updateLayersPanel();
             this.toast('Pasted selection', 'success');
             return true;
@@ -23780,7 +23949,7 @@ self.onmessage = async function(e) {
             this._clipboard.set({ left: this._clipboard.left + 20, top: this._clipboard.top + 20 });
             this.canvas.setActiveObject(cloned);
             this.canvas.requestRenderAll();
-            this.saveHistory('Paste');
+            this.saveHistory('Paste', { pixelEdit:true });
             this.updateLayersPanel();
         });
         return true;
@@ -23800,7 +23969,7 @@ self.onmessage = async function(e) {
             }
             this.canvas.setActiveObject(cloned);
             this.canvas.requestRenderAll();
-            this.saveHistory('Duplicate');
+            this.saveHistory('Duplicate', { pixelEdit:true });
             this.updateLayersPanel();
         });
     },
@@ -23897,11 +24066,14 @@ self.onmessage = async function(e) {
             const lw = Math.round(br.x - tl.x), lh = Math.round(br.y - tl.y);
             ctx.clearRect(lx, ly, lw, lh);
         }
+        const historyDirtyRect = this._selectionBounds
+            ? this._historyDirtyRectForObject(target, this._selectionBounds)
+            : null;
         // Report what actually happened. This used to clear the selection and
         // claim success even when the guard refused the write, so the user got
         // an error and a success toast together and lost the selection they
         // would have needed to retry.
-        this._replaceActiveImage(target, oc.toDataURL('image/png'), history).then(committed => {
+        this._replaceActiveImage(target, oc.toDataURL('image/png'), history, null, { historyDirtyRect }).then(committed => {
             if (!committed) return;
             this.clearSelection();
             this.toast(success, 'success');
@@ -23999,7 +24171,10 @@ self.onmessage = async function(e) {
                 const index = layer.objects.indexOf(stroke);
                 if (index >= 0) layer.objects.splice(index, 1);
             });
-            const committed = await this._replaceActiveImage(raster, surface.toDataURL('image/png'), 'Draw');
+            const dirtyRects = this._historyDirtyRectForObjects(raster, strokes);
+            const committed = await this._replaceActiveImage(raster, surface.toDataURL('image/png'), 'Draw', null, {
+                historyDirtyRect:dirtyRects?.[this._ensureObjectId(raster)]?.[0] || null
+            });
             if (!committed) return false;
             // Painting is not selecting; leave nothing selected behind.
             this.canvas.discardActiveObject();

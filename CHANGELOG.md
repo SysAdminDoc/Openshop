@@ -51,6 +51,7 @@ All notable changes to Openshop will be documented in this file.
   fullscreen now expose their current state visually and through `aria-checked`.
 
 ### Fixed
+- History entries now opt into raster capture only for pixel edits; stroke and filter commits track dirty tiles, hash tile bytes before encoding, and reuse untouched or unchanged tiles. The 8K performance gate records the metadata path reading zero raster tiles.
 - Offline shell promotion now copies into a verified candidate cache, persists
   a resume marker before the copy, flips the active-cache pointer only after
   verification, and retains the previous shell until the new one is active.

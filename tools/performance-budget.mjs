@@ -25,6 +25,7 @@ const baselineP95Ms = Object.freeze({
     paint:100,
     filterPreview:150,
     filterApply:4_000,
+    historyCapture:1_000,
     undoRedo:1_000,
     export:500,
     batch:2_500,
@@ -91,6 +92,12 @@ function checkReport(report) {
         }
         if (name === 'staleResult' && result.staleResultHandling?.discarded !== true) {
             failures.push(`${fixture.name}.staleResult did not discard a stale compute result`);
+        }
+        if (name === 'historyCapture' && result.historyCapture?.captureSkipped !== true) {
+            failures.push(`${fixture.name}.historyCapture performed an unexpected raster capture`);
+        }
+        if (name === 'historyCapture' && result.historyCapture?.capturedTiles !== 0) {
+            failures.push(`${fixture.name}.historyCapture read ${result.historyCapture.capturedTiles} raster tiles`);
         }
     }));
     if (failures.length) throw new Error(`Performance budget failure: ${failures.join(', ')}`);
@@ -172,6 +179,22 @@ async function runFixtureSample(page, fixture, slowMs) {
         const applied = await timed('filterApply', () => OS._filterApply(), pathFor(fabric.getFilterBackend?.(), 'FabricFilterBackend'));
         const applyMetrics = { ...OS._lastFilterRenderMetrics };
 
+        const historyCapture = await timed('historyCapture', () => {
+            const beforeMetrics = OS._historyCaptureMetrics;
+            const fullRasterTiles = Number(beforeMetrics?.tilesRead || 0);
+            const target = OS.canvas.getActiveObject();
+            if (!target) throw new Error('History probe lost its image target');
+            target.name = 'History metadata probe';
+            const saved = OS.saveHistory('History metadata probe');
+            const afterMetrics = OS._historyCaptureMetrics;
+            return {
+                saved,
+                captureSkipped:afterMetrics === beforeMetrics,
+                fullRasterTiles,
+                capturedTiles:afterMetrics === beforeMetrics ? 0 : Number(afterMetrics?.tilesRead || 0)
+            };
+        }, pathFor(null, 'CanvasRenderingContext2D'));
+
         const exported = await timed('export', async () => {
             const captured = await OS._captureExportedBlob('png');
             if (!captured?.blob?.size) throw new Error('Export probe produced an empty blob');
@@ -224,6 +247,7 @@ async function runFixtureSample(page, fixture, slowMs) {
             paint:painted,
             filterPreview:{ ...preview, value:previewMetrics },
             filterApply:{ ...applied, value:applyMetrics },
+            historyCapture,
             export:exported,
             undoRedo:history,
             batch,
@@ -245,6 +269,7 @@ async function benchmark(page) {
                 samples[name].push({
                     durationMs:result.durationMs,
                     executionPaths:result.executionPaths,
+                    historyCapture:name === 'historyCapture' ? result.value : undefined,
                     cancellation:name === 'cancel' ? { tested:true, observed:Boolean(result.value?.observed && result.value.signalAborted) } : undefined,
                     staleResultHandling:name === 'staleResult' ? { tested:true, discarded:Boolean(result.value?.discarded) } : undefined
                 });
@@ -255,6 +280,7 @@ async function benchmark(page) {
                 p50Ms:Number(percentile(values.map(value => value.durationMs), 0.5).toFixed(3)),
                 p95Ms:Number(percentile(values.map(value => value.durationMs), 0.95).toFixed(3)),
                 executionPaths:values.at(-1).executionPaths,
+                historyCapture:values.at(-1).historyCapture,
                 cancellation:values.at(-1).cancellation,
                 staleResultHandling:values.at(-1).staleResultHandling
         }]));
