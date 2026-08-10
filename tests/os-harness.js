@@ -118,16 +118,18 @@ export function createCanvasMock(initialObjects = []) {
       activeObject = null;
     }),
     toJSON: vi.fn(() => ({ objects: objects.map(({ name, type }) => ({ name, type })) })),
-    loadFromJSON: vi.fn((_json, callback) => {
-      if (callback) callback();
-    }),
+    loadFromJSON: vi.fn(async () => canvas),
     toDataURL: vi.fn(({ format = 'png' } = {}) => `data:image/${format};base64,TEST`),
     zoomToPoint: vi.fn(),
     setViewportTransform: vi.fn((transform) => {
       canvas.viewportTransform = transform;
     }),
-    setWidth: vi.fn(),
-    setHeight: vi.fn()
+    getScenePoint: vi.fn(event => ({ x:event?.clientX ?? 0, y:event?.clientY ?? 0 })),
+    setDimensions: vi.fn((dimensions = {}) => {
+      if (Number.isFinite(dimensions.width)) canvas.width = dimensions.width;
+      if (Number.isFinite(dimensions.height)) canvas.height = dimensions.height;
+      return canvas;
+    })
   };
   return canvas;
 }

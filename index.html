@@ -9,85 +9,19 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10" id="theme-color-meta">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-6lzH46X+/hTrZozIawA7KVrXrggTy1EkOvn6jZ3l40Y=' 'sha256-bAmqp1CrnDdJ237I7d/Bj+SSy+sxiiEqt9KZbH9Ml2o=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-ZB8neXbx9BhBNIJ/2ch8K4wePWGf0wVHHQMHpU19f/Q=' 'sha256-PabFNM3YST/l3o+9eDIGQ82Nt2bWZ0MfhA45uxkz6oo=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
-// Keep existing project files and editing commands stable across Fabric's
-// Promise-based v7 API while each call site is migrated independently.
-const applyFabricCompat = () => {
+// OpenShop-specific Fabric configuration. The editor uses Fabric 7's native
+// Promise-based APIs directly; keep only the defaults and serialization
+// metadata that are part of OpenShop's document contract.
+const configureFabric = () => {
     const api = window.fabric;
     if (!api || api.version !== '7.4.0') throw new Error('OpenShop requires Fabric.js 7.4.0');
 
     api.FabricObject.ownDefaults.originX = 'left';
     api.FabricObject.ownDefaults.originY = 'top';
     api.FabricObject.customProperties = ['name', 'excludeFromExport', '_openShopObjectId', '_hasMask', '_isArrow', '_openShopAdjustmentBaseSrc', '_openShopAdjustmentLayers', '_openShopLayerMask', '_openShopMaskBaseSrc', '_openShopSmartObject', '_openShopTextFeatures', '_openShopOriginalText', '_openShopTextOnPath'];
-    api.Image.filters = api.filters;
-
-    const reportAsyncError = error => {
-        console.error('Fabric operation failed:', error);
-        window.dispatchEvent(new CustomEvent('openshop:fabric-error', { detail: error }));
-    };
-    const fromURL = api.FabricImage.fromURL.bind(api.FabricImage);
-    api.FabricImage.fromURL = function(url, callbackOrOptions, imageOptions, legacyCrossOrigin) {
-        if (typeof callbackOrOptions !== 'function') {
-            return fromURL(url, callbackOrOptions, imageOptions);
-        }
-        const loadOptions = legacyCrossOrigin ? { crossOrigin: legacyCrossOrigin } : {};
-        const promise = fromURL(url, loadOptions, imageOptions || {});
-        promise.then(callbackOrOptions).catch(reportAsyncError);
-        return promise;
-    };
-
-    const clone = api.FabricObject.prototype.clone;
-    api.FabricObject.prototype.clone = function(callbackOrProperties) {
-        const promise = clone.call(this, typeof callbackOrProperties === 'function' ? undefined : callbackOrProperties);
-        if (typeof callbackOrProperties === 'function') promise.then(callbackOrProperties).catch(reportAsyncError);
-        return promise;
-    };
-
-    const loadFromJSON = api.StaticCanvas.prototype.loadFromJSON;
-    api.StaticCanvas.prototype.loadFromJSON = function(json, callbackOrReviver, options) {
-        if (typeof callbackOrReviver === 'function' && callbackOrReviver.length === 0) {
-            const promise = loadFromJSON.call(this, json, undefined, options);
-            return promise.then(() => {
-                callbackOrReviver();
-                return this;
-            }).catch(error => {
-                reportAsyncError(error);
-                throw error;
-            });
-        }
-        return loadFromJSON.call(this, json, callbackOrReviver, options);
-    };
-
-    api.Canvas.prototype.getPointer = function(event) {
-        return this.getScenePoint(event);
-    };
-    api.StaticCanvas.prototype.setWidth = function(width, options) {
-        return this.setDimensions({ width }, options);
-    };
-    api.StaticCanvas.prototype.setHeight = function(height, options) {
-        return this.setDimensions({ height }, options);
-    };
-    api.StaticCanvas.prototype.setBackgroundColor = function(color, callback) {
-        this.backgroundColor = color;
-        if (typeof callback === 'function') callback();
-        else this.requestRenderAll();
-        return this;
-    };
-
-    const stackingMethods = {
-        bringToFront: 'bringObjectToFront',
-        bringForward: 'bringObjectForward',
-        sendBackwards: 'sendObjectBackwards',
-        sendToBack: 'sendObjectToBack'
-    };
-    Object.entries(stackingMethods).forEach(([legacyName, canvasMethod]) => {
-        api.FabricObject.prototype[legacyName] = function() {
-            if (this.canvas) this.canvas[canvasMethod](this);
-            return this;
-        };
-    });
 };
 
 // Every hosted competitor puts a credit meter in the corner of the editor.
@@ -346,7 +280,7 @@ const runVerifiedBootScript = (bytes, name) => new Promise((resolve, reject) => 
 
 const executedBootAssets = new Set();
 const runVerifiedBootAssets = async () => {
-    // Sequential: the compat shim below reads the Fabric build the moment it runs.
+    // Sequential: Fabric must execute before its configured defaults are read.
     for (const asset of OPENSHOP_BOOT_ASSETS) {
         if (executedBootAssets.has(asset.name)) continue;
         await runVerifiedBootScript(await fetchVerifiedBootAsset(asset), asset.name);
@@ -368,7 +302,7 @@ window.__openshopBoot = (async () => {
         OPENSHOP_NETWORK.disableStrict(`A cold start needs the pinned libraries and none were cached (${error.message})`);
         await runVerifiedBootAssets();
     }
-    applyFabricCompat();
+    configureFabric();
     return true;
 })();
 </script>
@@ -6683,7 +6617,8 @@ const OS = {
         this._colorProfile = { name:'sRGB', sourceKind:'assumed', iccData:null, colorSpace:'srgb', workingSpace:'srgb', conversion:'identity' };
         this._aiMasks = [];
         this.canvasW = w; this.canvasH = h; this.layers = []; this.canvas.clear();
-        this.canvas.setBackgroundColor(null, this.canvas.renderAll.bind(this.canvas));
+        this.canvas.backgroundColor = null;
+        this.canvas.renderAll();
         const boundary = this._createCheckerBoundary(w, h);
         this.canvas.add(boundary);
         const backgroundObjects = [boundary];
@@ -7491,7 +7426,7 @@ const OS = {
             const visible = stack.filter(({ layer }) => layer.visible !== false);
             if (!visible.length) {
                 if (!object._openShopAdjustmentBaseSrc) continue;
-                const restored = await fabric.Image.fromURL(object._openShopAdjustmentBaseSrc);
+                const restored = await fabric.FabricImage.fromURL(object._openShopAdjustmentBaseSrc);
                 const width = object.width, height = object.height;
                 object.setElement?.(restored.getElement());
                 if (!object.setElement) object._element = restored.getElement();
@@ -7502,7 +7437,7 @@ const OS = {
                 continue;
             }
             if (!object._openShopAdjustmentBaseSrc) object._openShopAdjustmentBaseSrc = this._imageToDataURL(object);
-            const base = await fabric.Image.fromURL(object._openShopAdjustmentBaseSrc);
+            const base = await fabric.FabricImage.fromURL(object._openShopAdjustmentBaseSrc);
             const source = base.getElement();
             const surface = document.createElement('canvas');
             surface.width = source.naturalWidth || source.width;
@@ -7980,8 +7915,7 @@ const OS = {
         this._blankWorkspace = false;
         this.canvasW = state.canvas.width;
         this.canvasH = state.canvas.height;
-        const loadResult = this.canvas.loadFromJSON(state.canvas.fabric);
-        if (loadResult?.then) await loadResult;
+        await this.canvas.loadFromJSON(state.canvas.fabric);
 
         const objects = this.canvas.getObjects();
         const usedObjectIds = new Set();
@@ -8808,7 +8742,7 @@ const OS = {
             const context = canvas.getContext('2d', { alpha:true, willReadFrequently:false });
             if (!context) throw new Error('Could not create the RAW preview canvas');
             context.putImageData(new ImageData(rgba, width, height), 0, 0);
-            const image = await fabric.Image.fromURL(canvas.toDataURL('image/png'));
+            const image = await fabric.FabricImage.fromURL(canvas.toDataURL('image/png'));
             this._lastImportRaw = {
                 make:this._safeText(metadata?.camera_make || '', 120),
                 model:this._safeText(metadata?.camera_model || '', 120),
@@ -8909,7 +8843,7 @@ const OS = {
             this._docName = this._safeText(String(file.name || 'Untitled').replace(/\.[^.]+$/, ''), 100) || 'Untitled';
             this.layers[1].name = 'Page 1';
             for (let index = 0; index < renderedPages.length; index += 1) {
-                const image = await fabric.Image.fromURL(renderedPages[index]);
+                const image = await fabric.FabricImage.fromURL(renderedPages[index]);
                 image.set({ left:0, top:0, selectable:true, name:`Page ${index + 1}` });
                 this.canvas.add(image);
                 if (index === 0) this.layers[1].objects.push(image);
@@ -9058,13 +8992,13 @@ const OS = {
                     reader.onerror = () => reject(new Error('Could not read the file'));
                     reader.readAsDataURL(decodeSource);
                 });
-                img = await fabric.Image.fromURL(url);
+                img = await fabric.FabricImage.fromURL(url);
                 if (orientation > 1) {
                     // Rotate the pixels rather than the object: the correction
                     // has to survive export, and every downstream consumer
                     // works on the layer's pixels.
                     const corrected = this._applyExifOrientation(img.getElement(), orientation, { colorSpace:colorContext.targetSpace });
-                    if (corrected) img = await fabric.Image.fromURL(corrected.toDataURL('image/png'));
+                    if (corrected) img = await fabric.FabricImage.fromURL(corrected.toDataURL('image/png'));
                 }
             }
             this._lastImportExif = exif || null;
@@ -9214,7 +9148,7 @@ const OS = {
             let decodedBytes = 0;
             for (const descriptor of ordered) {
                 const dataUrl = `data:image/png;base64,${this._bytesToBase64(descriptor.entry.bytes)}`;
-                const image = await fabric.Image.fromURL(dataUrl);
+                const image = await fabric.FabricImage.fromURL(dataUrl);
                 const dimensions = this._validateDecodedImage(image);
                 decodedBytes += dimensions.width * dimensions.height * 4;
                 if (decodedBytes > this._importLimits.maxORADecodedBytes) throw new Error('OpenRaster decoded pixels exceed the import budget');
@@ -9244,7 +9178,7 @@ const OS = {
             }
             if (!imported.length && byName.has('mergedimage.png')) {
                 const dataUrl = `data:image/png;base64,${this._bytesToBase64(byName.get('mergedimage.png').bytes)}`;
-                const image = await fabric.Image.fromURL(dataUrl);
+                const image = await fabric.FabricImage.fromURL(dataUrl);
                 this._validateDecodedImage(image);
                 image.set({ left:0, top:0, originX:'left', originY:'top', name:'Merged Image', selectable:true, evented:true, _openShopObjectId:this._newDocumentId('object') });
                 imported.push({ id:this._newDocumentId('layer'), name:'Merged Image', visible:true, locked:false, opacity:100, blend:'source-over', kind:'pixel', objects:[image] });
@@ -9310,7 +9244,7 @@ const OS = {
                 ? this._convertImageDataColorProfile(decoded, colorContext.profile, colorContext.targetSpace)
                 : { imageData:decoded, conversion:'identity', converted:false };
             context.putImageData(converted.imageData, 0, 0);
-            const image = await fabric.Image.fromURL(canvas.toDataURL('image/png'));
+            const image = await fabric.FabricImage.fromURL(canvas.toDataURL('image/png'));
             this._lastImportExif = null;
             const added = await this._addDecodedImageToCanvas(image, {
                 name:file.name || 'Imported AVIF',
@@ -9330,7 +9264,7 @@ const OS = {
     },
     async _installAnimationFrames(frames, delays, file, formatLabel, { colorProfile = null, workingColorSpace = 'srgb', colorConversion = 'identity' } = {}) {
         if (!Array.isArray(frames) || !frames.length) throw new Error('Animated decoder returned no frames');
-        const image = await fabric.Image.fromURL(frames[0]);
+        const image = await fabric.FabricImage.fromURL(frames[0]);
         if (await this._addDecodedImageToCanvas(image, {
             name:file.name,
             mode:'open',
@@ -9450,7 +9384,7 @@ const OS = {
                 reader.onerror = () => reject(new Error('Could not read the GIF'));
                 reader.readAsDataURL(file);
             });
-            const image = await fabric.Image.fromURL(dataUrl);
+            const image = await fabric.FabricImage.fromURL(dataUrl);
             return this._addDecodedImageToCanvas(image, { name:file.name, mode:'open' });
         };
         try {
@@ -10633,7 +10567,7 @@ const OS = {
             reader.onerror = () => reject(new Error('Could not read the batch image'));
             reader.readAsDataURL(file);
         });
-        const image = await fabric.Image.fromURL(url);
+        const image = await fabric.FabricImage.fromURL(url);
         this._validateDecodedImage(image);
         this.createNewDocument(image.width, image.height, { resetProject:true });
         this._docName = this._safeText(String(file.name || 'Untitled').replace(/\.[^.]+$/, ''), 100) || 'Untitled';
@@ -13416,10 +13350,11 @@ self.onmessage = function(event) {
                     ? layer.parentId || null
                     : cloneMap.get(this._layerById(layer.parentId))?.id || layer.parentId || null;
             });
-            const work = sourceLayers.flatMap(layer => (layer.objects || []).filter(object => object.name !== '__boundary__').map(object => new Promise((resolve, reject) => {
-                try { object.clone(clone => (clone ? resolve({ layer, source:object, clone }) : reject(new Error('clone returned nothing')))); }
-                catch (error) { reject(error); }
-            })));
+            const work = sourceLayers.flatMap(layer => (layer.objects || []).filter(object => object.name !== '__boundary__').map(async object => {
+                const clone = await object.clone();
+                if (!clone) throw new Error('clone returned nothing');
+                return { layer, source:object, clone };
+            }));
             Promise.allSettled(work).then(results => {
                 results.filter(result => result.status === 'fulfilled').forEach(({ value }) => {
                     value.clone.set({ left:value.source.left + 10, top:value.source.top + 10 });
@@ -13434,6 +13369,9 @@ self.onmessage = function(event) {
                 this._enforceLayerInvariants();
                 this.updateLayersPanel();
                 this.saveHistory('Duplicate Group', { pixelEdit:results.some(result => result.status === 'fulfilled') });
+            }).catch(error => {
+                console.error('Group duplication failed:', error);
+                this.toast(`Could not duplicate the group: ${error.message}`, 'error');
             });
             return true;
         }
@@ -13464,15 +13402,14 @@ self.onmessage = function(event) {
             this._enforceLayerInvariants(); this.updateLayersPanel(); this.saveHistory('Duplicate Layer', { pixelEdit:false });
             return;
         }
-        // Settling every clone before touching the layer table: the counter
-        // form only finished on the success path, and the compat shim swallows
-        // a clone rejection into a console warning, so one failure left the
-        // new layer spliced in with a partial object set, a stale panel and no
-        // history entry at all — invisible to undo.
-        Promise.allSettled(toClone.map(o => new Promise((resolve, reject) => {
-            try { o.clone(c => (c ? resolve({ source:o, clone:c }) : reject(new Error('clone returned nothing')))); }
-            catch (error) { reject(error); }
-        }))).then(results => {
+        // Settle every clone before touching the layer table: a rejected
+        // native clone must not leave a partial layer, stale panel, or missing
+        // history entry behind.
+        Promise.allSettled(toClone.map(async source => {
+            const clone = await source.clone();
+            if (!clone) throw new Error('clone returned nothing');
+            return { source, clone };
+        })).then(results => {
             const cloned = results.filter(r => r.status === 'fulfilled').map(r => r.value);
             if (!cloned.length) { this.toast('Could not duplicate this layer', 'error'); return; }
             cloned.forEach(({ source, clone }) => {
@@ -13486,6 +13423,9 @@ self.onmessage = function(event) {
             this.saveHistory('Duplicate Layer', { pixelEdit:cloned.some(({ clone }) => clone?.type === 'image') });
             const failed = results.length - cloned.length;
             if (failed) this.toast(`Duplicated the layer without ${failed} object${failed === 1 ? '' : 's'} that could not be copied`, 'warning');
+        }).catch(error => {
+            console.error('Layer duplication failed:', error);
+            this.toast(`Could not duplicate the layer: ${error.message}`, 'error');
         });
     },
     mergeDown() {
@@ -13638,7 +13578,7 @@ self.onmessage = function(event) {
         }
     },
     async _replaceDocumentWithRaster(dataUrl, width, height, name) {
-        const img = await fabric.Image.fromURL(dataUrl);
+        const img = await fabric.FabricImage.fromURL(dataUrl);
         this._validateDecodedImage(img);
         this.createNewDocument(width, height, { resetHistory:false });
         img.set({ left:0, top:0, selectable:true, name, _openShopObjectId:this._newDocumentId('object') });
@@ -14482,13 +14422,13 @@ self.onmessage = function(event) {
         brush.onMouseMove = function(pointer, event) {
             owner._reconcilePredictedBrushSamples(this);
             owner._pointerEventsFor(event).forEach(sampleEvent => {
-                const samplePointer = sampleEvent === event ? pointer : owner.canvas.getPointer(sampleEvent);
+                const samplePointer = sampleEvent === event ? pointer : owner.canvas.getScenePoint(sampleEvent);
                 owner._applyBrushDynamics(this, sampleEvent);
                 originalMove.call(this, samplePointer, sampleEvent);
             });
             const predicted = owner._pointerEventsFor(event, { predicted:true });
             predicted.forEach(sampleEvent => {
-                const samplePointer = owner.canvas.getPointer(sampleEvent);
+                const samplePointer = owner.canvas.getScenePoint(sampleEvent);
                 owner._applyBrushDynamics(this, sampleEvent);
                 originalMove.call(this, samplePointer, sampleEvent);
             });
@@ -14645,7 +14585,7 @@ self.onmessage = function(event) {
             this._openShopPoints = [];
             this._openShopPredictedCount = 0;
             owner._pointerEventsFor(event).forEach(sampleEvent => {
-                const samplePointer = sampleEvent === event ? pointer : owner.canvas.getPointer(sampleEvent);
+                const samplePointer = sampleEvent === event ? pointer : owner.canvas.getScenePoint(sampleEvent);
                 this._openShopPoints.push(owner._abrPointFromPointer(samplePointer, sampleEvent));
             });
         };
@@ -14656,11 +14596,11 @@ self.onmessage = function(event) {
                 this._openShopPredictedCount = 0;
             }
             owner._pointerEventsFor(event).forEach(sampleEvent => {
-                const samplePointer = sampleEvent === event ? pointer : owner.canvas.getPointer(sampleEvent);
+                const samplePointer = sampleEvent === event ? pointer : owner.canvas.getScenePoint(sampleEvent);
                 this._openShopPoints.push(owner._abrPointFromPointer(samplePointer, sampleEvent));
             });
             const predicted = owner._pointerEventsFor(event, { predicted:true });
-            predicted.forEach(sampleEvent => this._openShopPoints.push(owner._abrPointFromPointer(owner.canvas.getPointer(sampleEvent), sampleEvent, { predicted:true })));
+            predicted.forEach(sampleEvent => this._openShopPoints.push(owner._abrPointFromPointer(owner.canvas.getScenePoint(sampleEvent), sampleEvent, { predicted:true })));
             this._openShopPredictedCount = predicted.length;
         };
         brush.onMouseUp = function() {
@@ -14679,7 +14619,7 @@ self.onmessage = function(event) {
         const raster = this._renderABRStroke(points, asset);
         if (raster.error) { this.toast(raster.error, 'error'); return false; }
         try {
-            const image = await fabric.Image.fromURL(raster.dataUrl);
+            const image = await fabric.FabricImage.fromURL(raster.dataUrl);
             image.set({ left:raster.left, top:raster.top, originX:'left', originY:'top', selectable:true, name:`ABR: ${asset.name}` });
             image._openShopABRStamp = { assetId:asset.id, stampCount:raster.stampCount, width:raster.width, height:raster.height };
             this._addObjectAsLayer(image, `ABR: ${asset.name}`);
@@ -14836,7 +14776,7 @@ self.onmessage = function(event) {
 
     // ====================== MOUSE ======================
     onMouseDown(opt) {
-        const ptr = this.canvas.getPointer(opt.e), tool = this.state.tool;
+        const ptr = this.canvas.getScenePoint(opt.e), tool = this.state.tool;
         this._beginPressureStroke(opt.e);
         // Read the modifier at the start of the gesture; by the time a marquee
         // is released it is usually already back up.
@@ -14941,7 +14881,7 @@ self.onmessage = function(event) {
         }
     },
     onMouseMove(opt) {
-        const ptr=this.canvas.getPointer(opt.e);
+        const ptr=this.canvas.getScenePoint(opt.e);
         this._updatePressureBrush(opt.e);
         document.getElementById('cursor-pos').textContent=`X: ${Math.round(ptr.x)} Y: ${Math.round(ptr.y)}`;
         // Light the close marker while the pointer is over it.
@@ -15035,10 +14975,10 @@ self.onmessage = function(event) {
             return;
         }
         if(this.state.isDrawing&&this.state.tool==='gradient'&&this._shapeStart) {
-            const ptr=this.canvas.getPointer(opt.e); this.drawGradient(this._shapeStart,ptr); this._shapeStart=null; this.state.isDrawing=false; return;
+            const ptr=this.canvas.getScenePoint(opt.e); this.drawGradient(this._shapeStart,ptr); this._shapeStart=null; this.state.isDrawing=false; return;
         }
         if(this.state.isDrawing&&this.state.tool==='pattern'&&this._shapeStart) {
-            const ptr=this.canvas.getPointer(opt.e); this.drawPattern(this._shapeStart,ptr); this._shapeStart=null; this.state.isDrawing=false; return;
+            const ptr=this.canvas.getScenePoint(opt.e); this.drawPattern(this._shapeStart,ptr); this._shapeStart=null; this.state.isDrawing=false; return;
         }
         if(this.state.isDrawing&&this._tempShape) {
             // Replace placeholders with final shapes
@@ -15072,7 +15012,7 @@ self.onmessage = function(event) {
                 const star=new fabric.Polygon(pts,{fill,stroke:sk,strokeWidth:sw,selectable:true});
                 this._addObjectAsLayer(star, 'Star');
             } else if (this._tempShape._customShapePlaceholder) {
-                const s = this._shapeStart, end = this.canvas.getPointer(opt.e);
+                const s = this._shapeStart, end = this.canvas.getScenePoint(opt.e);
                 const x = Math.min(s.x, end.x), y = Math.min(s.y, end.y), w = Math.abs(end.x - s.x), h = Math.abs(end.y - s.y);
                 this.canvas.remove(this._tempShape);
                 if (w > 2 && h > 2) {
@@ -15812,10 +15752,13 @@ self.onmessage = function(event) {
         }
         ovCtx.putImageData(ovData, 0, 0);
         this.canvas.getObjects().filter(o => o._wandOverlay).forEach(o => this.canvas.remove(o));
-        fabric.Image.fromURL(ov.toDataURL(), img => {
+        void fabric.FabricImage.fromURL(ov.toDataURL()).then(img => {
             img.set({ left: 0, top: 0, scaleX: 1, scaleY: 1,
                 selectable: false, evented: false, _wandOverlay: true, excludeFromExport: true });
             this.canvas.add(img); this.canvas.renderAll();
+        }).catch(error => {
+            console.error('Magic wand preview failed:', error);
+            this.toast(`Could not render the selection preview: ${error.message}`, 'error');
         });
     },
 
@@ -16566,11 +16509,11 @@ self.onmessage = function(event) {
     },
     _applyImageAdjustmentsRaw(active, values, options) {
         const filters = [];
-        if (values.brightness !== 0) filters.push(new fabric.Image.filters.Brightness({ brightness:values.brightness / 250 }));
-        if (values.contrast !== 0) filters.push(new fabric.Image.filters.Contrast({ contrast:values.contrast / 250 }));
-        if (values.saturation !== 0) filters.push(new fabric.Image.filters.Saturation({ saturation:values.saturation / 100 }));
-        if (values.hue !== 0) filters.push(new fabric.Image.filters.HueRotation({ rotation:values.hue / 180 }));
-        if (values.blur > 0) filters.push(new fabric.Image.filters.Blur({ blur:values.blur / 250 }));
+        if (values.brightness !== 0) filters.push(new fabric.filters.Brightness({ brightness:values.brightness / 250 }));
+        if (values.contrast !== 0) filters.push(new fabric.filters.Contrast({ contrast:values.contrast / 250 }));
+        if (values.saturation !== 0) filters.push(new fabric.filters.Saturation({ saturation:values.saturation / 100 }));
+        if (values.hue !== 0) filters.push(new fabric.filters.HueRotation({ rotation:values.hue / 180 }));
+        if (values.blur > 0) filters.push(new fabric.filters.Blur({ blur:values.blur / 250 }));
         return this._applyImageFilters(active, filters, options);
     },
     liveAdjust() {
@@ -16749,14 +16692,14 @@ self.onmessage = function(event) {
             // Build filter from current slider values
             let f;
             switch(name) {
-                case 'Blur': f=new fabric.Image.filters.Blur({blur:+(panel.querySelector('#fp-blur')?.value||0)/250}); break;
-                case 'Brightness': f=new fabric.Image.filters.Brightness({brightness:+(panel.querySelector('#fp-bright')?.value||0)/250}); break;
-                case 'Contrast': f=new fabric.Image.filters.Contrast({contrast:+(panel.querySelector('#fp-cont')?.value||0)/250}); break;
-                case 'Saturation': f=new fabric.Image.filters.Saturation({saturation:+(panel.querySelector('#fp-sat')?.value||0)/100}); break;
-                case 'HueRotation': f=new fabric.Image.filters.HueRotation({rotation:+(panel.querySelector('#fp-hue')?.value||0)/180}); break;
-                case 'Pixelate': f=new fabric.Image.filters.Pixelate({blocksize:+(panel.querySelector('#fp-pix')?.value||4)}); break;
-                case 'Noise': f=new fabric.Image.filters.Noise({noise:+(panel.querySelector('#fp-noise')?.value||0)}); break;
-                case 'Gamma': { const r=+(panel.querySelector('#fp-gr')?.value||100)/100,g=+(panel.querySelector('#fp-gg')?.value||100)/100,b=+(panel.querySelector('#fp-gb')?.value||100)/100; f=new fabric.Image.filters.Gamma({gamma:[r,g,b]}); break; }
+                case 'Blur': f=new fabric.filters.Blur({blur:+(panel.querySelector('#fp-blur')?.value||0)/250}); break;
+                case 'Brightness': f=new fabric.filters.Brightness({brightness:+(panel.querySelector('#fp-bright')?.value||0)/250}); break;
+                case 'Contrast': f=new fabric.filters.Contrast({contrast:+(panel.querySelector('#fp-cont')?.value||0)/250}); break;
+                case 'Saturation': f=new fabric.filters.Saturation({saturation:+(panel.querySelector('#fp-sat')?.value||0)/100}); break;
+                case 'HueRotation': f=new fabric.filters.HueRotation({rotation:+(panel.querySelector('#fp-hue')?.value||0)/180}); break;
+                case 'Pixelate': f=new fabric.filters.Pixelate({blocksize:+(panel.querySelector('#fp-pix')?.value||4)}); break;
+                case 'Noise': f=new fabric.filters.Noise({noise:+(panel.querySelector('#fp-noise')?.value||0)}); break;
+                case 'Gamma': { const r=+(panel.querySelector('#fp-gr')?.value||100)/100,g=+(panel.querySelector('#fp-gg')?.value||100)/100,b=+(panel.querySelector('#fp-gb')?.value||100)/100; f=new fabric.filters.Gamma({gamma:[r,g,b]}); break; }
             }
             // Update value labels
             panel.querySelectorAll('input[type="range"]').forEach(inp => {
@@ -16844,12 +16787,12 @@ self.onmessage = function(event) {
         if (photonSpec) return this._applyImageDataFilterDirect(name, photonSpec);
         let f;
         switch(name) {
-            case 'Grayscale': f=new fabric.Image.filters.Grayscale(); break;
-            case 'Invert': f=new fabric.Image.filters.Invert(); break;
-            case 'Sepia': f=new fabric.Image.filters.Sepia(); break;
-            case 'BlackWhite': f=new fabric.Image.filters.BlackWhite(); break;
-            case 'Sharpen': f=new fabric.Image.filters.Convolute({matrix:[0,-1,0,-1,5,-1,0,-1,0]}); break;
-            case 'Emboss': f=new fabric.Image.filters.Convolute({matrix:[-2,-1,0,-1,1,1,0,1,2]}); break;
+            case 'Grayscale': f=new fabric.filters.Grayscale(); break;
+            case 'Invert': f=new fabric.filters.Invert(); break;
+            case 'Sepia': f=new fabric.filters.Sepia(); break;
+            case 'BlackWhite': f=new fabric.filters.BlackWhite(); break;
+            case 'Sharpen': f=new fabric.filters.Convolute({matrix:[0,-1,0,-1,5,-1,0,-1,0]}); break;
+            case 'Emboss': f=new fabric.filters.Convolute({matrix:[-2,-1,0,-1,1,1,0,1,2]}); break;
         }
         if(f){
             active.filters.push(f);
@@ -18443,25 +18386,28 @@ self.onmessage = function(event) {
         const vpt=this.canvas.viewportTransform; vpt[4]=(a.clientWidth-this.canvasW)/2; vpt[5]=(a.clientHeight-this.canvasH)/2;
         this.canvas.setViewportTransform(vpt); this._renderZoomReadout(1); this._syncSessionWorkspace(); this.drawGrid(); this.drawRulers();
     },
-    resizeCanvas() { const a=document.getElementById('canvas-area'); this.canvas.setWidth(a.clientWidth); this.canvas.setHeight(a.clientHeight); this.canvas.renderAll(); },
+    resizeCanvas() { const a=document.getElementById('canvas-area'); this.canvas.setDimensions({ width:a.clientWidth, height:a.clientHeight }); this.canvas.renderAll(); },
     zoomActual() { this.zoomReset(); },
     _layerViaCopy() {
         const active = this.canvas.getActiveObject();
         if (!active) { this.toast('Select an object first', 'info'); return; }
-        active.clone(c => {
+        void active.clone().then(c => {
             const idx = this.layers.length;
             this.layers.push({ name: 'Layer ' + idx + ' (copy)', visible: true, locked: false, opacity: 100, blend: 'source-over', objects: [c] });
             this.canvas.add(c); this.activeLayerIdx = idx;
             this.canvas.setActiveObject(c); this.canvas.renderAll();
             this.saveHistory('Layer Via Copy', { pixelEdit:c?.type === 'image' }); this.updateLayersPanel();
             this.toast('Layer via copy', 'success');
+        }).catch(error => {
+            console.error('Layer copy failed:', error);
+            this.toast(`Could not copy the layer: ${error.message}`, 'error');
         });
     },
     _layerViaCut() {
         const active = this.canvas.getActiveObject();
         if (!active) { this.toast('Select an object first', 'info'); return; }
         if (!this._guardObjectEdit(active)) return;
-        active.clone(c => {
+        void active.clone().then(c => {
             // Remove from current layer
             const curLayer = this.layers[this.activeLayerIdx];
             const oi = curLayer ? curLayer.objects.indexOf(active) : -1;
@@ -18474,6 +18420,9 @@ self.onmessage = function(event) {
             this.canvas.setActiveObject(c); this.canvas.renderAll();
             this.saveHistory('Layer Via Cut', { pixelEdit:c?.type === 'image' }); this.updateLayersPanel();
             this.toast('Layer via cut', 'success');
+        }).catch(error => {
+            console.error('Layer cut failed:', error);
+            this.toast(`Could not cut the layer: ${error.message}`, 'error');
         });
     },
     _lastFilter: null,
@@ -18493,7 +18442,10 @@ self.onmessage = function(event) {
     duplicateSelected() {
         const active=this.canvas.getActiveObject(); if(!active) return;
         if (!this._guardObjectEdit(active) || !this._guardActiveLayerEdit()) return;
-        active.clone(c=>{ c.set({left:active.left+15,top:active.top+15}); this.canvas.add(c); this.layers[this.activeLayerIdx].objects.push(c); this.canvas.setActiveObject(c); this.canvas.renderAll(); this.saveHistory('Duplicate', { pixelEdit:active.type === 'image' }); this.updateLayersPanel(); });
+        void active.clone().then(c=>{ c.set({left:active.left+15,top:active.top+15}); this.canvas.add(c); this.layers[this.activeLayerIdx].objects.push(c); this.canvas.setActiveObject(c); this.canvas.renderAll(); this.saveHistory('Duplicate', { pixelEdit:active.type === 'image' }); this.updateLayersPanel(); }).catch(error => {
+            console.error('Object duplication failed:', error);
+            this.toast(`Could not duplicate the object: ${error.message}`, 'error');
+        });
     },
     flipH() {
         const active = this.canvas.getActiveObject();
@@ -22739,7 +22691,7 @@ self.onmessage = async function(event) {
             targetId:objectId
         };
         try {
-            const newImg = await fabric.Image.fromURL(dataUrl);
+            const newImg = await fabric.FabricImage.fromURL(dataUrl);
             if (!this._isEditCurrent(guard, active)) {
                 this.toast('Edit cancelled because the document or target layer changed', 'info');
                 return false;
@@ -23092,7 +23044,7 @@ self.onmessage = async function(event) {
     },
     async _restoreLayerMaskBase(object) {
         if (!object?._openShopMaskBaseSrc || object.type !== 'image') return false;
-        const restored = await fabric.Image.fromURL(object._openShopMaskBaseSrc);
+        const restored = await fabric.FabricImage.fromURL(object._openShopMaskBaseSrc);
         const width = object.width, height = object.height;
         object.setElement?.(restored.getElement());
         if (!object.setElement) object._element = restored.getElement();
@@ -23113,7 +23065,7 @@ self.onmessage = async function(event) {
                 continue;
             }
             if (!object._openShopMaskBaseSrc) object._openShopMaskBaseSrc = this._imageToDataURL(object);
-            const base = await fabric.Image.fromURL(object._openShopMaskBaseSrc);
+            const base = await fabric.FabricImage.fromURL(object._openShopMaskBaseSrc);
             const source = base.getElement();
             const width = source.naturalWidth || source.width, height = source.naturalHeight || source.height;
             const surface = document.createElement('canvas'); surface.width = width; surface.height = height;
@@ -23246,7 +23198,7 @@ self.onmessage = async function(event) {
     async _replaceSmartObjectSource(object, dataUrl, sourceName = 'Embedded source') {
         if (!object?._openShopSmartObject || object.type !== 'image') return false;
         const smart = this._normalizeSmartObject({ ...object._openShopSmartObject, source:dataUrl, sourceName, revision:(object._openShopSmartObject.revision || 1) + 1 }, { validate:true });
-        const replacement = await fabric.Image.fromURL(dataUrl);
+        const replacement = await fabric.FabricImage.fromURL(dataUrl);
         const oldWidth = Math.max(1, object.getScaledWidth?.() || Math.abs(object.width * object.scaleX));
         const oldHeight = Math.max(1, object.getScaledHeight?.() || Math.abs(object.height * object.scaleY));
         const width = Math.max(1, replacement.width || replacement.getElement?.().naturalWidth || 1);
@@ -23457,7 +23409,7 @@ self.onmessage = async function(event) {
         const move = event => {
             if (!this._pathEditHandle) return;
             if (!this._guardObjectEdit(this._pathEditObject)) { this._pathEditHandle = null; return; }
-            const pointer = this.canvas.getPointer(event); const inverse = fabric.util.invertTransform(this._pathEditObject.calcTransformMatrix()); const local = fabric.util.transformPoint(pointer, inverse); const command = this._pathEditObject.path[this._pathEditHandle.commandIndex];
+            const pointer = this.canvas.getScenePoint(event); const inverse = fabric.util.invertTransform(this._pathEditObject.calcTransformMatrix()); const local = fabric.util.transformPoint(pointer, inverse); const command = this._pathEditObject.path[this._pathEditHandle.commandIndex];
             command[this._pathEditHandle.xIndex] = local.x; command[this._pathEditHandle.yIndex] = local.y; this._pathEditDirty = true; this._pathEditObject.dirty = true; this._pathEditObject.setCoords?.(); this.canvas.renderAll(); this._renderPathEditOverlay();
         };
         const up = () => { this._pathEditHandle = null; };
@@ -25217,8 +25169,11 @@ self.onmessage = async function(e) {
             const callback = { resolve, reject, worker, job, op:payload.op, backend:payload.backend };
             this._filterJobCallbacks[id] = callback;
             job.cancel = error => {
-                if (this._filterJobCallbacks[id] !== callback) return;
-                delete this._filterJobCallbacks[id];
+                // The worker can remove its callback entry while a cancellation
+                // is already in flight. Reject the owning promise regardless so
+                // callers never remain suspended behind an intentionally stopped
+                // job.
+                if (this._filterJobCallbacks[id] === callback) delete this._filterJobCallbacks[id];
                 reject(error);
             };
             if (!worker._osHandlerInstalled) {
@@ -25264,10 +25219,15 @@ self.onmessage = async function(e) {
         }
     },
     async _runOffscreenFilterInWorker(op, imgData, width, height, params) {
+        const pending = this._runFilterJob({ backend:'offscreen', op }, imgData, width, height, params);
+        const job = this._activeComputeJob('image-processing');
         try {
-            return await this._runFilterJob({ backend:'offscreen', op }, imgData, width, height, params);
+            return await pending;
         } catch (error) {
-            if (this._isComputeAbort(error)) return null;
+            // Preserve cancellation for the caller. Returning null here made
+            // _runFilterWithPhoton interpret an intentional abort as an
+            // unavailable backend and start a second, uncancellable worker.
+            if (job?.cancelled || this._isComputeAbort(error)) throw this._computeAbortError(error?.message || 'Operation cancelled');
             this._disableOffscreenRenderer(error);
             return null;
         }
@@ -25327,12 +25287,10 @@ self.onmessage = async function(e) {
         return true;
     },
     async _runGPUFilterInWorker(op, imgData, width, height, params) {
-        try {
-            return await this._runFilterJob({backend:'gpu', op}, imgData, width, height, params);
-        } catch (error) {
-            if (this._isComputeAbort(error)) return null;
-            throw error;
-        }
+        // Let the pipeline catch an abort before it considers a slower
+        // fallback backend. Returning null here makes cancellation look like
+        // an unavailable GPU and starts another job after the user stopped it.
+        return this._runFilterJob({backend:'gpu', op}, imgData, width, height, params);
     },
     async _runPhotonFilterInWorker(op, imgData, width, height, params) {
         const target = this.canvas?.getActiveObject?.();
@@ -25386,8 +25344,12 @@ self.onmessage = async function(e) {
             }
         }
         if (this.renderer.capabilities.offscreenFilter) {
-            const offscreen = await this._runOffscreenFilterInWorker(op, imgData, width, height, params);
-            if (offscreen) return offscreen;
+            try {
+                const offscreen = await this._runOffscreenFilterInWorker(op, imgData, width, height, params);
+                if (offscreen) return offscreen;
+            } catch (error) {
+                if (this._isComputeAbort(error)) return null;
+            }
         }
         return this._runFilterInWorker(op, imgData, width, height, params);
     },
@@ -28123,8 +28085,13 @@ self.onmessage = async function(e) {
         const active = this.canvas.getActiveObject();
         if (!active) { this.toast('Nothing selected', 'info'); return false; }
         this._pixelClipboard = null;
-        active.clone(cloned => { this._clipboard = cloned; });
-        this.toast('Copied', 'info');
+        void active.clone().then(cloned => {
+            this._clipboard = cloned;
+            this.toast('Copied', 'info');
+        }).catch(error => {
+            console.error('Object copy failed:', error);
+            this.toast(`Could not copy the object: ${error.message}`, 'error');
+        });
         return true;
     },
     _cutSelection() {
@@ -28144,7 +28111,7 @@ self.onmessage = async function(e) {
         if (!clipboard) return false;
         if (!this._guardActiveLayerEdit()) return false;
         try {
-            const image = await fabric.Image.fromURL(clipboard.dataUrl);
+            const image = await fabric.FabricImage.fromURL(clipboard.dataUrl);
             image.set({
                 left:Math.min(this.canvasW - image.width, clipboard.x + 20),
                 top:Math.min(this.canvasH - image.height, clipboard.y + 20),
@@ -28170,7 +28137,7 @@ self.onmessage = async function(e) {
         if (this._pixelClipboard) { void this._pastePixelSelection(); return true; }
         if (!this._clipboard) { this.toast('Nothing to paste', 'info'); return false; }
         if (!this._guardActiveLayerEdit()) return;
-        this._clipboard.clone(cloned => {
+        void this._clipboard.clone().then(cloned => {
             this.canvas.discardActiveObject();
             cloned.set({ left: cloned.left + 20, top: cloned.top + 20, evented: true });
             if (cloned.type === 'activeSelection') {
@@ -28186,6 +28153,9 @@ self.onmessage = async function(e) {
             this.canvas.requestRenderAll();
             this.saveHistory('Paste', { pixelEdit:true });
             this.updateLayersPanel();
+        }).catch(error => {
+            console.error('Object paste failed:', error);
+            this.toast(`Could not paste the object: ${error.message}`, 'error');
         });
         return true;
     },
@@ -28193,7 +28163,7 @@ self.onmessage = async function(e) {
         const active = this.canvas.getActiveObject();
         if (!active) return;
         if (!this._guardObjectEdit(active) || !this._guardActiveLayerEdit()) return;
-        active.clone(cloned => {
+        void active.clone().then(cloned => {
             cloned.set({ left: cloned.left + 20, top: cloned.top + 20, evented: true });
             if (cloned.type === 'activeSelection') {
                 cloned.canvas = this.canvas;
@@ -28206,6 +28176,9 @@ self.onmessage = async function(e) {
             this.canvas.requestRenderAll();
             this.saveHistory('Duplicate', { pixelEdit:true });
             this.updateLayersPanel();
+        }).catch(error => {
+            console.error('Selection duplication failed:', error);
+            this.toast(`Could not duplicate the selection: ${error.message}`, 'error');
         });
     },
     _deleteSelected() {
@@ -28360,7 +28333,7 @@ self.onmessage = async function(e) {
         const blank = document.createElement('canvas');
         blank.width = width;
         blank.height = height;
-        const raster = await fabric.Image.fromURL(blank.toDataURL('image/png'));
+        const raster = await fabric.FabricImage.fromURL(blank.toDataURL('image/png'));
         raster.set({
             left:0, top:0, selectable:true, name:layer.name,
             _openShopObjectId:this._newDocumentId('object')
@@ -28426,9 +28399,9 @@ self.onmessage = async function(e) {
     async _mirrorPath(path) {
         const cx = this.canvasW / 2, cy = this.canvasH / 2;
         const mode = this._symmetryMode;
-        const clone = () => new Promise((resolve, reject) => {
-            try { path.clone(c => (c ? resolve(c) : reject(new Error('clone returned nothing')))); }
-            catch (error) { reject(error); }
+        const clone = () => path.clone().then(c => {
+            if (!c) throw new Error('clone returned nothing');
+            return c;
         });
         const place = [];
         if (mode === 'horizontal' || mode === 'both') {
@@ -28912,11 +28885,14 @@ self.onmessage = async function(e) {
             ctx.fillText(text[i], 0, 0);
             ctx.restore();
         }
-        fabric.Image.fromURL(oc.toDataURL(), img => {
+        void fabric.FabricImage.fromURL(oc.toDataURL()).then(img => {
             img.set({ left: this.canvasW/2 - size/2, top: this.canvasH/2 - size/2, selectable: true });
             this.canvas.add(img); this.canvas.setActiveObject(img);
             this.layers[this.activeLayerIdx].objects.push(img);
             this.saveHistory('Curved Text'); this.updateLayersPanel();
+        }).catch(error => {
+            console.error('Curved text image decode failed:', error);
+            this.toast(`Could not create curved text: ${error.message}`, 'error');
         });
         overlay.remove(); this.toast(this._t('Curved text created'),'success');
     },
@@ -29026,7 +29002,7 @@ self.onmessage = async function(e) {
     async _loadAnimationFrame(index) {
         const data = this._animFrames[index];
         if (!data) throw new Error('Frame no longer exists');
-        const img = await fabric.Image.fromURL(data);
+        const img = await fabric.FabricImage.fromURL(data);
         this._validateDecodedImage(img);
         this.canvas.clear();
         const boundary = this._createCheckerBoundary(this.canvasW, this.canvasH);
@@ -30291,7 +30267,7 @@ self.onmessage = async function(e) {
             finalCanvas.getContext('2d').drawImage(depthCanvas, 0, 0, origW, origH);
             const depthUrl = finalCanvas.toDataURL('image/png');
             // Add as new layer above current
-            const img = await this._raceComputeJob(fabric.Image.fromURL(depthUrl), job);
+            const img = await this._raceComputeJob(fabric.FabricImage.fromURL(depthUrl), job);
             this._assertComputeJobCurrent(job);
             img.set({ left: target.left, top: target.top, scaleX: target.scaleX, scaleY: target.scaleY, selectable: true, name: 'Depth Map', opacity: 0.85 });
             this.canvas.add(img); this.canvas.setActiveObject(img);
@@ -31748,13 +31724,6 @@ document.addEventListener('input', e => {
         e.target.nextElementSibling.textContent = e.target.value + e.target.dataset.suffix;
 });
 
-// The Fabric compat shim reports async decode failures through this event.
-// Without a listener a corrupt image simply did nothing at all.
-window.addEventListener('openshop:fabric-error', e => {
-    if (typeof OS === 'undefined' || !OS.toast) return;
-    const reason = e.detail?.message || 'the file could not be decoded';
-    OS.toast(`Could not read that image — ${reason}`, 'error');
-});
 window.addEventListener('error', e => { console.error('Unhandled error:', e.error || e.message); if (typeof OS !== 'undefined' && OS.toast) OS.toast('Something went wrong — see console', 'error'); });
 window.addEventListener('unhandledrejection', e => { console.error('Unhandled promise rejection:', e.reason); if (typeof OS !== 'undefined' && OS.toast) OS.toast('Something went wrong — see console', 'error'); });
 const renderBootFailure = (stage, error) => {

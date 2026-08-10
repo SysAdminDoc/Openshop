@@ -233,7 +233,7 @@ describe('OpenShop core object', () => {
   it('reconciles provisional predicted brush points before the next committed sample', () => {
     const OS = loadOpenShop();
     OS.canvas = createCanvasMock();
-    OS.canvas.getPointer = vi.fn(event => ({ x:event.clientX, y:event.clientY }));
+    OS.canvas.getScenePoint = vi.fn(event => ({ x:event.clientX, y:event.clientY }));
     OS.state.tool = 'brush';
     OS.state.brushSize = 10;
     const points = [];
@@ -368,15 +368,41 @@ describe('OpenShop core object', () => {
     ]);
   });
 
+  it('uses Fabric 7 native promises and handles clone rejection at the caller', async () => {
+    const source = readFileSync('index.html', 'utf8');
+    expect(source).not.toContain('applyFabricCompat');
+    expect(source).not.toContain('reportAsyncError');
+    expect(source).not.toContain('openshop:fabric-error');
+    expect(source).not.toMatch(/(?:fromURL|clone|loadFromJSON)\([^)]*=>/);
+    expect(source).not.toMatch(/\bgetPointer\b|\bsetWidth\b|\bsetHeight\b|\bsetBackgroundColor\b/);
+
+    const OS = loadOpenShop();
+    const active = {
+      name:'Native clone subject', type:'rect', left:10, top:20,
+      clone:vi.fn().mockRejectedValue(new Error('native clone failed'))
+    };
+    const canvas = createCanvasMock([active]);
+    canvas.setActiveObject(active);
+    OS.canvas = canvas;
+    OS.layers = [{ id:'layer-native', name:'Native clone subject', visible:true, locked:false, opacity:100, blend:'source-over', objects:[active] }];
+    OS.activeLayerIdx = 0;
+    quietUiMethods(OS);
+
+    expect(OS._layerViaCopy()).toBeUndefined();
+    await vi.waitFor(() => expect(OS.toast).toHaveBeenCalledWith('Could not copy the layer: native clone failed', 'error'));
+    expect(OS.layers).toHaveLength(1);
+    expect(canvas.add).not.toHaveBeenCalled();
+  });
+
   it('restores prior snapshots through undo and redo', async () => {
     const OS = loadOpenShop();
     const canvas = createCanvasMock();
     let snapshotName = 'Initial';
     canvas.toJSON = vi.fn(() => ({ objects: [{ name: snapshotName }] }));
     const restored = [];
-    canvas.loadFromJSON = vi.fn((json, callback) => {
+    canvas.loadFromJSON = vi.fn((json) => {
       restored.push(json.objects[0].name);
-      callback?.();
+      return Promise.resolve(canvas);
     });
     OS.canvas = canvas;
     quietUiMethods(OS);
@@ -1765,7 +1791,7 @@ describe('OpenShop core object', () => {
 
     const created = {};
     installFabricMock();
-    globalThis.fabric.Image = {
+    globalThis.fabric.FabricImage = {
       fromURL: async () => ({
         set(props) { Object.assign(created, props); },
         type: 'image'

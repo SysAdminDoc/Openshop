@@ -714,17 +714,13 @@ test('applies a one-click pixel filter to an active image layer @cross-browser',
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 8, 8);
 
-    await new Promise((resolve) => {
-      fabric.Image.fromURL(source.toDataURL('image/png'), (img) => {
-        img.set({ name: 'Filter Smoke', left: 20, top: 20, selectable: true });
-        OS.canvas.add(img);
-        if (!OS.layers.length) OS.addLayer();
-        OS.layers[OS.activeLayerIdx].objects.push(img);
-        OS.canvas.setActiveObject(img);
-        OS.canvas.renderAll();
-        resolve();
-      });
-    });
+    const img = await fabric.FabricImage.fromURL(source.toDataURL('image/png'));
+    img.set({ name: 'Filter Smoke', left: 20, top: 20, selectable: true });
+    OS.canvas.add(img);
+    if (!OS.layers.length) OS.addLayer();
+    OS.layers[OS.activeLayerIdx].objects.push(img);
+    OS.canvas.setActiveObject(img);
+    OS.canvas.renderAll();
 
     await OS.applyFilterDirect('Sharpen');
 
@@ -790,7 +786,7 @@ test('cancels a running pixel filter without changing pixels or history', async 
     source.width = 8;
     source.height = 8;
     source.getContext('2d').fillRect(0, 0, 8, 8);
-    const img = await fabric.Image.fromURL(source.toDataURL('image/png'));
+    const img = await fabric.FabricImage.fromURL(source.toDataURL('image/png'));
     img.set({ name: 'Cancelable Filter', left: 20, top: 20, selectable: true });
     OS.canvas.add(img);
     OS.layers[OS.activeLayerIdx].objects.push(img);
@@ -856,16 +852,12 @@ test('creates a pixel selection from a mocked AI segment mask', async ({ page })
     ctx.fillStyle = '#f8fafc';
     ctx.fillRect(12, 4, 4, 8);
 
-    await new Promise((resolve) => {
-      fabric.Image.fromURL(source.toDataURL('image/png'), (img) => {
-        img.set({ name: 'Segment Smoke', left: 0, top: 0, selectable: true });
-        OS.canvas.add(img);
-        OS.layers[OS.activeLayerIdx].objects.push(img);
-        OS.canvas.setActiveObject(img);
-        OS.canvas.renderAll();
-        resolve();
-      });
-    });
+    const img = await fabric.FabricImage.fromURL(source.toDataURL('image/png'));
+    img.set({ name: 'Segment Smoke', left: 0, top: 0, selectable: true });
+    OS.canvas.add(img);
+    OS.layers[OS.activeLayerIdx].objects.push(img);
+    OS.canvas.setActiveObject(img);
+    OS.canvas.renderAll();
 
     const data = new Uint8Array(16 * 16);
     for (let y = 4; y <= 11; y++) {
@@ -964,9 +956,7 @@ test('loads legacy Fabric 5 documents without geometry or metadata drift', async
 
     const migrated = await OS._loadDocumentState(legacyDocument);
     const objects = OS.canvas.getObjects();
-    const cloneName = await new Promise((resolve, reject) => {
-      objects[0].clone((clone) => resolve(clone.name)).catch(reject);
-    });
+    const cloneName = (await objects[0].clone()).name;
     const serialized = OS.canvas.toJSON(['name']);
 
     return {
@@ -2244,12 +2234,12 @@ test('undoes destructive canvas and frame transactions without state loss', asyn
       return OS.applyCrop();
     });
 
-    const originalFromURL = fabric.Image.fromURL;
+    const originalFromURL = fabric.FabricImage.fromURL;
     const beforeFailure = snapshot();
     const historyBeforeFailure = OS.history.length;
-    fabric.Image.fromURL = () => Promise.reject(new Error('Synthetic image decode failure'));
+    fabric.FabricImage.fromURL = () => Promise.reject(new Error('Synthetic image decode failure'));
     const failedFlatten = await OS.flattenImage();
-    fabric.Image.fromURL = originalFromURL;
+    fabric.FabricImage.fromURL = originalFromURL;
     const failedFlattenRolledBack = snapshot() === beforeFailure && OS.history.length === historyBeforeFailure;
 
     const frameBase = snapshot();
@@ -5450,7 +5440,7 @@ test('copies and cuts pixel selections through PNG and the system clipboard @cro
     source.width = 8; source.height = 8;
     source.getContext('2d').fillStyle = '#c8501e';
     source.getContext('2d').fillRect(0, 0, 8, 8);
-    const image = await fabric.Image.fromURL(source.toDataURL('image/png'));
+    const image = await fabric.FabricImage.fromURL(source.toDataURL('image/png'));
     image.set({ left:0, top:0, name:'Clipboard source' });
     OS.canvas.add(image);
     OS.layers[OS.activeLayerIdx].objects.push(image);
@@ -5478,7 +5468,7 @@ test('copies and cuts pixel selections through PNG and the system clipboard @cro
 
     setSelection();
     const copied = await OS._copyPixelSelection();
-    const copiedImage = await fabric.Image.fromURL(OS._pixelClipboard.dataUrl);
+    const copiedImage = await fabric.FabricImage.fromURL(OS._pixelClipboard.dataUrl);
     const copiedPixel = readPixel(copiedImage, 1, 1);
     const copiedShape = { width:copiedImage.width, height:copiedImage.height, pixel:copiedPixel };
 
@@ -7425,7 +7415,7 @@ test('keeps 4K adjustment and filter previews responsive while Apply stays full 
     referenceContext.fillStyle = 'rgb(40,80,120)';
     referenceContext.fillRect(0, 0, 1, 1);
     const reference = new fabric.Image(referenceSource);
-    reference.filters = [new fabric.Image.filters.Brightness({ brightness:finalBrightness / 250 })];
+    reference.filters = [new fabric.filters.Brightness({ brightness:finalBrightness / 250 })];
     reference.applyFilters();
     const referencePixel = [...reference.getElement().getContext('2d').getImageData(0, 0, 1, 1).data];
 
@@ -8328,23 +8318,22 @@ test('runs the Photon WASM backend for real on the operation it is allowed @slow
     ctx.fillRect(0, 0, 8, 8);
     const source = swatch.toDataURL('image/png');
 
-    const addImage = () => new Promise(resolve => {
-      fabric.Image.fromURL(source, image => {
-        OS.canvas.add(image);
-        OS.layers.push({
-          id: OS._newDocumentId('layer'),
-          name: 'Swatch',
-          visible: true,
-          locked: false,
-          opacity: 100,
-          blend: 'source-over',
-          objects: [image]
-        });
-        OS.activeLayerIdx = OS.layers.length - 1;
-        OS.canvas.setActiveObject(image);
-        resolve(image);
+    const addImage = async () => {
+      const image = await fabric.FabricImage.fromURL(source);
+      OS.canvas.add(image);
+      OS.layers.push({
+        id: OS._newDocumentId('layer'),
+        name: 'Swatch',
+        visible: true,
+        locked: false,
+        opacity: 100,
+        blend: 'source-over',
+        objects: [image]
       });
-    });
+      OS.activeLayerIdx = OS.layers.length - 1;
+      OS.canvas.setActiveObject(image);
+      return image;
+    };
 
     const pixelOf = image => {
       const el = image.getElement();
@@ -8596,20 +8585,16 @@ test('hands AI pipelines canvas pixels, and cancels or fails without touching th
     ctx.fillRect(0, 0, 12, 9);
     const source = swatch.toDataURL('image/png');
 
-    const image = await new Promise(resolve => {
-      fabric.Image.fromURL(source, added => {
-        OS.canvas.add(added);
-        OS.layers.push({
-          id: OS._newDocumentId('layer'),
-          name: 'Subject',
-          visible: true, locked: false, opacity: 100, blend: 'source-over',
-          objects: [added]
-        });
-        OS.activeLayerIdx = OS.layers.length - 1;
-        OS.canvas.setActiveObject(added);
-        resolve(added);
-      });
+    const image = await fabric.FabricImage.fromURL(source);
+    OS.canvas.add(image);
+    OS.layers.push({
+      id: OS._newDocumentId('layer'),
+      name: 'Subject',
+      visible: true, locked: false, opacity: 100, blend: 'source-over',
+      objects: [image]
     });
+    OS.activeLayerIdx = OS.layers.length - 1;
+    OS.canvas.setActiveObject(image);
     const originalElement = image.getElement().src;
 
     class FakeRawImage {

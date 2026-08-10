@@ -63,6 +63,7 @@ All notable changes to Openshop will be documented in this file.
   fullscreen now expose their current state visually and through `aria-checked`.
 
 ### Fixed
+- Retired the Fabric v5 compatibility layer: editor call sites now use Fabric 7's native promises, current scene/size/filter APIs, and local async failure handling; cancelled accelerated filters no longer fall through into a second worker job.
 - Added a capability-tested OffscreenCanvas renderer worker for supported
   filter application and capped previews, with the existing Fabric/main-thread
   and CPU-worker paths retained for Firefox, WebKit, and unsupported contexts.
