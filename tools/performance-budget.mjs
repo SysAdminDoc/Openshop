@@ -27,6 +27,7 @@ const baselineP95Ms = Object.freeze({
     filterApply:4_000,
     historyCapture:1_000,
     historyReplay:1_000,
+    psdLazyDecode:1_000,
     rendererFilter:1_000,
     rendererFallback:1_000,
     undoRedo:1_000,
@@ -105,6 +106,20 @@ function checkReport(report) {
         if (name === 'historyReplay' && result.historyReplay?.reconstructionSteps > result.historyReplay?.checkpointInterval - 1) {
             failures.push(`${fixture.name}.historyReplay replayed ${result.historyReplay.reconstructionSteps} deltas without a nearby checkpoint`);
         }
+        if (name === 'psdLazyDecode') {
+            if (result.psdLazyDecode?.strategy !== 'useRawData' || result.psdLazyDecode?.lazy !== true) {
+                failures.push(`${fixture.name}.psdLazyDecode did not use raw layer decoding`);
+            }
+            if (!Number.isFinite(result.psdLazyDecode?.firstLayerMs)) {
+                failures.push(`${fixture.name}.psdLazyDecode did not report time-to-first-layer`);
+            }
+            if (!(Number(result.psdLazyDecode?.totalMemoryLimit) > 0 && Number(result.psdLazyDecode.totalMemoryLimit) < 2 * 1024 * 1024 * 1024)) {
+                failures.push(`${fixture.name}.psdLazyDecode did not enforce an explicit sub-2GB memory limit`);
+            }
+            if (Number(result.psdLazyDecode?.decodedLayerCount) < 4) {
+                failures.push(`${fixture.name}.psdLazyDecode did not exercise the large multi-layer fixture`);
+            }
+        }
         if (name === 'rendererFilter' && result.rendererFilter?.path !== 'offscreen-filter-worker') {
             failures.push(`${fixture.name}.rendererFilter did not exercise the OffscreenCanvas worker path`);
         }
@@ -115,8 +130,8 @@ function checkReport(report) {
     if (failures.length) throw new Error(`Performance budget failure: ${failures.join(', ')}`);
 }
 
-async function runFixtureSample(page, fixture, slowMs) {
-    return page.evaluate(async ({ width, height, slowFilterMs: injectedSlowMs }) => {
+async function runFixtureSample(page, fixture, slowMs, psdFixture) {
+    return page.evaluate(async ({ width, height, slowFilterMs: injectedSlowMs, psdFixture }) => {
         const pathFor = (backend, fallback = 'CanvasRenderingContext2D') => {
             const webgl = Boolean(backend && window.fabric?.WebGLFilterBackend && backend instanceof fabric.WebGLFilterBackend);
             const canvas2d = Boolean(backend && window.fabric?.Canvas2dFilterBackend && backend instanceof fabric.Canvas2dFilterBackend);
@@ -303,6 +318,16 @@ async function runFixtureSample(page, fixture, slowMs) {
             return { processed:result.processed.length, bytes:result.blob.size };
         }, pathFor(null, 'CanvasRenderingContext2D'));
 
+        const psdLazyDecode = await timed('psdLazyDecode', async () => {
+            const bytes = Uint8Array.from(atob(psdFixture), character => character.charCodeAt(0));
+            const imported = await OS._loadPSDFile(new File([bytes], 'performance-nested.psd', { type:'image/vnd.adobe.photoshop' }));
+            const metrics = { ...OS._lastPSDImportMetrics };
+            if (!imported || metrics.strategy !== 'useRawData' || metrics.lazy !== true) {
+                throw new Error('PSD performance probe did not use lazy raw decoding');
+            }
+            return metrics;
+        }, { backend:'ag-psd-worker', worker:true, gpu:false, cpu:false });
+
         const cancelled = await timed('cancel', () => {
             const job = OS._startComputeJob('performance-cancel');
             const observed = OS._cancelComputeJob(job, 'Performance cancellation probe');
@@ -330,6 +355,7 @@ async function runFixtureSample(page, fixture, slowMs) {
             filterApply:{ ...applied, value:applyMetrics },
             historyCapture,
             historyReplay,
+            psdLazyDecode,
             rendererFilter,
             rendererFallback,
             export:exported,
@@ -340,21 +366,22 @@ async function runFixtureSample(page, fixture, slowMs) {
         };
         await OS.closeDocument({ force:true });
         return output;
-    }, { ...fixture, slowFilterMs:slowMs });
+    }, { ...fixture, slowFilterMs:slowMs, psdFixture });
 }
 
-async function benchmark(page) {
+async function benchmark(page, psdFixture) {
     const reportFixtures = [];
     for (const fixture of fixtures) {
         const samples = Object.fromEntries(Object.keys(budgets).map(name => [name, []]));
         for (let index = 0; index < iterations; index += 1) {
-            const measured = await runFixtureSample(page, fixture, slowFilterMs);
+            const measured = await runFixtureSample(page, fixture, slowFilterMs, psdFixture);
             Object.entries(measured).forEach(([name, result]) => {
                 samples[name].push({
                     durationMs:result.durationMs,
                     executionPaths:result.executionPaths,
                     historyCapture:name === 'historyCapture' ? result.value : undefined,
                     historyReplay:name === 'historyReplay' ? result.value : undefined,
+                    psdLazyDecode:name === 'psdLazyDecode' ? result.value : undefined,
                     rendererFilter:name === 'rendererFilter' ? result.value : undefined,
                     rendererFallback:name === 'rendererFallback' ? result.value : undefined,
                     cancellation:name === 'cancel' ? { tested:true, observed:Boolean(result.value?.observed && result.value.signalAborted) } : undefined,
@@ -369,6 +396,7 @@ async function benchmark(page) {
                 executionPaths:values.at(-1).executionPaths,
                 historyCapture:values.at(-1).historyCapture,
                 historyReplay:values.at(-1).historyReplay,
+                psdLazyDecode:values.at(-1).psdLazyDecode,
                 rendererFilter:values.at(-1).rendererFilter,
                 rendererFallback:values.at(-1).rendererFallback,
                 cancellation:values.at(-1).cancellation,
@@ -401,13 +429,47 @@ async function main() {
         await page.goto(appUrl, { waitUntil:'domcontentloaded' });
         await page.waitForFunction(() => document.documentElement.dataset.osBoot === 'ready', null, { timeout:30_000 });
         await page.getByRole('button', { name:'Enter Studio' }).click();
-        const report = await benchmark(page);
+        const psdFixture = await page.evaluate(() => {
+            const width = 1536;
+            const height = 1536;
+            const colors = ['#cc2233', '#2244cc', '#22aa66', '#ddaa22'];
+            const makeCanvas = color => {
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const context = canvas.getContext('2d');
+                context.fillStyle = color;
+                context.fillRect(0, 0, width, height);
+                return canvas;
+            };
+            const bytes = new Uint8Array(agPsd.writePsd({
+                width,
+                height,
+                canvas:makeCanvas('#101010'),
+                children:colors.map((color, index) => ({
+                    name:`Performance PSD layer ${index + 1}`,
+                    left:0,
+                    top:0,
+                    right:width,
+                    bottom:height,
+                    canvas:makeCanvas(color)
+                }))
+            }));
+            let binary = '';
+            for (let index = 0; index < bytes.length; index += 0x8000) {
+                binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+            }
+            return btoa(binary);
+        });
+        const report = await benchmark(page, psdFixture);
         if (process.argv.includes('--check')) checkReport(report);
         if (process.argv.includes('--json')) console.log(JSON.stringify(report, null, 2));
         else {
             console.log(`Performance budgets passed for ${report.fixtures.length} real browser fixtures (4K, 8K, 12MP).`);
             report.fixtures.forEach(fixture => {
                 const values = Object.keys(budgets).map(name => `${name} p95 ${formatMs(fixture.operations[name].p95Ms)}`);
+                const firstLayerMs = fixture.operations.psdLazyDecode.psdLazyDecode?.firstLayerMs;
+                if (Number.isFinite(firstLayerMs)) values.push(`psd time-to-first-layer ${formatMs(firstLayerMs)}`);
                 console.log(`${fixture.name} ${fixture.width}x${fixture.height}: ${values.join(', ')}`);
             });
         }

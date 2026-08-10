@@ -1016,6 +1016,7 @@ test('decodes and bounds PSD pixels in a worker before committing the document',
       layers: OS.layers.map((layer) => layer.name),
       bluePixel: pixel ? [...pixel] : null,
       decodedLimit: OS._psdLimits.maxDecodedBytes,
+      decodeMetrics: OS._lastPSDImportMetrics,
       progressClosed: !document.getElementById('psd-import-progress'),
       dirty: OS._isDirty
     };
@@ -1033,6 +1034,14 @@ test('decodes and bounds PSD pixels in a worker before committing the document',
   expect(result.heartbeats).toBeGreaterThan(0);
   expect(result.bluePixel[2]).toBeGreaterThan(result.bluePixel[0]);
   expect(result.decodedLimit).toBe(256 * 1024 * 1024);
+  expect(result.decodeMetrics).toMatchObject({
+    strategy:'useRawData',
+    lazy:true,
+    totalMemoryLimit:result.decodedLimit,
+    layerDecoder:expect.stringMatching(/getLayerImageData|decodeLayerPixels/)
+  });
+  expect(result.decodeMetrics.firstLayerMs).toBeGreaterThanOrEqual(0);
+  expect(result.decodeMetrics.decodedLayerCount).toBe(1);
   expect(pageErrors).toEqual([]);
 });
 
@@ -1062,7 +1071,8 @@ test('imports a Photoshop-authored nested PSD fixture', async ({ page }) => {
         name: group.name,
         parent: namesById.get(group.parentId) || null
       })),
-      flattened: OS._lastPSDImportReport?.flattenWholeDocument
+      flattened: OS._lastPSDImportReport?.flattenWholeDocument,
+      decodeMetrics: OS._lastPSDImportMetrics
     };
   }, payload);
 
@@ -1077,6 +1087,9 @@ test('imports a Photoshop-authored nested PSD fixture', async ({ page }) => {
     name: `Folder${index + 1}`,
     parent: index === 0 ? null : `Folder${index}`
   })));
+  expect(result.decodeMetrics).toMatchObject({ strategy:'useRawData', lazy:true });
+  expect(result.decodeMetrics.firstLayerMs).toBeGreaterThanOrEqual(0);
+  expect(result.decodeMetrics.decodedLayerCount).toBeGreaterThan(0);
 });
 
 test('round-trips nested PSD groups, blends, opacity, and basic text without duplicating the composite', async ({ page }) => {

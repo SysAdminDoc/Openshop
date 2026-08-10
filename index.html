@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-6ZFD0ZAKBU8bnlFX4xDaWjPnFXRjiwRlTcDlEe2nL4Q=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-nzvZfGklkuse0F1+rYE6WWiCMRjAJWFMDcYnvFwtZGk=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -5356,6 +5356,7 @@ const OS = {
     _lastSaveError: null,
     _psdInterchange: null,
     _lastPSDImportReport: null,
+    _lastPSDImportMetrics: null,
     _lastImportRaw: null,
     // Keep profile bytes opaque: the editor does not convert pixels yet, but
     // a project round-trip must not silently discard the source profile.
@@ -5948,6 +5949,7 @@ const OS = {
         this._lastDocumentMigrationReport = null;
         this._lastDocumentExportReport = null;
         this._lastPSDImportReport = null;
+        this._lastPSDImportMetrics = null;
         this._lastImportRaw = null;
         this._colorProfile = { name:'sRGB', source:'assumed', iccData:null };
         this._aiMasks = [];
@@ -6477,6 +6479,7 @@ const OS = {
         this._lastDocumentMigrationReport = null;
         this._lastDocumentExportReport = null;
         this._lastPSDImportReport = null;
+        this._lastPSDImportMetrics = null;
         this._lastPSDExportReport = null;
         this._colorProfile = { name:'sRGB', source:'assumed', iccData:null };
         this._aiMasks = [];
@@ -9558,6 +9561,9 @@ const OS = {
         maxLayers: 256,
         maxLayerPixels: 80 * 1000 * 1000,
         maxDecodedBytes: 256 * 1024 * 1024,
+        // ag-psd defaults to a 2 GB allocator; keep untrusted PSDs on the
+        // same 256 MB ceiling as the app's aggregate transferred-pixel cap.
+        totalMemoryLimit: 256 * 1024 * 1024,
         supportedDepths: [8, 16],
         supportedColorModes: [3]
     },
@@ -9876,19 +9882,38 @@ self.onmessage = function(event) {
             lib.initializeCanvas(function(width, height) { return new OffscreenCanvas(width, height); });
         }
         self.postMessage({ id: id, type: 'progress', message: 'Checking layer budget…' });
-        // Two passes, for two different limits. This one is the application's:
-        // parse structure only, then add up layer areas so a hostile file is
+        // Parse structure only, then add up layer areas so a hostile file is
         // rejected before a single pixel is allocated, and so per-layer and
-        // layer-count ceilings are enforced (ag-psd has neither). The decode
-        // pass below then also hands ag-psd its own totalMemoryLimit, which
-        // stops the allocator dead rather than trusting this estimate.
+        // layer-count ceilings are enforced (ag-psd has neither). Raw image
+        // data stays compressed until the individual layer is needed below.
         var limits = event.data.limits;
+        var startedAt = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+        var now = function() { return typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now(); };
         var structure = lib.readPsd(new Uint8Array(event.data.buffer), {
-            skipLayerImageData: true,
-            skipCompositeImageData: true,
+            useRawData: true,
+            useRawThumbnail: true,
             skipThumbnail: true,
-            skipLinkedFilesData: true
+            skipLinkedFilesData: true,
+            totalMemoryLimit: limits.totalMemoryLimit
         });
+        var structureParseMs = now() - startedAt;
+        var layerDecoderName = typeof lib.getLayerImageData === 'function'
+            ? 'getLayerImageData'
+            : typeof lib.decodeLayerPixels === 'function' ? 'decodeLayerPixels' : null;
+        var compositeDecoderName = typeof lib.decodeCompositePixels === 'function'
+            ? 'decodeCompositePixels'
+            : typeof lib.getCompositeImageData === 'function' ? 'getCompositeImageData' : null;
+        if (!layerDecoderName) throw new Error('Verified PSD decoder does not expose lazy layer decoding');
+        var decodeLayerBitmap = function(layer) {
+            if (layerDecoderName === 'getLayerImageData') return lib.getLayerImageData(layer);
+            lib.decodeLayerPixels(layer, true);
+            return layer.imageData || null;
+        };
+        var decodeCompositeBitmap = function(psd) {
+            if (compositeDecoderName === 'decodeCompositePixels') return lib.decodeCompositePixels(psd);
+            if (compositeDecoderName === 'getCompositeImageData') return lib.getCompositeImageData(psd);
+            return psd.imageData || null;
+        };
         var plannedLayers = 0;
         var plannedPixels = 0;
         (function walk(node) {
@@ -9912,18 +9937,13 @@ self.onmessage = function(event) {
                 walk(child);
             }
         })(structure);
-        structure = null;
         self.postMessage({ id: id, type: 'progress', message: 'Decoding pixels off the UI thread…' });
-        const psd = lib.readPsd(new Uint8Array(event.data.buffer), {
-            useImageData: true,
-            skipThumbnail: true,
-            skipLinkedFilesData: true,
-            // ag-psd 31 enforces this inside the allocator and throws
-            // "Exceeded memory limit" rather than committing the allocation.
-            totalMemoryLimit: limits.maxDecodedBytes
-        });
         let layerCount = 0;
         let decodedBytes = 0;
+        let layerDecodeRequests = 0;
+        let firstLayerMs = null;
+        let layerDecodeMs = 0;
+        let compositeDecodeMs = 0;
         const transfer = [];
         const transferSet = new Set();
         const takePixels = function(imageData, label) {
@@ -9996,7 +10016,7 @@ self.onmessage = function(event) {
                 : node.placedLayer ? 'smart-object'
                 : (node.vectorMask || node.vectorFill) ? 'vector'
                 : text ? 'text'
-                : node.imageData ? 'bitmap'
+                : node.rawData || node.imageData || node.canvas ? 'bitmap'
                 : 'empty';
             const unsupported = [];
             if (node.effects) unsupported.push('layer effects');
@@ -10025,18 +10045,13 @@ self.onmessage = function(event) {
                 protected: Boolean(node.transparencyProtected || node.protected && (node.protected.transparency || node.protected.composite || node.protected.position)),
                 text: text,
                 unsupported: unsupported,
-                pixels: isGroup ? null : takePixels(node.imageData, 'PSD layer ' + layerCount),
+                pixels: null,
                 children: isGroup ? node.children.map(function(child, index) { return simplify(child, depth + 1, path.concat(index), id); }) : []
             };
         };
-        const children = Array.isArray(psd.children)
-            ? psd.children.map(function(child, index) { return simplify(child, 0, [index], null); })
+        const children = Array.isArray(structure.children)
+            ? structure.children.map(function(child, index) { return simplify(child, 0, [index], null); })
             : [];
-        const hasLayerPixels = function(nodes) {
-            return nodes.some(function(node) {
-                return Boolean(node.pixels) || hasLayerPixels(node.children || []);
-            });
-        };
         const needsCompositeFallback = function(nodes) {
             const wholeDocumentReasons = new Set(['layer effects', 'layer mask', 'adjustment layer', 'clipping', 'fill opacity']);
             return nodes.some(function(node) {
@@ -10044,13 +10059,67 @@ self.onmessage = function(event) {
                     needsCompositeFallback(node.children || []);
             });
         };
-        const layerPixelsAvailable = hasLayerPixels(children);
+        const flattenRequired = needsCompositeFallback(children);
+        const fillLayerPixels = function(rawNodes, outputNodes) {
+            if (!Array.isArray(rawNodes) || !Array.isArray(outputNodes)) return;
+            for (var index = 0; index < rawNodes.length && index < outputNodes.length; index++) {
+                var rawNode = rawNodes[index];
+                var outputNode = outputNodes[index];
+                if (Array.isArray(rawNode && rawNode.children)) {
+                    fillLayerPixels(rawNode.children, outputNode.children || []);
+                    continue;
+                }
+                if (outputNode.sourceKind === 'empty' || outputNode.text && outputNode.text.simple) continue;
+                var decodeStartedAt = now();
+                var pixels = decodeLayerBitmap(rawNode);
+                layerDecodeRequests += 1;
+                if (firstLayerMs === null) firstLayerMs = now() - startedAt;
+                layerDecodeMs += now() - decodeStartedAt;
+                outputNode.pixels = takePixels(pixels, 'PSD layer ' + layerDecodeRequests);
+            }
+        };
+        if (!flattenRequired) fillLayerPixels(structure.children || [], children);
+        const hasRenderableLayer = function(nodes) {
+            return (nodes || []).some(function(node) {
+                return Boolean(node.pixels || node.text && node.text.simple || hasRenderableLayer(node.children || []));
+            });
+        };
+        let composite = null;
+        if (flattenRequired || !hasRenderableLayer(children)) {
+            var compositeBytes = Number(structure.width) * Number(structure.height) * 4;
+            var compositeBudgetAvailable = Number.isSafeInteger(compositeBytes)
+                && compositeBytes >= 0
+                && compositeBytes <= limits.maxDecodedBytes - decodedBytes;
+            if (compositeBudgetAvailable) {
+                var compositeStartedAt = now();
+                composite = takePixels(decodeCompositeBitmap(structure), 'PSD composite');
+                compositeDecodeMs += now() - compositeStartedAt;
+            } else if (!flattenRequired) {
+                throw new Error('PSD composite exceeds the aggregate decoded memory limit');
+            }
+        }
+        if (flattenRequired && composite === null) {
+            fillLayerPixels(structure.children || [], children);
+        }
+        const metric = function(value) { return Number.isFinite(value) ? Number(value.toFixed(3)) : null; };
         const result = {
-            width: Number(psd.width),
-            height: Number(psd.height),
+            width: Number(structure.width),
+            height: Number(structure.height),
             decodedBytes: 0,
-            composite: (!layerPixelsAvailable || needsCompositeFallback(children)) ? takePixels(psd.imageData, 'PSD composite') : null,
-            children: children
+            composite: composite,
+            children: children,
+            decodeMetrics: {
+                strategy:'useRawData',
+                lazy:true,
+                layerDecoder:layerDecoderName,
+                compositeDecoder:compositeDecoderName || 'embedded-image-data',
+                structureParseMs:metric(structureParseMs),
+                firstLayerMs:metric(firstLayerMs),
+                layerDecodeMs:metric(layerDecodeMs),
+                compositeDecodeMs:metric(compositeDecodeMs),
+                decodedLayerCount:layerDecodeRequests,
+                totalMemoryLimit:Number(limits.totalMemoryLimit)
+            }
         };
         result.decodedBytes = decodedBytes;
         self.postMessage({ id: id, type: 'result', psd: result }, transfer);
@@ -10098,7 +10167,8 @@ self.onmessage = function(event) {
                     maxLayers: this._psdLimits.maxLayers,
                     maxDimension: this._psdLimits.maxDimension,
                     maxLayerPixels: this._psdLimits.maxLayerPixels,
-                    maxDecodedBytes: this._psdLimits.maxDecodedBytes
+                    maxDecodedBytes: this._psdLimits.maxDecodedBytes,
+                    totalMemoryLimit: this._psdLimits.totalMemoryLimit
                 }
             }, [copy]);
         });
@@ -10546,6 +10616,7 @@ self.onmessage = function(event) {
             savedSnapshot:this._savedSnapshot,
             psdInterchange:this._psdInterchange,
             lastPSDImportReport:this._lastPSDImportReport,
+            lastPSDImportMetrics:this._lastPSDImportMetrics,
             colorProfile:this._colorProfile,
             aiMasks:this._aiMasks
         };
@@ -10566,6 +10637,7 @@ self.onmessage = function(event) {
             this._savedSnapshot = null;
             this._psdInterchange = prepared.psdInterchange;
             this._lastPSDImportReport = prepared.report;
+            this._lastPSDImportMetrics = psd.decodeMetrics || null;
             this._colorProfile = this._normalizeColorProfile(prepared.colorProfile);
             this._aiMasks = [];
             this.guides = [];
@@ -10613,6 +10685,7 @@ self.onmessage = function(event) {
             this._savedSnapshot = previous.savedSnapshot;
             this._psdInterchange = previous.psdInterchange;
             this._lastPSDImportReport = previous.lastPSDImportReport;
+            this._lastPSDImportMetrics = previous.lastPSDImportMetrics;
             this._colorProfile = previous.colorProfile;
             this._aiMasks = previous.aiMasks;
             if (previous.activeObject) this.canvas.setActiveObject(previous.activeObject);
