@@ -5,6 +5,7 @@ All notable changes to Openshop will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Added a roadmap consistency validator and regression suite that treats `ROADMAP.md` as the actionable queue, classifies the Photoshop parity file as historical evidence, and rejects checked-off rows, duplicate items, impossible totals, and stale drained claims.
 - Added explicit ownership and disposal for verified lazy runtimes: raw asset buffers leave the session after initialization, shared worker/module blob URLs use reference counts, failed loads remain retryable, and deterministic lifecycle probes verify zero retained payloads after disposal.
 - Added a fail-closed SPDX license inventory for every pinned runtime asset, verified package metadata for modern-gif and LibRaw-Wasm, and a README synchronization test covering all shipped runtime packages.
 - Pinned the release workflow's GitHub Actions to immutable commit SHAs with release tags, explicit read-only job permissions, weekly Dependabot coverage, and a regression test for the supply-chain contract.

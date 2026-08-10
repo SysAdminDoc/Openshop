@@ -420,6 +420,10 @@ npm run test:release
 
 Runtime CDN URLs, integrity hashes, cache policy, and package metadata share one canonical manifest. After changing a pinned runtime dependency, run `npm run runtime:sync` followed by `npm run security:write` before running the release gate.
 
+`node tools/roadmap-consistency.mjs` checks that `ROADMAP.md` remains the sole
+actionable queue and that the Photoshop parity ledger's historical status totals
+and classifications cannot drift silently.
+
 The release workflow pins every GitHub Action to a full commit SHA with its human-readable release tag in a comment, grants only read access to repository contents, and is monitored by weekly Dependabot updates for both Actions and npm dependencies. The same immutable-action contract is covered by the unit suite.
 
 `npm test` runs Vitest unit coverage for the core editor object with canvas mocks, including the redistributable `tests/fixtures/compatibility-corpus.json` manifest and its project/layer/mask/animation/metadata/loss invariants. `npm run test:e2e` runs Playwright against `index.html`, including onboarding and dialog checks at 320×568, 375×667, 768×1024, and their landscape equivalents. Hosted/offline browser tests query `__test/identity` and compare a checkout content token before boot, so local server reuse cannot silently exercise another tree; CI always starts a fresh server. The shell contract also gates accessible names for generated form controls, tablist/tab/tabpanel ownership, command-palette combobox state, keyboard entry to the canvas, and inert mobile drawers; the browser gate runs axe-core against blank, editor, modal, and mobile-drawer states.
