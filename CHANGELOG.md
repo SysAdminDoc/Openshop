@@ -648,3 +648,84 @@ All notable changes to Openshop will be documented in this file.
 - Added: Add files via upload
 - Added: Add files via upload
 - Added: Add files via upload
+
+## Roadmap archive — 2026-08-10 — ROADMAP.md
+
+<details>
+<summary>Original roadmap snapshot</summary>
+
+```markdown
+# OpenShop Roadmap
+
+Single-file browser image editor with layers, PSD import, and client-side AI. Roadmap targets staying turnkey while expanding pro-grade editing and export fidelity.
+
+The Photoshop parity ledger is preserved in `PHOTOSHOP_PARITY_ROADMAP.md` as
+historical audit evidence. Its mixed PLANNED, BLOCKED, and VERIFIED statuses are
+not an active task list; `ROADMAP.md` is the single actionable source. The ledger
+records what was observed and what acceptance evidence exists, while the active
+items below are the only work queue.
+
+## Planned Features
+
+### Format & I/O
+### Editor Core
+
+### AI / ML (Transformers.js)
+
+### Performance
+
+## Competitive Research
+- **Photopea** — closest peer; strong PSD parity and SVG editing. Lesson: invest in SVG-as-layers and smart-object fidelity.
+- **Pixlr E / X** — cloud-assisted AI generative workflows; forces account gating. Lesson: keep AI local, make it the differentiator. (2026-08-04: verified — Pixlr meters AI at 80/1,000/10,000/20,000 credits per tier. Local inference is the single largest structural advantage OpenShop has and the README undersells it.)
+- **miniPaint** — tiny single-file editor, weak on layers/AI. Lesson: OpenShop's AI + PSD import + single-file combo is a real gap they leave open. (2026-08-04: miniPaint is now effectively dormant — 4 commits since 2025-01-01; its open issues are OpenShop's shipped feature list.)
+- **Krita (desktop)** — best-in-class brush engine and color management. Lesson: borrow the brush preset format, borrow ICC profile handling for print users. (2026-08-04: Krita 5.3 shipped a complete text-engine rewrite — on-canvas editing, full OpenType, text flowing into shapes, glyph palette for CJK alternates, PSD text objects — plus a much faster liquify. Text is the newer lesson.)
+- **Graphite** (26.7k★, Apache-2.0, added 2026-07-31) — Rust/`wgpu` node-graph editor, the only genuine leapfrog threat. Lesson: the layer panel can be a *projection of a node graph*, and undo can be a graph diff instead of a pixel snapshot. Counter-lesson: they have deferred raster/photo tooling to Beta 2 and PSD to LTS, so the "parametric photo editor with PSD round-trip" intersection is currently unoccupied by anyone. (2026-08-04: still no tagged stable release since 2022-02-04; their top-voted issues are desktop packaging, which `file://` already solves.)
+- **Photopea has shipped nothing since 5.6 (Sep 2024)** — verified 2026-07-31, blog dormant ~22 months. The free incumbent has stalled; its users' loudest complaints (ads eating canvas width, anti-adblock lockout, COPPA-driven school bans) are all things OpenShop already avoids by construction and never advertises. (2026-08-04: re-verified, ≥21 months with no announced release. HN names its professional gaps precisely — no colour profiles, no GPU acceleration for large PSDs, no camera RAW, weak healing, no plugins. OpenShop already has RAW and plugins; colour management and healing are the two remaining.)
+- **Penpot / Excalidraw** (added 2026-08-04) — the #1 open issue in a 58k★ design tool is *image cropping*; Excalidraw's #2 and #3 are per-range text formatting inside one text element. Design tools structurally under-serve raster and rich text, and both features are cheap here.
+
+## Nice-to-Haves
+
+## Open-Source Research (Round 2)
+
+### Related OSS Projects
+- https://github.com/viliusle/miniPaint — Single-file browser image editor, layers/filters, closest conceptual peer. MIT.
+- https://github.com/nhn/tui.image-editor — NHN Cloud Canvas editor, React/Vue wrappers, rich filter set. (2026-08-04: dead — last commit 2023-11-20, 289 open issues. Do not study further.)
+- https://github.com/igorski/bitmappery — Vue/Vuex non-destructive web photo editor with PSD I/O. (2026-08-04: 1.2.0 added undo/redo history preserved across multiple open documents — the one idea still worth taking.)
+- https://github.com/OliverBalfour/SimplePaint — HTML5 canvas editor with stylus/tablet support and Photoshop-style brushes.
+- https://github.com/geeeeeeeek/freePS — Single-file HTML5 layer-based editor.
+- https://github.com/mattketmo/darkroomjs — Fabric.js-backed pluggable image editor core.
+- https://github.com/aurbano/nuophoto — Minimal browser editor, good reference for small-footprint adjustments.
+- https://github.com/excalidraw/excalidraw — Not a raster editor but best-in-class canvas interaction patterns.
+- https://github.com/steffest/DPaint-js — Zero-dependency, no-build-step ES6 editor with indexed-palette dithering and colour cycling (added 2026-08-04).
+
+### Features to Borrow
+- Tablet/stylus pressure curves + Photoshop-style custom brush dynamics (SimplePaint). (2026-08-04: pressure and ABR stamps shipped; tilt/azimuth and full-rate sampling are not — see P2 below.)
+- Full-featured filter set: grayscale, emboss, tint, multiply, blend modes w/ WebGL (tui.image-editor). (2026-08-04: filter set shipped; GPU acceleration covers exactly one operation — see P2.)
+- Complete UI/canvas-text localization and RTL behavior (BitMappery/miniPaint) — the shipped locale map is only partial. (2026-08-04: still open and larger than recorded — 365 toast call sites, essentially none translated. Superseded by the P2 localization item below.)
+- Clipboard paste + URL/data-URL/drag-drop open paths (miniPaint). (2026-08-04: paste-in and drop shipped; copy-*out* does not exist — see P1.)
+
+### Patterns & Architectures Worth Studying
+- **Fabric.js canvas abstraction** (DarkroomJS) — sprite/object model for non-destructive transforms vs raw ImageData. (2026-08-04: adopted, but through a v5-shaped compatibility shim at `index.html:30-70` — see P2.)
+- **OffscreenCanvas + Worker filter pipeline** (tui.image-editor) — keeps >4K images responsive. (2026-08-04: still open — `transferControlToOffscreen` is never called. Superseded by the P2 OffscreenCanvas item below.)
+- **Plugin registration API** (DarkroomJS) — each tool is `plugin.register(editor)` with lifecycle hooks. (2026-08-04: superseded by the shipped sandboxed protocol; mirror Photoshop UXP's permission vocabulary rather than DarkroomJS's.)
+- **WebGL shader-based color adjustments** (BitMappery) — real-time sliders without CPU re-composite. (2026-08-04: still open — superseded by the P2 acceleration-allowlist item below, which is gated on the existing parity harness rather than adding a second unverified backend.)
+
+## Research-Driven Additions
+
+### P0 — Release and trust
+
+### P1 — Trust, accessibility, and interoperability
+
+### P2 — Performance, mobile, extensibility, and workflow depth
+
+### P3 — Polish and reach
+
+### P0 — 2026-08-08 trust-state additions
+
+### P1 — 2026-08-08 data-safety and contract additions
+
+
+### P2 — 2026-08-08 lifecycle and maintenance additions
+```
+
+</details>

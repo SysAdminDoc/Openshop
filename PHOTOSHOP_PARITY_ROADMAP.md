@@ -1,9 +1,10 @@
 # OpenShop Photoshop-Parity Roadmap
 
-This roadmap converts the live Adobe Photoshop CS6 audit into implementation-ready
-work entries for OpenShop. It is planning only. No rebuild or product implementation
-is authorized by this document; implementation begins only after the explicit
-BEGIN REBUILD instruction.
+This document is a historical parity ledger derived from the live Adobe Photoshop
+CS6 audit. It preserves implementation context and acceptance evidence, but it is
+not the active engineering queue. `ROADMAP.md` is the single actionable source;
+entries here remain historical PLANNED, BLOCKED, or VERIFIED evidence unless an
+item is explicitly represented in that active tracker.
 
 ## Source of truth
 
@@ -14,7 +15,8 @@ BEGIN REBUILD instruction.
 - Tool prerequisites and safety: windows-app-audit/tools/tool-prerequisite-matrix.csv and
   windows-app-audit/tools/tool-safety-classification.csv
 - Reconstruction guidance: windows-app-audit/planning/reconstruction-specification.md
-- This roadmap: PHOTOSHOP_PARITY_ROADMAP.md
+- Historical parity ledger: PHOTOSHOP_PARITY_ROADMAP.md
+- Active engineering tracker: ROADMAP.md
 
 The audit target was Photoshop CS6 Version 13.0 x64. The live instance had no document
 open. Therefore the audit confirms shell, menu, panel, flyout, shortcut, blank-state,
