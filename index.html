@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10" id="theme-color-meta">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-6lzH46X+/hTrZozIawA7KVrXrggTy1EkOvn6jZ3l40Y=' 'sha256-C06UFm3sz/BEs6eFBfnNFKrFg1yQw1J+vtgJrioWPII=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-6lzH46X+/hTrZozIawA7KVrXrggTy1EkOvn6jZ3l40Y=' 'sha256-MKUeXOVbA0DFJA49t/10RxEE9292kW4TUHxBGCgmpP0=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -5566,6 +5566,16 @@ const OS = {
     _pluginRequestSequence: 0,
     guides: [],
     _lassoPoints: [],
+    _lassoMode: 'free',
+    _magneticLassoActive: false,
+    _magneticLassoSnapshot: null,
+    _magneticLassoLastPoint: null,
+    _quickSelectionActive: false,
+    _quickSelectionSnapshot: null,
+    _quickSelectionMask: null,
+    _quickSelectionOriginal: null,
+    _quickSelectionOriginalBounds: null,
+    _quickSelectionMode: 'replace',
     _measureStart: null,
     _penPoints: [],
     _histChannel: 'luminance',
@@ -12289,7 +12299,7 @@ self.onmessage = function(event) {
     // ====================== LAYERS ======================
     _layerOwnership: null,
     _drawingLayerTools: new Set(['brush','pencil','eraser','spray']),
-    _activeLayerWriteTools: new Set(['brush','pencil','eraser','spray','text','gradient','pattern','line','rect','circle','triangle','arrow','polygon','star','pen']),
+    _activeLayerWriteTools: new Set(['brush','pencil','eraser','spray','text','gradient','pattern','line','rect','rounded-rect','circle','triangle','arrow','polygon','star','custom-shape','pen']),
     _isGroupLayer(layerOrIndex) {
         const layer = typeof layerOrIndex === 'number' ? this.layers[layerOrIndex] : layerOrIndex;
         return layer?.kind === 'group';
@@ -12825,8 +12835,8 @@ self.onmessage = function(event) {
     },
     // A readable layer name for the thing that was just made.
     _shapeLayerName(tool) {
-        const names = { rect:'Rectangle', circle:'Ellipse', triangle:'Triangle', line:'Line',
-            polygon:'Polygon', star:'Star', arrow:'Arrow', pen:'Path' };
+        const names = { rect:'Rectangle', 'rounded-rect':'Rounded Rectangle', circle:'Ellipse', triangle:'Triangle', line:'Line',
+            polygon:'Polygon', star:'Star', arrow:'Arrow', 'custom-shape':'Custom Shape', pen:'Path' };
         return names[tool] || 'Shape';
     },
     _objectLayerName(object, fallback) {
@@ -13855,7 +13865,7 @@ self.onmessage = function(event) {
         // PRESERVED across tool switches, just like Photoshop.
         // They only clear on: Esc, Ctrl+D, Edit>Deselect, or new selection.
         // Only hide the lasso drawing overlay (not the marching-ants result):
-        if (prevTool === 'lasso' && tool !== 'lasso') {
+        if (['lasso','lasso-polygonal','lasso-magnetic'].includes(prevTool) && !['lasso','lasso-polygonal','lasso-magnetic'].includes(tool)) {
             // Lasso was active — if no selection was finalized, clear its points
             if (!this._selectionBounds) {
                 document.getElementById('lasso-overlay').style.display='none';
@@ -13863,6 +13873,9 @@ self.onmessage = function(event) {
                 document.querySelector('#lasso-overlay svg polygon').setAttribute('points', '');
             }
         }
+        if (prevTool === 'lasso-magnetic' && tool !== 'lasso-magnetic') this._magneticLassoActive = false;
+        if (prevTool === 'quick-selection' && tool !== 'quick-selection') this._quickSelectionActive = false;
+        if (prevTool === 'direct-selection' && tool !== 'direct-selection') this.finishPathEdit(true);
         document.getElementById('pen-overlay').style.display='none';
         document.getElementById('measure-overlay').style.display='none';
         // Lasso cleanup handled above in selection persistence block
@@ -13893,11 +13906,12 @@ self.onmessage = function(event) {
                 document.getElementById('opt-spray').style.display='flex'; break;
             case 'clone': c.defaultCursor='crosshair'; document.getElementById('opt-clone').style.display='flex'; break;
             case 'healing': c.defaultCursor='crosshair'; document.getElementById('opt-healing').style.display='flex'; break;
+            case 'spot-healing': c.defaultCursor='crosshair'; document.getElementById('opt-healing').style.display='flex'; break;
             case 'dodge': c.defaultCursor='crosshair'; document.getElementById('opt-dodge').style.display='flex'; break;
             case 'burn': c.defaultCursor='crosshair'; document.getElementById('opt-burn').style.display='flex'; break;
             case 'sponge': c.defaultCursor='crosshair'; document.getElementById('opt-sponge').style.display='flex'; break;
             case 'smudge': c.defaultCursor='crosshair'; document.getElementById('opt-smudge').style.display='flex'; break;
-            case 'line': case 'rect': case 'circle': case 'triangle': case 'arrow':
+            case 'line': case 'rect': case 'rounded-rect': case 'circle': case 'triangle': case 'arrow': case 'custom-shape':
                 document.getElementById('opt-shape').style.display='flex'; break;
             case 'polygon': document.getElementById('opt-polygon').style.display='flex'; break;
             case 'star': document.getElementById('opt-star').style.display='flex'; break;
@@ -13913,25 +13927,31 @@ self.onmessage = function(event) {
             case 'marquee-rect': case 'marquee-ellipse': document.getElementById('opt-marquee').style.display='flex'; break;
             case 'magic-wand': document.getElementById('opt-wand').style.display='flex'; break;
             case 'ai-segment': c.defaultCursor='crosshair'; c.hoverCursor='crosshair'; document.getElementById('opt-ai-segment').style.display='flex'; break;
-            case 'lasso':
+            case 'lasso': case 'lasso-polygonal': case 'lasso-magnetic':
                 document.getElementById('opt-lasso').style.display='flex';
                 document.getElementById('lasso-overlay').style.display='block';
+                this._lassoMode = tool === 'lasso-magnetic' ? 'magnetic' : tool === 'lasso-polygonal' ? 'polygonal' : 'free';
                 // If there's no existing lasso selection, reset points for new lasso
                 if (!this._selectionBounds) {
                     this._lassoPoints=[];
                     document.querySelector('#lasso-overlay svg polygon').setAttribute('points','');
                 }
                 break;
+            case 'quick-selection':
+                c.defaultCursor='crosshair'; c.hoverCursor='crosshair'; document.getElementById('opt-wand').style.display='flex'; break;
+            case 'path-selection': case 'direct-selection':
+                c.defaultCursor='default'; c.hoverCursor='default'; break;
             case 'measure': document.getElementById('opt-measure').style.display='flex'; document.getElementById('measure-overlay').style.display='block'; break;
             case 'note': c.defaultCursor='crosshair'; c.hoverCursor='crosshair'; break;
         case 'crop': document.getElementById('opt-crop').style.display='flex'; this._initCrop(); break;
+            case 'perspective-crop': document.getElementById('opt-crop').style.display='flex'; this._initPerspectiveCrop(); break;
             default:
                 this.state.tool = prevTool;
                 return this._refuseUnimplementedTool(tool);
         }
         this._applyToolOptions(tool);
         this._applyLayerInteractionState({ render:false });
-        const toolNames = {'marquee-rect':'Rect Marquee','marquee-ellipse':'Ellipse Marquee','magic-wand':'Magic Wand','ai-segment':'AI Segment'};
+        const toolNames = {'marquee-rect':'Rect Marquee','marquee-ellipse':'Ellipse Marquee','magic-wand':'Magic Wand','quick-selection':'Quick Selection','ai-segment':'AI Segment','spot-healing':'Spot Healing','perspective-crop':'Perspective Crop'};
         document.getElementById('tool-display').textContent = toolNames[tool] || tool.charAt(0).toUpperCase()+tool.replace(/-/g,' ').slice(1);
         this._syncSessionWorkspace();
         this._renderAccessibilityTree();
@@ -14413,6 +14433,7 @@ self.onmessage = function(event) {
         if (this._selectionCombineTools.has(tool)) this._captureSelectionCombine(opt.e);
         if (tool==='pan' || this._tempPanning) { this.state.isPanning=true; this.state.panStart={x:opt.e.clientX,y:opt.e.clientY}; this.canvas.defaultCursor='grabbing'; return; }
         if (tool==='zoom') { opt.e.altKey?this.zoomOut():this.zoomIn(); return; }
+        if (tool==='perspective-crop') return;
         if (this._activeLayerWriteTools.has(tool) && !this._guardActiveLayerEdit()) return;
         if (tool==='marquee-rect'||tool==='marquee-ellipse') {
             // Clear any previous selection (wand overlay, old bounds)
@@ -14433,11 +14454,14 @@ self.onmessage = function(event) {
             document.getElementById('selection-overlay').style.display='none';
             this.aiSegmentSelectAt(ptr); return;
         }
-        if (tool==='lasso') { this._lassoClick(opt.e); return; }
+        if (tool==='lasso' || tool==='lasso-polygonal') { this._lassoClick(opt.e); return; }
+        if (tool==='lasso-magnetic') { this._magneticLassoStart(ptr, opt.e); return; }
+        if (tool==='quick-selection') { this._quickSelectionStart(ptr, opt.e); return; }
         if (tool==='pen') { this._penClick(ptr, opt.e); return; }
         if (tool==='note') { this.addStickyNote(opt.e); return; }
         if (['dodge','burn','sponge','smudge'].includes(tool)) { this._retouchStart(tool, ptr, opt.e); return; }
-        if (tool==='healing') { this._healStart(ptr, opt.e); return; }
+        if (tool==='healing' || tool==='spot-healing') { this._healStart(ptr, opt.e); return; }
+        if (tool==='path-selection' || tool==='direct-selection') { this._pathSelectionClick(ptr, tool); return; }
         if (tool==='measure') { this._measureClick(ptr, opt.e); return; }
         if (tool==='clone'&&opt.e.altKey) { this._cloneSource={x:ptr.x,y:ptr.y}; this._cloneOffset=null; this.toast(this._t('Clone source set'),'info'); return; }
         if (tool==='clone'&&this._cloneSource) { this._cloneStart(ptr, opt.e); return; }
@@ -14477,13 +14501,14 @@ self.onmessage = function(event) {
             return;
         }
         if (tool==='gradient'||tool==='pattern') { this.state.isDrawing=true; this._shapeStart={x:ptr.x,y:ptr.y}; return; }
-        if (['line','rect','circle','triangle','arrow','polygon','star'].includes(tool)) {
+        if (['line','rect','rounded-rect','circle','triangle','arrow','polygon','star','custom-shape'].includes(tool)) {
             this.state.isDrawing=true; this._shapeStart={x:ptr.x,y:ptr.y};
             const fill=this.state.shapeFilled?this.state.shapeFill:'transparent', sk=this.state.shapeStroke, sw=this.state.shapeStrokeWidth;
             const dashArr = this.state.shapeDash ? this.state.shapeDash.split(',').map(Number) : null;
             const dashOpts = dashArr ? {strokeDashArray: dashArr} : {};
             switch(tool) {
                 case 'rect': this._tempShape=new fabric.Rect({left:ptr.x,top:ptr.y,width:0,height:0,fill,stroke:sk,strokeWidth:sw,selectable:false,...dashOpts}); break;
+                case 'rounded-rect': this._tempShape=new fabric.Rect({left:ptr.x,top:ptr.y,width:0,height:0,rx:0,ry:0,fill,stroke:sk,strokeWidth:sw,selectable:false,...dashOpts}); break;
                 case 'circle': this._tempShape=new fabric.Ellipse({left:ptr.x,top:ptr.y,rx:0,ry:0,fill,stroke:sk,strokeWidth:sw,selectable:false,...dashOpts}); break;
                 case 'line': this._tempShape=new fabric.Line([ptr.x,ptr.y,ptr.x,ptr.y],{stroke:sk,strokeWidth:sw,selectable:false,...dashOpts}); break;
                 case 'triangle': this._tempShape=new fabric.Triangle({left:ptr.x,top:ptr.y,width:0,height:0,fill,stroke:sk,strokeWidth:sw,selectable:false,...dashOpts}); break;
@@ -14497,6 +14522,10 @@ self.onmessage = function(event) {
                     this._tempShape=new fabric.Circle({left:ptr.x,top:ptr.y,radius:0,fill:'transparent',stroke:'transparent',selectable:false,_starPlaceholder:true});
                     break;
                 }
+                case 'custom-shape': {
+                    this._tempShape=new fabric.Circle({left:ptr.x,top:ptr.y,radius:0,fill:'transparent',stroke:'transparent',selectable:false,_customShapePlaceholder:true});
+                    break;
+                }
             }
             if(this._tempShape) this.canvas.add(this._tempShape);
         }
@@ -14506,7 +14535,7 @@ self.onmessage = function(event) {
         this._updatePressureBrush(opt.e);
         document.getElementById('cursor-pos').textContent=`X: ${Math.round(ptr.x)} Y: ${Math.round(ptr.y)}`;
         // Light the close marker while the pointer is over it.
-        if (this.state.tool === 'lasso') {
+        if (this.state.tool === 'lasso' || this.state.tool === 'lasso-polygonal' || this.state.tool === 'lasso-magnetic') {
             this._updateCloseHandle('lasso-close-handle', this._lassoPoints, { x:opt.e.offsetX, y:opt.e.offsetY }, 3);
         } else if (this.state.tool === 'pen') {
             const vpt = this.canvas.viewportTransform;
@@ -14519,21 +14548,24 @@ self.onmessage = function(event) {
             const vpt=this.canvas.viewportTransform.slice(); vpt[4]+=dx; vpt[5]+=dy;
             this.canvas.setViewportTransform(vpt); this.state.panStart={x:opt.e.clientX,y:opt.e.clientY}; this.drawGrid(); this.drawRulers(); return;
         }
+        if (this.state.tool === 'lasso-magnetic' && this._magneticLassoActive) this._magneticLassoMove(ptr, opt.e);
+        if (this.state.tool === 'quick-selection' && this._quickSelectionActive && (opt.e.buttons & 1)) this._quickSelectionStroke(ptr);
         if(this.state.isDrawing&&this._marqueeStart) {
             const el=document.getElementById('selection-overlay'), sx=this._marqueeStart.x, sy=this._marqueeStart.y, cx=opt.e.offsetX, cy=opt.e.offsetY;
             el.style.left=Math.min(sx,cx)+'px'; el.style.top=Math.min(sy,cy)+'px'; el.style.width=Math.abs(cx-sx)+'px'; el.style.height=Math.abs(cy-sy)+'px'; return;
         }
         if(this.state.tool==='clone'&&this._cloneOC&&(opt.e.buttons&1)) { this._cloneStroke(ptr); }
         if(['dodge','burn','sponge','smudge'].includes(this.state.tool)&&(opt.e.buttons&1)) { this._retouchStroke(this.state.tool, ptr); }
-        if(this.state.tool==='healing'&&this._healOC&&(opt.e.buttons&1)) { this._healStroke(ptr); }
+        if((this.state.tool==='healing' || this.state.tool==='spot-healing')&&this._healOC&&(opt.e.buttons&1)) { this._healStroke(ptr); }
         if(this.state.isDrawing&&this._tempShape&&this._shapeStart) {
             const s=this._shapeStart, w=ptr.x-s.x, h=ptr.y-s.y;
             switch(this.state.tool) {
                 case 'rect': this._tempShape.set({left:w<0?ptr.x:s.x,top:h<0?ptr.y:s.y,width:Math.abs(w),height:Math.abs(h)}); break;
+                case 'rounded-rect': this._tempShape.set({left:w<0?ptr.x:s.x,top:h<0?ptr.y:s.y,width:Math.abs(w),height:Math.abs(h),rx:Math.min(24,Math.abs(w)/2,Math.abs(h)/2),ry:Math.min(24,Math.abs(w)/2,Math.abs(h)/2)}); break;
                 case 'circle': this._tempShape.set({left:w<0?ptr.x:s.x,top:h<0?ptr.y:s.y,rx:Math.abs(w)/2,ry:Math.abs(h)/2}); break;
                 case 'line': case 'arrow': this._tempShape.set({x2:ptr.x,y2:ptr.y}); break;
                 case 'triangle': this._tempShape.set({left:w<0?ptr.x:s.x,top:h<0?ptr.y:s.y,width:Math.abs(w),height:Math.abs(h)}); break;
-                case 'polygon': case 'star': this._tempShape.set({radius:Math.sqrt(w*w+h*h)}); break;
+                case 'polygon': case 'star': case 'custom-shape': this._tempShape.set({radius:Math.sqrt(w*w+h*h)}); break;
             }
             this.canvas.renderAll();
         }
@@ -14548,6 +14580,8 @@ self.onmessage = function(event) {
             else { this.canvas.defaultCursor='crosshair'; }
             return;
         }
+        if (this._quickSelectionActive) { this._quickSelectionFinish(); return; }
+        if (this._magneticLassoActive) { this._magneticLassoFinish(); return; }
         if(this._marqueeStart){
             const el=document.getElementById('selection-overlay');
             const sw=parseFloat(el.style.width)||0,sh=parseFloat(el.style.height)||0;
@@ -14627,6 +14661,17 @@ self.onmessage = function(event) {
                 this.canvas.remove(this._tempShape);
                 const star=new fabric.Polygon(pts,{fill,stroke:sk,strokeWidth:sw,selectable:true});
                 this._addObjectAsLayer(star, 'Star');
+            } else if (this._tempShape._customShapePlaceholder) {
+                const s = this._shapeStart, end = this.canvas.getPointer(opt.e);
+                const x = Math.min(s.x, end.x), y = Math.min(s.y, end.y), w = Math.abs(end.x - s.x), h = Math.abs(end.y - s.y);
+                this.canvas.remove(this._tempShape);
+                if (w > 2 && h > 2) {
+                    const fill=this.state.shapeFilled?this.state.shapeFill:'transparent', sk=this.state.shapeStroke, sw=this.state.shapeStrokeWidth;
+                    const path = new fabric.Path(`M ${w * .5} ${h} C ${w * .42} ${h * .84} 0 ${h * .62} 0 ${h * .28} C 0 ${h * .04} ${w * .3} 0 ${w * .5} ${h * .2} C ${w * .7} 0 ${w} ${h * .04} ${w} ${h * .28} C ${w} ${h * .62} ${w * .58} ${h * .84} ${w * .5} ${h} Z`, {
+                        left:x + w / 2, top:y + h / 2, originX:'center', originY:'center', fill, stroke:sk, strokeWidth:sw, selectable:true
+                    });
+                    this._addObjectAsLayer(path, 'Custom Shape');
+                }
             } else {
                 this._tempShape.setCoords(); this._tempShape.selectable=true;
                 // Already on the canvas as the live preview.
@@ -15708,6 +15753,7 @@ self.onmessage = function(event) {
     // project may need persistent crop state, in that case make your own
     // function". Two different features that happen to share a name.
     async applyCrop() {
+        if (this.state.tool === 'perspective-crop') return this.applyPerspectiveCrop();
         if(!this._cropRegion) return;
         if (!await this._confirmDocumentStateLoss('Crop')) return false;
         const r=this._cropRegion, vpt=this.canvas.viewportTransform;
@@ -15734,10 +15780,148 @@ self.onmessage = function(event) {
             return success;
         });
     },
+    _initPerspectiveCrop() {
+        this._cleanupCrop();
+        const vpt = this.canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
+        const width = this.canvasW * vpt[0], height = this.canvasH * vpt[3], pad = Math.min(20, Math.max(4, Math.min(width, height) / 10));
+        this._perspectiveCropCorners = [
+            { x:vpt[4] + pad, y:vpt[5] + pad },
+            { x:vpt[4] + width - pad, y:vpt[5] + pad },
+            { x:vpt[4] + width - pad, y:vpt[5] + height - pad },
+            { x:vpt[4] + pad, y:vpt[5] + height - pad }
+        ];
+        const container = document.getElementById('crop-container');
+        container.style.display = 'block';
+        container.style.pointerEvents = 'all';
+        container.innerHTML = this._trustedHTML`<svg class="perspective-crop-surface" style="position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:all">
+            <polygon id="perspective-crop-polygon" points="" fill="rgba(108,140,255,.12)" stroke="var(--accent)" stroke-width="2" stroke-dasharray="8 4" style="pointer-events:all" />
+            <circle data-perspective-index="0" r="7" fill="var(--accent)" stroke="white" stroke-width="2" style="cursor:move;pointer-events:all" />
+            <circle data-perspective-index="1" r="7" fill="var(--accent)" stroke="white" stroke-width="2" style="cursor:move;pointer-events:all" />
+            <circle data-perspective-index="2" r="7" fill="var(--accent)" stroke="white" stroke-width="2" style="cursor:move;pointer-events:all" />
+            <circle data-perspective-index="3" r="7" fill="var(--accent)" stroke="white" stroke-width="2" style="cursor:move;pointer-events:all" />
+            <text id="perspective-crop-label" x="12" y="22" fill="white" font-size="11" style="paint-order:stroke;stroke:#000;stroke-width:3px;pointer-events:none" />
+        </svg>`;
+        this._updatePerspectiveCropVisuals();
+        let active = null, startX = 0, startY = 0, original = null;
+        const onDown = event => {
+            const handle = event.target.closest?.('[data-perspective-index]');
+            if (!handle) return;
+            active = Number(handle.dataset.perspectiveIndex);
+            startX = event.clientX; startY = event.clientY;
+            original = { ...this._perspectiveCropCorners[active] };
+            event.preventDefault(); event.stopPropagation();
+        };
+        const onMove = event => {
+            if (active === null || !original) return;
+            this._perspectiveCropCorners[active] = { x:original.x + event.clientX - startX, y:original.y + event.clientY - startY };
+            this._updatePerspectiveCropVisuals();
+        };
+        const onUp = () => { active = null; original = null; };
+        container.addEventListener('mousedown', onDown);
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        this._cropListeners = { down:onDown, move:onMove, up:onUp, el:container };
+    },
+    _updatePerspectiveCropVisuals() {
+        const corners = this._perspectiveCropCorners;
+        if (!corners?.length) return;
+        const polygon = document.getElementById('perspective-crop-polygon');
+        if (polygon) polygon.setAttribute('points', corners.map(point => `${point.x},${point.y}`).join(' '));
+        document.querySelectorAll('#crop-container [data-perspective-index]').forEach(handle => {
+            const point = corners[Number(handle.dataset.perspectiveIndex)];
+            if (point) { handle.setAttribute('cx', String(point.x)); handle.setAttribute('cy', String(point.y)); }
+        });
+        const label = document.getElementById('perspective-crop-label');
+        if (label) {
+            const width = Math.round((Math.hypot(corners[1].x - corners[0].x, corners[1].y - corners[0].y) + Math.hypot(corners[2].x - corners[3].x, corners[2].y - corners[3].y)) / 2);
+            const height = Math.round((Math.hypot(corners[3].x - corners[0].x, corners[3].y - corners[0].y) + Math.hypot(corners[2].x - corners[1].x, corners[2].y - corners[1].y)) / 2);
+            label.textContent = `${width} × ${height} px — drag corners, press Enter to apply`;
+        }
+    },
+    _perspectiveCropDocumentCorners() {
+        const inverse = fabric.util.invertTransform(this.canvas.viewportTransform || [1, 0, 0, 1, 0, 0]);
+        return (this._perspectiveCropCorners || []).map(point => fabric.util.transformPoint(point, inverse));
+    },
+    _perspectiveCropOutputSize(corners) {
+        const distance = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
+        return {
+            width:Math.max(1, Math.round((distance(corners[0], corners[1]) + distance(corners[3], corners[2])) / 2)),
+            height:Math.max(1, Math.round((distance(corners[0], corners[3]) + distance(corners[1], corners[2])) / 2))
+        };
+    },
+    _solvePerspectiveSystem(matrix, values) {
+        const size = values.length;
+        const augmented = matrix.map((row, index) => [...row, values[index]]);
+        for (let column = 0; column < size; column++) {
+            let pivot = column;
+            for (let row = column + 1; row < size; row++) if (Math.abs(augmented[row][column]) > Math.abs(augmented[pivot][column])) pivot = row;
+            if (Math.abs(augmented[pivot][column]) < 1e-9) throw new Error('Perspective corners are degenerate');
+            [augmented[column], augmented[pivot]] = [augmented[pivot], augmented[column]];
+            const divisor = augmented[column][column];
+            for (let entry = column; entry <= size; entry++) augmented[column][entry] /= divisor;
+            for (let row = 0; row < size; row++) {
+                if (row === column) continue;
+                const factor = augmented[row][column];
+                if (!factor) continue;
+                for (let entry = column; entry <= size; entry++) augmented[row][entry] -= factor * augmented[column][entry];
+            }
+        }
+        return augmented.map(row => row[size]);
+    },
+    _perspectiveWarpCanvas(source, corners, width, height) {
+        const sourceCanvas = document.createElement('canvas');
+        sourceCanvas.width = source.width; sourceCanvas.height = source.height;
+        const sourceContext = sourceCanvas.getContext('2d', { willReadFrequently:true });
+        sourceContext.drawImage(source, 0, 0);
+        const sourceData = sourceContext.getImageData(0, 0, source.width, source.height).data;
+        const rows = [], values = [];
+        [[0,0],[width,0],[width,height],[0,height]].forEach(([outputX, outputY], index) => {
+            const point = corners[index];
+            rows.push([outputX, outputY, 1, 0, 0, 0, -point.x * outputX, -point.x * outputY]); values.push(point.x);
+            rows.push([0, 0, 0, outputX, outputY, 1, -point.y * outputX, -point.y * outputY]); values.push(point.y);
+        });
+        const [a,b,c,d,e,f,g,h] = this._solvePerspectiveSystem(rows, values);
+        const output = document.createElement('canvas'); output.width = width; output.height = height;
+        const outputContext = output.getContext('2d', { willReadFrequently:true });
+        const pixels = outputContext.createImageData(width, height), target = pixels.data;
+        for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+            const denominator = g * x + h * y + 1;
+            const sourceX = (a * x + b * y + c) / denominator, sourceY = (d * x + e * y + f) / denominator;
+            if (sourceX < 0 || sourceY < 0 || sourceX >= source.width || sourceY >= source.height) continue;
+            const left = Math.floor(sourceX), top = Math.floor(sourceY), right = Math.min(source.width - 1, left + 1), bottom = Math.min(source.height - 1, top + 1);
+            const xWeight = sourceX - left, yWeight = sourceY - top, outputIndex = (y * width + x) * 4;
+            for (let channel = 0; channel < 4; channel++) {
+                const topLeft = sourceData[(top * source.width + left) * 4 + channel], topRight = sourceData[(top * source.width + right) * 4 + channel];
+                const bottomLeft = sourceData[(bottom * source.width + left) * 4 + channel], bottomRight = sourceData[(bottom * source.width + right) * 4 + channel];
+                const upper = topLeft + (topRight - topLeft) * xWeight, lower = bottomLeft + (bottomRight - bottomLeft) * xWeight;
+                target[outputIndex + channel] = Math.round(upper + (lower - upper) * yWeight);
+            }
+        }
+        outputContext.putImageData(pixels, 0, 0);
+        return output;
+    },
+    async _applyPerspectiveCropRaw({ corners, width, height }) {
+        const source = await this._loadImage(this._captureCanvasRaster());
+        const output = this._perspectiveWarpCanvas(source, corners, width, height);
+        return this._replaceDocumentWithRaster(output.toDataURL('image/png'), width, height, 'Perspective Cropped');
+    },
+    async applyPerspectiveCrop() {
+        const corners = this._perspectiveCropDocumentCorners();
+        if (corners.length !== 4) return false;
+        const size = this._perspectiveCropOutputSize(corners);
+        if (this._canvasDimensionFailure(size.width, size.height)) { this.toast(this._canvasLimitMessage(size.width, size.height, 'Perspective crop'), 'error'); return false; }
+        if (!await this._confirmDocumentStateLoss('Perspective crop')) return false;
+        const command = this._makeCommand('canvas.perspective-crop', { corners, ...size });
+        const result = this._executeCommand(command, { label:'Perspective Crop' });
+        return Promise.resolve(result).then(success => {
+            if (success) { this.cancelCrop(); this.toast(`Perspective crop applied: ${size.width} × ${size.height}`, 'success'); }
+            return success;
+        });
+    },
     cancelCrop() {
         this._cleanupCrop();
         const c = document.getElementById('crop-container');
-        c.style.display='none'; c.replaceChildren(); this._cropRegion=null;
+        c.style.display='none'; c.style.pointerEvents='none'; c.replaceChildren(); this._cropRegion=null; this._perspectiveCropCorners=null;
     },
 
     // ====================== AI BACKGROUND REMOVAL ======================
@@ -16165,12 +16349,12 @@ self.onmessage = function(event) {
 
     // ====================== HISTORY ======================
     _unimplementedToolStates: Object.freeze([
-        'marquee-row', 'marquee-column', 'lasso-polygonal', 'lasso-magnetic', 'quick-selection',
-        'perspective-crop', 'slice', 'slice-select', 'color-sampler', 'spot-healing', 'patch',
+        'marquee-row', 'marquee-column',
+        'slice', 'slice-select', 'color-sampler', 'patch',
         'content-aware-move', 'red-eye', 'pattern-stamp', 'history-brush', 'art-history-brush',
         'background-eraser', 'magic-eraser', 'blur', 'sharpen', 'freeform-pen', 'add-anchor',
         'delete-anchor', 'convert-point', 'vertical-text', 'horizontal-text-mask',
-        'vertical-text-mask', 'path-selection', 'direct-selection', 'rounded-rect', 'custom-shape',
+        'vertical-text-mask',
         'rotate-view'
     ]),
     _toolExtensionStates: Object.freeze(['brush', 'pencil', 'spray', 'ai-segment']),
@@ -16643,6 +16827,23 @@ self.onmessage = function(event) {
                     height:finite(args?.height, 'Crop height', 1, this._importLimits.maxImageDimension)
                 }),
                 execute:args => this._applyCropRaw(args)
+            }],
+            ['canvas.perspective-crop', {
+                label:'Perspective Crop',
+                touchesPixels:true,
+                validate:args => {
+                    if (!Array.isArray(args?.corners) || args.corners.length !== 4) throw new Error('Perspective crop needs four corners');
+                    const corners = args.corners.map((corner, index) => {
+                        const x = finite(corner?.x, `Perspective corner ${index + 1} x`, -this._importLimits.maxImageDimension, this._importLimits.maxImageDimension);
+                        const y = finite(corner?.y, `Perspective corner ${index + 1} y`, -this._importLimits.maxImageDimension, this._importLimits.maxImageDimension);
+                        return { x, y };
+                    });
+                    const width = Math.round(finite(args?.width, 'Perspective crop width', 1, this._importLimits.maxImageDimension));
+                    const height = Math.round(finite(args?.height, 'Perspective crop height', 1, this._importLimits.maxImageDimension));
+                    if (this._canvasDimensionFailure(width, height)) throw new Error(this._canvasLimitMessage(width, height, 'Perspective crop'));
+                    return { corners, width, height };
+                },
+                execute:args => this._applyPerspectiveCropRaw(args)
             }],
             ['canvas.rotate', {
                 label:'Rotate Canvas',
@@ -21290,6 +21491,10 @@ self.onmessage = async function(event) {
     },
     _lassoClick(evt) {
         const x = evt.offsetX, y = evt.offsetY;
+        if (evt.detail >= 2 && this._lassoPoints.length >= 3) {
+            this._lassoDoubleClick();
+            return;
+        }
         // Clicking the start point closes the outline, which is what issue #3
         // means by the start and end points having no "suction".
         if (this._lassoPoints.length >= 3 && this._withinCloseRadius(this._lassoPoints, x, y)) {
@@ -21339,8 +21544,161 @@ self.onmessage = async function(event) {
         this.toast('Lasso selection: ' + count.toLocaleString() + ' px', 'info');
     },
 
+    _magneticLassoStart(ptr, evt) {
+        try {
+            this._magneticLassoSnapshot = this._readDocumentImageData();
+        } catch (error) {
+            this._magneticLassoSnapshot = null;
+            this.toast('Magnetic lasso could not read the document', 'error');
+            return false;
+        }
+        this._magneticLassoActive = true;
+        this._magneticLassoLastPoint = { x:Number(ptr.x) || 0, y:Number(ptr.y) || 0 };
+        this._lassoPoints = [`${evt.offsetX},${evt.offsetY}`];
+        const svg = document.querySelector('#lasso-overlay svg polygon');
+        if (svg) svg.setAttribute('points', this._lassoPoints.join(' '));
+        this._updateCloseHandle('lasso-close-handle', this._lassoPoints, null, 3);
+        return true;
+    },
+    _magneticEdgePoint(point) {
+        const snap = this._magneticLassoSnapshot;
+        if (!snap?.data) return point;
+        const x = Math.round(Number(point.x) || 0), y = Math.round(Number(point.y) || 0);
+        const radius = 7;
+        const luminance = (px, py) => {
+            if (px < 0 || py < 0 || px >= snap.width || py >= snap.height) return null;
+            const index = (py * snap.width + px) * 4;
+            return snap.data[index] * .299 + snap.data[index + 1] * .587 + snap.data[index + 2] * .114;
+        };
+        const base = luminance(x, y);
+        if (base === null) return point;
+        let best = { x, y, score:-Infinity };
+        for (let py = Math.max(1, y - radius); py <= Math.min(snap.height - 2, y + radius); py++) {
+            for (let px = Math.max(1, x - radius); px <= Math.min(snap.width - 2, x + radius); px++) {
+                const center = luminance(px, py);
+                const horizontal = Math.abs(center - luminance(px - 1, py)) + Math.abs(center - luminance(px + 1, py));
+                const vertical = Math.abs(center - luminance(px, py - 1)) + Math.abs(center - luminance(px, py + 1));
+                const distance = Math.hypot(px - x, py - y);
+                const score = Math.max(horizontal, vertical) - distance * 3;
+                if (score > best.score) best = { x:px, y:py, score };
+            }
+        }
+        return { x:best.x, y:best.y };
+    },
+    _magneticLassoMove(ptr) {
+        if (!this._magneticLassoActive) return;
+        const snapped = this._magneticEdgePoint(ptr);
+        const previous = this._magneticLassoLastPoint || snapped;
+        if (Math.hypot(snapped.x - previous.x, snapped.y - previous.y) < 3) return;
+        this._magneticLassoLastPoint = snapped;
+        const vpt = this.canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
+        const sx = snapped.x * vpt[0] + vpt[4], sy = snapped.y * vpt[3] + vpt[5];
+        this._lassoPoints.push(`${sx},${sy}`);
+        const svg = document.querySelector('#lasso-overlay svg polygon');
+        if (svg) svg.setAttribute('points', this._lassoPoints.join(' '));
+        this._updateCloseHandle('lasso-close-handle', this._lassoPoints, null, 3);
+    },
+    _magneticLassoFinish() {
+        const active = this._magneticLassoActive;
+        this._magneticLassoActive = false;
+        this._magneticLassoLastPoint = null;
+        this._magneticLassoSnapshot = null;
+        if (!active || this._lassoPoints.length < 3) {
+            this._lassoPoints = [];
+            return false;
+        }
+        this._lassoDoubleClick();
+        return true;
+    },
+
+    _quickSelectionStart(ptr) {
+        try {
+            this._quickSelectionSnapshot = this._readDocumentImageData();
+        } catch (error) {
+            this._quickSelectionSnapshot = null;
+            this.toast('Quick Selection could not read the document', 'error');
+            return false;
+        }
+        const existing = this._selectionMask || this._maskFromMarqueeBounds();
+        this._quickSelectionOriginal = existing
+            ? { mask:new Uint8Array(existing.mask), w:existing.w, h:existing.h }
+            : null;
+        this._quickSelectionOriginalBounds = this._selectionBounds ? { ...this._selectionBounds } : null;
+        this._quickSelectionMode = this._selectionCombine || 'replace';
+        this._quickSelectionMask = new Uint8Array(this._quickSelectionSnapshot.width * this._quickSelectionSnapshot.height);
+        this._quickSelectionActive = true;
+        this._quickSelectionStroke(ptr);
+        return true;
+    },
+    _quickSelectionRegionMask(ptr) {
+        const snap = this._quickSelectionSnapshot;
+        if (!snap?.data) return null;
+        const width = snap.width, height = snap.height;
+        const sx = Math.max(0, Math.min(width - 1, Math.round(Number(ptr.x) || 0)));
+        const sy = Math.max(0, Math.min(height - 1, Math.round(Number(ptr.y) || 0)));
+        const radius = Math.max(5, Math.round(Number(this.state.brushSize) || 8));
+        const limit = Math.max(radius * 2, 12);
+        const seedIndex = (sy * width + sx) * 4;
+        const seed = [snap.data[seedIndex], snap.data[seedIndex + 1], snap.data[seedIndex + 2]];
+        const tolerance = Math.max(0, Number(this.state.wandTolerance) || 0);
+        const mask = new Uint8Array(width * height);
+        const allowed = (x, y) => {
+            if (x < 0 || y < 0 || x >= width || y >= height) return false;
+            if (Math.hypot(x - sx, y - sy) > limit) return false;
+            const index = (y * width + x) * 4;
+            return Math.abs(snap.data[index] - seed[0]) <= tolerance
+                && Math.abs(snap.data[index + 1] - seed[1]) <= tolerance
+                && Math.abs(snap.data[index + 2] - seed[2]) <= tolerance;
+        };
+        if (this.state.wandContiguous !== false) {
+            const queue = [[sx, sy]], visited = new Uint8Array(width * height);
+            while (queue.length) {
+                const [x, y] = queue.pop();
+                if (x < 0 || y < 0 || x >= width || y >= height) continue;
+                const position = y * width + x;
+                if (visited[position] || !allowed(x, y)) continue;
+                visited[position] = 1;
+                mask[position] = 255;
+                queue.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+            }
+        } else {
+            const minX = Math.max(0, sx - limit), maxX = Math.min(width - 1, sx + limit);
+            const minY = Math.max(0, sy - limit), maxY = Math.min(height - 1, sy + limit);
+            for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) {
+                if (allowed(x, y)) mask[y * width + x] = 255;
+            }
+        }
+        return mask;
+    },
+    _quickSelectionStroke(ptr) {
+        if (!this._quickSelectionActive || !this._quickSelectionSnapshot) return false;
+        const region = this._quickSelectionRegionMask(ptr);
+        if (!region) return false;
+        for (let index = 0; index < region.length; index++) this._quickSelectionMask[index] = Math.max(this._quickSelectionMask[index], region[index]);
+        const original = this._quickSelectionOriginal;
+        this._selectionMask = original ? { mask:new Uint8Array(original.mask), w:original.w, h:original.h } : null;
+        this._selectionBounds = this._quickSelectionOriginalBounds ? { ...this._quickSelectionOriginalBounds } : null;
+        const count = this._setPixelSelectionMask(this._quickSelectionMask, this._quickSelectionSnapshot.width, this._quickSelectionSnapshot.height, { coverage:true, combine:this._quickSelectionMode });
+        this._quickSelectionCount = count;
+        return count;
+    },
+    _quickSelectionFinish() {
+        const count = Number(this._quickSelectionCount) || 0;
+        this._quickSelectionActive = false;
+        this._quickSelectionSnapshot = null;
+        this._quickSelectionMask = null;
+        this._quickSelectionOriginal = null;
+        this._quickSelectionOriginalBounds = null;
+        this._quickSelectionCount = 0;
+        if (count) {
+            this._placeSelectionBox({ borderRadius:'0' });
+            this.toast('Quick Selection: ' + count.toLocaleString() + ' px', 'info');
+        } else this.toast('Quick Selection found no matching pixels', 'info');
+        return Boolean(count);
+    },
+
     // ====================== HEALING BRUSH ======================
-    _healOC: null, _healTarget: null,
+    _healOC: null, _healTarget: null, _healTool: 'healing',
     _healStart(ptr, evt) {
         let target = this.canvas.getActiveObject();
         if (!target || target.type !== 'image') {
@@ -21353,12 +21711,13 @@ self.onmessage = async function(event) {
         const oc = document.createElement('canvas');
         oc.width = el.naturalWidth || el.width; oc.height = el.naturalHeight || el.height;
         oc.getContext('2d').drawImage(el, 0, 0);
-        this._healOC = oc; this._healTarget = target;
+        this._healOC = oc; this._healTarget = target; this._healTool = this.state.tool === 'spot-healing' ? 'spot-healing' : 'healing';
         this._healStroke(ptr);
         const commitFn = () => {
             document.removeEventListener('mouseup', commitFn);
             if (this._healOC && this._healTarget) {
-                this._replaceActiveImage(this._healTarget, this._healOC.toDataURL(), 'Healing Brush');
+                const history = this._healTool === 'spot-healing' ? 'Spot Healing' : 'Healing Brush';
+                this._replaceActiveImage(this._healTarget, this._healOC.toDataURL(), history);
                 this._healOC = null; this._healTarget = null;
             }
         };
@@ -21372,6 +21731,7 @@ self.onmessage = async function(event) {
         const local = fabric.util.transformPoint(ptr, inv);
         const lx = local.x + oc.width / 2, ly = local.y + oc.height / 2;
         const size = this.state.healingSize, r = Math.ceil(size / 2);
+        const selectionMask = this._selectionMask || (this._selectionBounds ? this._maskFromMarqueeBounds() : null);
         const x0 = Math.max(0, Math.floor(lx - r)), y0 = Math.max(0, Math.floor(ly - r));
         const x1 = Math.min(oc.width, Math.ceil(lx + r)), y1 = Math.min(oc.height, Math.ceil(ly + r));
         if (x1 <= x0 || y1 <= y0) return;
@@ -21387,8 +21747,15 @@ self.onmessage = async function(event) {
                 tr = Math.round(tr / cnt); tg = Math.round(tg / cnt); tb = Math.round(tb / cnt);
                 for (let py = 0; py < imgData.height; py++) for (let px = 0; px < w; px++) {
                     const dist = Math.sqrt((px + x0 - lx) ** 2 + (py + y0 - ly) ** 2);
-                    if (dist < r * 0.6) { const blend = dist / (r * 0.6); const i = (py * w + px) * 4;
-                        d[i] = Math.round(d[i]*blend + tr*(1-blend)); d[i+1] = Math.round(d[i+1]*blend + tg*(1-blend)); d[i+2] = Math.round(d[i+2]*blend + tb*(1-blend));
+                    if (dist < r * 0.6) {
+                        const localX = px + x0 + 0.5 - oc.width / 2, localY = py + y0 + 0.5 - oc.height / 2;
+                        const documentPoint = fabric.util.transformPoint({ x:localX, y:localY }, matrix);
+                        const coverage = selectionMask ? this._selectionCoverageAt(selectionMask, Math.floor(documentPoint.x), Math.floor(documentPoint.y), Math.round(this.canvasW), Math.round(this.canvasH)) : 255;
+                        if (!coverage) continue;
+                        const blend = dist / (r * 0.6), strength = coverage / 255, i = (py * w + px) * 4;
+                        d[i] = Math.round(d[i] * (1 - (1 - blend) * strength) + tr * (1 - blend) * strength);
+                        d[i+1] = Math.round(d[i+1] * (1 - (1 - blend) * strength) + tg * (1 - blend) * strength);
+                        d[i+2] = Math.round(d[i+2] * (1 - (1 - blend) * strength) + tb * (1 - blend) * strength);
                     }
                 }
                 ctx.putImageData(imgData, x0, y0);
@@ -22380,6 +22747,35 @@ self.onmessage = async function(event) {
         }
         return null;
     },
+    _vectorObjectAtPoint(pointer) {
+        const objects = this.canvas?.getObjects?.() || [];
+        const candidates = objects.filter(object => object && object.name !== '__boundary__' && !object._wandOverlay
+            && ['path','line','rect','rounded-rect','circle','ellipse','triangle','polygon','polyline'].includes(object.type));
+        for (let index = candidates.length - 1; index >= 0; index--) {
+            const object = candidates[index];
+            try {
+                if (object.containsPoint?.(pointer) || object.getBoundingRect?.().containsPoint?.(pointer)) return object;
+            } catch (_) { /* malformed vector bounds are simply skipped */ }
+        }
+        return null;
+    },
+    _pathSelectionClick(pointer, tool) {
+        const target = this._vectorObjectAtPoint(pointer);
+        if (!target) {
+            this.canvas.discardActiveObject?.();
+            this.canvas.requestRenderAll?.();
+            return false;
+        }
+        if (!this._guardObjectEdit(target)) return false;
+        this.canvas.setActiveObject(target);
+        if (tool === 'direct-selection') {
+            if (target.type !== 'path' && !this.convertSelectedVectorToPath()) return false;
+            return this.editSelectedVectorPath();
+        }
+        this.canvas.requestRenderAll?.();
+        this.toast('Path selected', 'info');
+        return true;
+    },
     convertSelectedVectorToPath() {
         const active = this.canvas.getActiveObject();
         if (!active) { this.toast('Select a vector shape first', 'info'); return false; }
@@ -22443,6 +22839,7 @@ self.onmessage = async function(event) {
         if (document.getElementById('path-edit-overlay')) return this.finishPathEdit(true);
         const active = this.canvas.getActiveObject();
         if (!active) { this.toast('Select a vector path first', 'info'); return false; }
+        if (!this._guardObjectEdit(active)) return false;
         if (active.type !== 'path') {
             if (!this.convertSelectedVectorToPath()) return false;
             return this.editSelectedVectorPath();
@@ -22457,6 +22854,7 @@ self.onmessage = async function(event) {
         };
         const move = event => {
             if (!this._pathEditHandle) return;
+            if (!this._guardObjectEdit(this._pathEditObject)) { this._pathEditHandle = null; return; }
             const pointer = this.canvas.getPointer(event); const inverse = fabric.util.invertTransform(this._pathEditObject.calcTransformMatrix()); const local = fabric.util.transformPoint(pointer, inverse); const command = this._pathEditObject.path[this._pathEditHandle.commandIndex];
             command[this._pathEditHandle.xIndex] = local.x; command[this._pathEditHandle.yIndex] = local.y; this._pathEditDirty = true; this._pathEditObject.dirty = true; this._pathEditObject.setCoords?.(); this.canvas.renderAll(); this._renderPathEditOverlay();
         };
@@ -26764,12 +27162,12 @@ self.onmessage = async function(e) {
             // === Non-modifier shortcuts ===
             switch(e.key) {
                 case 'Escape':
-                    if (this.state.tool === 'crop' && this._cropRegion) { this.cancelCrop(); return; }
+                    if ((this.state.tool === 'crop' || this.state.tool === 'perspective-crop') && (this._cropRegion || this._perspectiveCropCorners)) { this.cancelCrop(); return; }
                     if (this._selectionBounds || this._lassoPoints.length > 0) { this.clearSelection(); return; }
                     this.deselectAll();
                     return;
                 case 'Enter':
-                    if (this.state.tool === 'crop' && this._cropRegion) { e.preventDefault(); this.applyCrop(); return; }
+                    if ((this.state.tool === 'crop' || this.state.tool === 'perspective-crop') && (this._cropRegion || this._perspectiveCropCorners)) { e.preventDefault(); this.applyCrop(); return; }
                     if (this.state.tool === 'pen' && this._penPoints.length > 1) { e.preventDefault(); this._penFinish(); return; }
                     return;
                 case 'Delete': case 'Backspace':
@@ -28860,7 +29258,7 @@ self.onmessage = async function(e) {
     // in the nearest open-source rival (miniPaint#312). The mode is captured
     // when the gesture starts, because by the time a marquee is released the
     // modifier is often already back up.
-    _selectionCombineTools: new Set(['marquee-rect','marquee-ellipse','magic-wand','lasso','ai-segment']),
+    _selectionCombineTools: new Set(['marquee-rect','marquee-ellipse','magic-wand','lasso','lasso-polygonal','lasso-magnetic','quick-selection','ai-segment']),
     _selectionCombine: 'replace',
     // What the toolbar is set to. A held modifier wins for that one gesture.
     _selectionCombineDefault: 'replace',
@@ -30161,7 +30559,10 @@ self.onmessage = async function(e) {
     _toolLabel(tool) {
         const names = {
             'marquee-rect':'Rect Marquee', 'marquee-ellipse':'Ellipse Marquee',
-            'magic-wand':'Magic Wand', 'ai-segment':'AI Segment',
+            'magic-wand':'Magic Wand', 'quick-selection':'Quick Selection', 'ai-segment':'AI Segment',
+            'lasso-polygonal':'Polygonal Lasso', 'lasso-magnetic':'Magnetic Lasso',
+            'perspective-crop':'Perspective Crop', 'spot-healing':'Spot Healing',
+            'path-selection':'Path Selection', 'direct-selection':'Direct Selection',
             'clone':'Clone Stamp', 'healing':'Healing Brush'
         };
         const value = tool || this.state.tool || 'select';

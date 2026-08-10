@@ -5,6 +5,7 @@ All notable changes to Openshop will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Implemented polygonal and magnetic lasso, Quick Selection, perspective crop, spot healing, path/direct selection, rounded rectangles, and custom heart shapes; the registry now exposes these tools as enabled workflows with document-space selection masks, lock-aware raster edits, and one-step perspective-crop history.
 - Expanded locale coverage to inventory static toast and `_t()` source literals plus runtime messages, translate undo/live announcements, and verify pseudo-locale and RTL behavior without manufacturing unreviewed Chinese copy.
 - Completed the hosted PWA contract with maskable icons, wide/compact install screenshots, New/Open shortcuts, existing-client launch handling, complete import file handlers, and a multipart share target that persists files locally before handing them to the editor.
 - Added a WCAG-audited light theme with system `prefers-color-scheme` detection on first run, persisted theme selection, light-aware studio surfaces, and menu/command-palette access.

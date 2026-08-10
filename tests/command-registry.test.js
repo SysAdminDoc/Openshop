@@ -40,9 +40,18 @@ describe('OpenShop typed command and tool registry', () => {
     OS._announceAccessibility = vi.fn();
     const tools = OS.listRegisteredTools({ documentOpen: true });
     const unimplemented = tools.filter(tool => !tool.implemented);
+    const expectedDead = [
+      'marquee-row', 'marquee-column', 'slice', 'slice-select', 'color-sampler', 'patch',
+      'content-aware-move', 'red-eye', 'pattern-stamp', 'history-brush', 'art-history-brush',
+      'background-eraser', 'magic-eraser', 'blur', 'sharpen', 'freeform-pen', 'add-anchor',
+      'delete-anchor', 'convert-point', 'vertical-text', 'horizontal-text-mask', 'vertical-text-mask', 'rotate-view'
+    ];
 
-    expect(unimplemented).toHaveLength(32);
+    expect(unimplemented).toHaveLength(expectedDead.length);
+    expect(unimplemented.map(tool => tool.toolState)).toEqual(expectedDead);
     expect(unimplemented.every(tool => tool.enabled === false && tool.blocked === 'unimplemented')).toBe(true);
+    expect(['lasso-polygonal', 'lasso-magnetic', 'quick-selection', 'perspective-crop', 'spot-healing', 'path-selection', 'direct-selection', 'rounded-rect', 'custom-shape']
+      .every(toolState => tools.find(tool => tool.toolState === toolState)?.implemented)).toBe(true);
     const dead = unimplemented[0];
     expect(OS.getCommandState(dead.id, { documentOpen: true })).toMatchObject({
       enabled: false,
@@ -67,7 +76,7 @@ describe('OpenShop typed command and tool registry', () => {
     OS.setTool = vi.fn();
     OS._buildToolboxFromRegistry();
     const disabled = [...document.querySelectorAll('[data-unimplemented="true"]')];
-    expect(disabled).toHaveLength(32);
+    expect(disabled).toHaveLength(23);
     expect(disabled.every(button => button.disabled && button.getAttribute('aria-disabled') === 'true')).toBe(true);
 
     const branchStates = new Set([...setToolSource.matchAll(/case ['"]([^'"]+)['"]/g)].map(match => match[1]));
@@ -182,6 +191,10 @@ describe('OpenShop typed command and tool registry', () => {
     expect(byState('pen').optionsSchema).toMatchObject({ context:'pen', groupId:'opt-pen' });
     expect(byState('text').optionsSchema).toMatchObject({ context:'type', groupId:'opt-text' });
     expect(byState('zoom').optionsSchema).toMatchObject({ context:'zoom', groupId:'opt-zoom' });
+    expect(byState('quick-selection').optionsSchema).toMatchObject({ context:'wand', groupId:'opt-wand' });
+    expect(byState('spot-healing').optionsSchema).toMatchObject({ context:'healing', groupId:'opt-healing' });
+    expect(byState('perspective-crop').optionsSchema).toMatchObject({ context:'crop', groupId:'opt-crop' });
+    expect(byState('rounded-rect').optionsSchema).toMatchObject({ context:'shape', groupId:'opt-shape' });
     expect(OS.getCommandState('tool.move', { documentOpen:true }).optionsSchema).toMatchObject({ context:'select' });
   });
 });

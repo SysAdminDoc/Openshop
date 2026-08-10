@@ -5717,6 +5717,101 @@ test('lasso and pen paths close by clicking their start point @cross-browser', a
   expect(result.penAddedLayer).toBe(true);
 });
 
+test('enables the highest-value parity tools with real selection, vector, shape, and warp paths', async ({ page }) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).click();
+
+  const result = await page.evaluate(async () => {
+    OS.createNewDocument(160, 120, '#ffffff');
+    OS.canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+    const toolStates = ['lasso-polygonal', 'lasso-magnetic', 'quick-selection', 'perspective-crop', 'spot-healing', 'path-selection', 'direct-selection', 'rounded-rect', 'custom-shape'];
+    const registry = Object.fromEntries(toolStates.map(tool => [tool, OS.listRegisteredTools({ documentOpen:true }).find(entry => entry.toolState === tool)]));
+
+    OS.setTool('lasso-polygonal');
+    OS._lassoPoints = ['12,12', '90,12', '90,70'];
+    OS._lassoDoubleClick();
+    const polygonSelection = OS._selectionMask?.count || 0;
+
+    OS.clearSelection();
+    OS.setTool('quick-selection');
+    OS._selectionCombine = 'replace';
+    OS._quickSelectionStart({ x:30, y:30 });
+    const quickSelection = OS._quickSelectionFinish();
+    const quickPixels = OS._selectionMask?.count || 0;
+
+    OS.clearSelection();
+    OS.setTool('lasso-magnetic');
+    OS._magneticLassoStart({ x:15, y:15 }, { offsetX:15, offsetY:15 });
+    OS._magneticLassoMove({ x:90, y:15 });
+    OS._magneticLassoMove({ x:90, y:70 });
+    OS._magneticLassoFinish();
+    const magneticSelection = OS._selectionMask?.count || 0;
+
+    OS.createNewDocument(40, 30, '#ffffff');
+    OS.setTool('perspective-crop');
+    OS._perspectiveCropCorners = [{x:2,y:2},{x:38,y:2},{x:38,y:28},{x:2,y:28}];
+    const historyBeforePerspective = OS.history.length;
+    const perspectiveApplied = await OS.applyPerspectiveCrop();
+    const perspectiveHistoryEntries = OS.history.length - historyBeforePerspective;
+
+    const source = document.createElement('canvas');
+    source.width = 4; source.height = 4;
+    source.getContext('2d').fillStyle = '#ff0000';
+    source.getContext('2d').fillRect(0, 0, 4, 4);
+    const warped = OS._perspectiveWarpCanvas(source, [{x:0,y:0},{x:3,y:0},{x:3,y:3},{x:0,y:3}], 4, 4);
+    const warpedPixel = [...warped.getContext('2d').getImageData(1, 1, 1, 1).data];
+
+    const path = new fabric.Path('M 0 0 L 45 0 L 45 45 Z', { left:20, top:20, fill:'#6c8cff', selectable:true });
+    OS._addObjectAsLayer(path, 'Path');
+    OS.setTool('path-selection');
+    const pathSelected = OS._pathSelectionClick({ x:25, y:25 }, 'path-selection');
+    OS.setTool('direct-selection');
+    const directSelected = OS._pathSelectionClick({ x:25, y:25 }, 'direct-selection');
+    OS.finishPathEdit(false);
+
+    OS.setTool('rounded-rect');
+    const roundedOptions = document.getElementById('opt-shape').style.display;
+    const pointer = (x, y) => ({
+      e: { clientX:x, clientY:y, offsetX:x, offsetY:y, buttons:1 },
+      absolutePointer: { x, y }, pointer: { x, y }
+    });
+    OS.onMouseDown(pointer(20, 20));
+    OS.onMouseMove(pointer(70, 55));
+    OS.onMouseUp(pointer(70, 55));
+    const roundedShape = OS.canvas.getObjects().find(object => object.type === 'rect' && object.rx > 0);
+    OS.setTool('custom-shape');
+    const customOptions = document.getElementById('opt-shape').style.display;
+    OS.onMouseDown(pointer(80, 25));
+    OS.onMouseMove(pointer(130, 75));
+    OS.onMouseUp(pointer(130, 75));
+    const customShape = OS.canvas.getObjects().find(object => object.type === 'path' && object.name === undefined);
+
+    return {
+      implemented: Object.fromEntries(toolStates.map(tool => [tool, registry[tool]?.implemented === true && registry[tool]?.enabled === true])),
+      polygonSelection, quickSelection, quickPixels, magneticSelection,
+      perspectiveApplied, perspectiveHistoryEntries, perspectiveSize:[OS.canvasW, OS.canvasH],
+      warpedPixel, pathSelected, directSelected, roundedOptions, customOptions,
+      roundedShape: Boolean(roundedShape), customShape: Boolean(customShape)
+    };
+  });
+
+  expect(Object.values(result.implemented).every(Boolean)).toBe(true);
+  expect(result.polygonSelection).toBeGreaterThan(0);
+  expect(result.quickSelection).toBe(true);
+  expect(result.quickPixels).toBeGreaterThan(0);
+  expect(result.magneticSelection).toBeGreaterThan(0);
+  expect(result.perspectiveApplied).toBe(true);
+  expect(result.perspectiveHistoryEntries).toBe(1);
+  expect(result.perspectiveSize).toEqual([36, 26]);
+  expect(result.warpedPixel.slice(0, 3)).toEqual([255, 0, 0]);
+  expect(result.pathSelected).toBe(true);
+  expect(result.directSelected).toBe(true);
+  expect(result.roundedOptions).toBe('flex');
+  expect(result.customOptions).toBe('flex');
+  expect(result.roundedShape).toBe(true);
+  expect(result.customShape).toBe(true);
+});
+
 test('the panel stack resizes by drag and by keyboard @cross-browser', async ({ page }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).click();
