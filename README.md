@@ -43,7 +43,7 @@ Or download `index.html` and open it locally. Everything runs client-side. Your 
 | **Trace to Vector** | Converts a raster layer into editable paths with colour-count, smoothing, and detail controls; the source layer is hidden, not destroyed |
 | **Gradient Stops** | Linear gradients expose draggable start and end handles on the canvas; imported `.grd` presets retain their stops and can be selected for linear or radial fills |
 | **Auto-Save** | Dirty project revisions are written to browser recovery storage every 30 seconds and cleared only after the storage path acknowledges the write |
-| **Accelerated Filters** | Parity-verified invert filtering uses a WebGPU compute worker, while supported filter application and capped previews use a capability-tested OffscreenCanvas worker; WebGL2, Fabric, and CPU-worker fallbacks remain available, and `OS.aiBackendReport()` exposes measured backend and renderer paths |
+| **Accelerated Filters** | Parity-verified GPU kernels cover invert, grayscale, threshold, brightness/contrast, blur, and sharpen through WebGPU with WebGL2 fallback; supported filter application and capped previews use a capability-tested OffscreenCanvas worker, with Fabric and CPU-worker fallbacks, while `OS.aiBackendReport()` exposes the backend actually used per operation |
 
 ### File I/O
 

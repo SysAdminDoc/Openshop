@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-nzvZfGklkuse0F1+rYE6WWiCMRjAJWFMDcYnvFwtZGk=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-b823gwQN0suLWohWgcpZPp3zn6uCPK7Si6liklKLLoM=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -21065,7 +21065,7 @@ self.onmessage = async function(event) {
     _filterWorkerPhotonReady: false,
     _photonFilterDisabled: false,
     _gpuFilterDisabled: false,
-    _gpuParityOps: Object.freeze(['invert']),
+    _gpuParityOps: Object.freeze(['invert', 'grayscale', 'threshold', 'brightness', 'contrast', 'blur', 'sharpen']),
     _filterBenchmarks: {},
     _recordFilterBenchmark(op, backend, durationMs) {
         if (!op || !Number.isFinite(durationMs) || durationMs <= 0) return;
@@ -21128,8 +21128,9 @@ async function runPhotonFilter(op, d, w, h, p, runtime) {
         img.free();
     }
 }
-async function runWebGPUFilter(op, d, w, h) {
-    if (op !== 'invert' || !self.navigator?.gpu) throw new Error('WebGPU filter backend is unavailable');
+async function runWebGPUFilter(op, d, w, h, p) {
+    const opCodes = { invert:0, grayscale:1, threshold:2, brightness:3, contrast:4, blur:5, sharpen:6 };
+    if (!Object.prototype.hasOwnProperty.call(opCodes, op) || !self.navigator?.gpu) throw new Error('WebGPU filter backend is unavailable');
     const adapter = await self.navigator.gpu.requestAdapter();
     if (!adapter) throw new Error('WebGPU adapter is unavailable');
     const device = await adapter.requestDevice();
@@ -21139,21 +21140,67 @@ async function runWebGPUFilter(op, d, w, h) {
     new Uint32Array(input.getMappedRange()).set(values);
     input.unmap();
     const output = device.createBuffer({ size:values.byteLength, usage:1 | 4 | 128 });
-    const params = device.createBuffer({ size:4, usage:8 | 128, mappedAtCreation:true });
-    new Uint32Array(params.getMappedRange())[0] = pixelCount;
+    const params = device.createBuffer({ size:32, usage:8 | 128, mappedAtCreation:true });
+    const mappedParams = params.getMappedRange();
+    const paramsU32 = new Uint32Array(mappedParams);
+    const paramsF32 = new Float32Array(mappedParams);
+    const threshold = Math.max(0, Math.min(255, Number(p?.thr ?? p?.threshold) || 128));
+    const radius = Math.max(1, Math.min(8, Math.round(Number(p?.radius) || 1)));
+    paramsU32[0] = pixelCount;
+    paramsU32[1] = w;
+    paramsU32[2] = h;
+    paramsU32[3] = opCodes[op];
+    paramsF32[4] = Number(p?.value) || 0;
+    paramsF32[5] = threshold;
+    paramsU32[6] = radius;
     params.unmap();
-    const shader = device.createShaderModule({ code:'struct Params { count: u32 };\\n' +
+    const shader = device.createShaderModule({ code:'struct Params { count: u32, width: u32, height: u32, op: u32, value: f32, threshold: f32, radius: u32, padding: u32 };\\n' +
         '@group(0) @binding(0) var<storage, read> source: array<u32>;\\n' +
         '@group(0) @binding(1) var<storage, read_write> destination: array<u32>;\\n' +
         '@group(0) @binding(2) var<uniform> params: Params;\\n' +
+        'fn channel(pixel: u32, shift: u32) -> f32 { return f32((pixel >> shift) & 255u); }\\n' +
+        'fn pixelAt(x: i32, y: i32) -> u32 {\\n' +
+        '    let sx = clamp(x, 0, i32(params.width) - 1);\\n' +
+        '    let sy = clamp(y, 0, i32(params.height) - 1);\\n' +
+        '    return source[u32(sy) * params.width + u32(sx)];\\n' +
+        '}\\n' +
+        'fn byte(value: f32) -> u32 { return u32(clamp(round(value), 0.0, 255.0)); }\\n' +
+        'fn pack(r: f32, g: f32, b: f32, a: f32) -> u32 {\\n' +
+        '    return byte(r) | (byte(g) << 8u) | (byte(b) << 16u) | (byte(a) << 24u);\\n' +
+        '}\\n' +
+        'fn sharpen(x: i32, y: i32, pixel: u32) -> u32 {\\n' +
+        '    if (x == 0 || y == 0 || x + 1 >= i32(params.width) || y + 1 >= i32(params.height)) { return pixel; }\\n' +
+        '    var r = -channel(pixelAt(x, y - 1), 0u) - channel(pixelAt(x - 1, y), 0u) + channel(pixelAt(x, y), 0u) * 5.0 - channel(pixelAt(x + 1, y), 0u) - channel(pixelAt(x, y + 1), 0u);\\n' +
+        '    var g = -channel(pixelAt(x, y - 1), 8u) - channel(pixelAt(x - 1, y), 8u) + channel(pixelAt(x, y), 8u) * 5.0 - channel(pixelAt(x + 1, y), 8u) - channel(pixelAt(x, y + 1), 8u);\\n' +
+        '    var b = -channel(pixelAt(x, y - 1), 16u) - channel(pixelAt(x - 1, y), 16u) + channel(pixelAt(x, y), 16u) * 5.0 - channel(pixelAt(x + 1, y), 16u) - channel(pixelAt(x, y + 1), 16u);\\n' +
+        '    return pack(r, g, b, channel(pixel, 24u));\\n' +
+        '}\\n' +
         '@compute @workgroup_size(64)\\n' +
-        'fn invert(@builtin(global_invocation_id) id: vec3<u32>) {\\n' +
+        'fn filter(@builtin(global_invocation_id) id: vec3<u32>) {\\n' +
         '    let i = id.x; if (i >= params.count) { return; }\\n' +
         '    let pixel = source[i];\\n' +
-        '    let r = pixel & 255u; let g = (pixel >> 8u) & 255u; let b = (pixel >> 16u) & 255u;\\n' +
-        '    destination[i] = (255u - r) | ((255u - g) << 8u) | ((255u - b) << 16u) | (pixel & 4278190080u);\\n' +
+        '    let x = i32(i % params.width); let y = i32(i / params.width);\\n' +
+        '    let r = channel(pixel, 0u); let g = channel(pixel, 8u); let b = channel(pixel, 16u); let a = channel(pixel, 24u);\\n' +
+        '    let luminance = 0.299 * r + 0.587 * g + 0.114 * b;\\n' +
+        '    if (params.op == 6u) { destination[i] = sharpen(x, y, pixel); return; }\\n' +
+        '    if (params.op == 5u) {\\n' +
+        '        let radius = i32(params.radius); var sumR = 0.0; var sumG = 0.0; var sumB = 0.0; var sumA = 0.0; var count = 0.0;\\n' +
+        '        for (var dy: i32 = -8; dy <= 8; dy = dy + 1) { if (abs(dy) <= radius) {\\n' +
+        '            for (var dx: i32 = -8; dx <= 8; dx = dx + 1) { if (abs(dx) <= radius) {\\n' +
+        '                let sample = pixelAt(x + dx, y + dy); sumR = sumR + channel(sample, 0u); sumG = sumG + channel(sample, 8u); sumB = sumB + channel(sample, 16u); sumA = sumA + channel(sample, 24u); count = count + 1.0;\\n' +
+        '            }}\\n' +
+        '        }}\\n' +
+        '        destination[i] = pack(sumR / count, sumG / count, sumB / count, sumA / count); return;\\n' +
+        '    }\\n' +
+        '    var outR = r; var outG = g; var outB = b;\\n' +
+        '    if (params.op == 0u) { outR = 255.0 - r; outG = 255.0 - g; outB = 255.0 - b; }\\n' +
+        '    if (params.op == 1u) { outR = luminance; outG = luminance; outB = luminance; }\\n' +
+        '    if (params.op == 2u) { let weightedLuminance = 299.0 * r + 587.0 * g + 114.0 * b; let value = select(0.0, 255.0, weightedLuminance >= params.threshold * 1000.0); outR = value; outG = value; outB = value; }\\n' +
+        '    if (params.op == 3u) { outR = r + params.value * 255.0; outG = g + params.value * 255.0; outB = b + params.value * 255.0; }\\n' +
+        '    if (params.op == 4u) { let factor = (259.0 * (params.value * 255.0 + 255.0)) / (255.0 * (259.0 - params.value * 255.0)); outR = factor * (r - 128.0) + 128.0; outG = factor * (g - 128.0) + 128.0; outB = factor * (b - 128.0) + 128.0; }\\n' +
+        '    destination[i] = pack(outR, outG, outB, a);\\n' +
         '}'});
-    const pipeline = device.createComputePipeline({ layout:'auto', compute:{ module:shader, entryPoint:'invert' } });
+    const pipeline = device.createComputePipeline({ layout:'auto', compute:{ module:shader, entryPoint:'filter' } });
     const bindGroup = device.createBindGroup({
         layout:pipeline.getBindGroupLayout(0),
         entries:[{ binding:0, resource:{ buffer:input } }, { binding:1, resource:{ buffer:output } }, { binding:2, resource:{ buffer:params } }]
@@ -21170,8 +21217,9 @@ async function runWebGPUFilter(op, d, w, h) {
     input.destroy(); output.destroy(); params.destroy(); readback.destroy(); device.destroy?.();
     return result;
 }
-function runWebGL2Filter(op, d, w, h) {
-    if (op !== 'invert' || typeof OffscreenCanvas === 'undefined') throw new Error('WebGL2 filter backend is unavailable');
+function runWebGL2Filter(op, d, w, h, p) {
+    const opCodes = { invert:0, grayscale:1, threshold:2, brightness:3, contrast:4, blur:5, sharpen:6 };
+    if (!Object.prototype.hasOwnProperty.call(opCodes, op) || typeof OffscreenCanvas === 'undefined') throw new Error('WebGL2 filter backend is unavailable');
     const canvas = new OffscreenCanvas(w, h);
     const gl = canvas.getContext('webgl2', { alpha:true, premultipliedAlpha:false, preserveDrawingBuffer:true });
     if (!gl) throw new Error('WebGL2 filter backend is unavailable');
@@ -21182,11 +21230,32 @@ function runWebGL2Filter(op, d, w, h) {
     };
     const program = gl.createProgram();
     gl.attachShader(program, compile(gl.VERTEX_SHADER, '#version 300 es\\n' +
-        'layout(location=0) in vec2 position; out vec2 uv;\\n' +
-        'void main(){ uv=(position+1.0)*0.5; gl_Position=vec4(position,0.0,1.0); }'));
+        'layout(location=0) in vec2 position;\\n' +
+        'void main(){ gl_Position=vec4(position,0.0,1.0); }'));
     gl.attachShader(program, compile(gl.FRAGMENT_SHADER, '#version 300 es\\n' +
-        'precision highp float; in vec2 uv; uniform sampler2D source; out vec4 color;\\n' +
-        'void main(){ vec4 pixel=texture(source,uv); color=vec4(1.0-pixel.rgb,pixel.a); }'));
+        'precision highp float; precision highp int; uniform sampler2D source; uniform int operation; uniform float value; uniform float threshold; uniform int radius; uniform vec2 dimensions; out vec4 color;\\n' +
+        'ivec2 clampCoord(ivec2 coord){ return clamp(coord, ivec2(0), ivec2(int(dimensions.x)-1, int(dimensions.y)-1)); }\\n' +
+        'vec4 pixelAt(ivec2 coord){ return texelFetch(source, clampCoord(coord), 0); }\\n' +
+        'float byte(float value){ return clamp(round(value), 0.0, 255.0) / 255.0; }\\n' +
+        'void main(){\\n' +
+        '    ivec2 coord=ivec2(gl_FragCoord.xy); vec4 pixel=pixelAt(coord); vec3 rgb=pixel.rgb*255.0; float luminance=0.299*rgb.r+0.587*rgb.g+0.114*rgb.b;\\n' +
+        '    if (operation == 5) {\\n' +
+        '        vec4 sum=vec4(0.0); float count=0.0;\\n' +
+        '        for (int dy=-8; dy<=8; dy++) if (abs(dy)<=radius) for (int dx=-8; dx<=8; dx++) if (abs(dx)<=radius) { sum += pixelAt(coord+ivec2(dx,dy)); count += 1.0; }\\n' +
+        '        color=vec4(round(sum.rgb*255.0/count)/255.0, round(sum.a*255.0/count)/255.0); return;\\n' +
+        '    }\\n' +
+        '    if (operation == 6) {\\n' +
+        '        if (coord.x == 0 || coord.y == 0 || coord.x + 1 >= int(dimensions.x) || coord.y + 1 >= int(dimensions.y)) { color=pixel; return; }\\n' +
+        '        vec3 sharpen=-pixelAt(coord+ivec2(0,-1)).rgb*255.0-pixelAt(coord+ivec2(-1,0)).rgb*255.0+pixelAt(coord).rgb*255.0*5.0-pixelAt(coord+ivec2(1,0)).rgb*255.0-pixelAt(coord+ivec2(0,1)).rgb*255.0;\\n' +
+        '        rgb=clamp(sharpen,0.0,255.0); color=vec4(byte(rgb.r),byte(rgb.g),byte(rgb.b),pixel.a); return;\\n' +
+        '    }\\n' +
+        '    if (operation == 0) rgb=255.0-rgb;\\n' +
+        '    if (operation == 1) rgb=vec3(luminance);\\n' +
+        '    if (operation == 2) rgb=vec3((299.0*rgb.r+587.0*rgb.g+114.0*rgb.b) >= threshold*1000.0 ? 255.0 : 0.0);\\n' +
+        '    if (operation == 3) rgb=rgb+value*255.0;\\n' +
+        '    if (operation == 4) { float factor=(259.0*(value*255.0+255.0))/(255.0*(259.0-value*255.0)); rgb=factor*(rgb-128.0)+128.0; }\\n' +
+        '    color=vec4(byte(rgb.r),byte(rgb.g),byte(rgb.b),pixel.a);\\n' +
+        '}'));
     gl.linkProgram(program);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program) || 'WebGL2 shader link failed');
     const buffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
@@ -21196,15 +21265,21 @@ function runWebGL2Filter(op, d, w, h) {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, d);
     gl.useProgram(program); gl.bindBuffer(gl.ARRAY_BUFFER, buffer); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.uniform1i(gl.getUniformLocation(program, 'source'), 0);
+    gl.uniform1i(gl.getUniformLocation(program, 'operation'), opCodes[op]);
+    gl.uniform1f(gl.getUniformLocation(program, 'value'), Number(p?.value) || 0);
+    gl.uniform1f(gl.getUniformLocation(program, 'threshold'), Math.max(0, Math.min(255, Number(p?.thr ?? p?.threshold) || 128)));
+    gl.uniform1i(gl.getUniformLocation(program, 'radius'), Math.max(1, Math.min(8, Math.round(Number(p?.radius) || 1))));
+    gl.uniform2f(gl.getUniformLocation(program, 'dimensions'), w, h);
     gl.viewport(0, 0, w, h); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     const result = new Uint8ClampedArray(d.byteLength); gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, result);
     gl.deleteTexture(texture); gl.deleteBuffer(buffer); gl.deleteProgram(program);
     return result;
 }
-async function runAcceleratedFilter(op, d, w, h) {
-    try { return { data:await runWebGPUFilter(op, d, w, h), backend:'webgpu' }; }
+async function runAcceleratedFilter(op, d, w, h, p) {
+    try { return { data:await runWebGPUFilter(op, d, w, h, p), backend:'webgpu' }; }
     catch (webgpuError) {
-        try { return { data:runWebGL2Filter(op, d, w, h), backend:'webgl2' }; }
+        try { return { data:runWebGL2Filter(op, d, w, h, p), backend:'webgl2' }; }
         catch (webglError) { throw new Error('No accelerated filter backend available (' + webgpuError.message + '; ' + webglError.message + ')'); }
     }
 }
@@ -21330,8 +21405,8 @@ const filterOps = {
     threshold(d, w, h, p) {
         const thr = Math.max(0, Math.min(255, Number(p.thr ?? p.threshold) || 128));
         for (let i = 0; i < d.length; i += 4) {
-            const l = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-            const v = l >= thr ? 255 : 0;
+            const weightedLuminance = 299 * d[i] + 587 * d[i + 1] + 114 * d[i + 2];
+            const v = weightedLuminance >= thr * 1000 ? 255 : 0;
             d[i] = d[i + 1] = d[i + 2] = v;
         }
     },
@@ -21595,7 +21670,7 @@ self.onmessage = async function(e) {
             return;
         }
         if (backend === 'gpu') {
-            const out = await runAcceleratedFilter(op, d, w, h);
+            const out = await runAcceleratedFilter(op, d, w, h, p);
             self.postMessage({ _jobId, data: out.data.buffer, width, height, backend:out.backend, durationMs:performance.now() - started }, [out.data.buffer]);
             return;
         }
@@ -21637,7 +21712,7 @@ self.onmessage = async function(e) {
             job.worker = worker;
             const id = ++this._filterJobId;
             const buf = imgData.data.buffer.slice(0);
-            const callback = { resolve, reject, worker, job };
+            const callback = { resolve, reject, worker, job, op:payload.op, backend:payload.backend };
             this._filterJobCallbacks[id] = callback;
             job.cancel = error => {
                 if (this._filterJobCallbacks[id] !== callback) return;
@@ -21653,9 +21728,9 @@ self.onmessage = async function(e) {
                     try {
                         this._assertComputeJobCurrent(cb.job);
                         const result = new ImageData(new Uint8ClampedArray(e.data.data), e.data.width, e.data.height);
-                        if (e.data.error && ['photon','gpu','offscreen'].includes(payload.backend)) { cb.reject(new Error(e.data.error)); return; }
+                        if (e.data.error && ['photon','gpu','offscreen'].includes(cb.backend)) { cb.reject(new Error(e.data.error)); return; }
                         if (e.data.error) console.warn('Filter worker error:', e.data.error);
-                        this._recordFilterBenchmark(payload.op, e.data.backend || payload.backend, e.data.durationMs);
+                        this._recordFilterBenchmark(cb.op, e.data.backend || cb.backend, e.data.durationMs);
                         cb.resolve(result);
                     } catch (error) {
                         cb.reject(error);
@@ -21781,15 +21856,11 @@ self.onmessage = async function(e) {
             throw error;
         }
     },
-    // GPU and Photon do not compute what this app computes unless a parity
-    // fixture says they do. Measured against the JS
-    // worker on a 16x16 fixture: grayscale differs by up to 58 levels (it does
-    // not use the Rec.601 weights every other filter and the histogram here
-    // use), sepia by 192, threshold flips pixels outright, and the sharpen and
-    // emboss convolutions zero the alpha of the outermost pixel ring — a
-    // transparent one-pixel frame. Only operations that match byte for byte may
-    // run on the WASM backend, so the result never depends on whether the
-    // optional download happened to succeed.
+    // GPU operations are admitted by the browser parity harness at a one-level
+    // colour tolerance with exact alpha preservation. Photon remains stricter:
+    // its 16x16 probe shows grayscale, sepia, threshold, sharpen and emboss
+    // diverging from the JS worker, so only byte-for-byte operations may use the
+    // optional WASM download.
     _photonParityOps: Object.freeze(['invert']),
     async _runFilterWithPhoton(op, imgData, width, height, params) {
         await this._ensureRendererReady();

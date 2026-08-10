@@ -261,21 +261,34 @@ async function runFixtureSample(page, fixture, slowMs, psdFixture) {
                 sourcePixels[index + 2] = 120;
                 sourcePixels[index + 3] = 255;
             }
-            await OS._runFilterWithPhoton('sharpen', new ImageData(sourcePixels, 64, 64), 64, 64, {});
-            const report = OS.aiBackendReport();
-            return {
-                path:report.renderer.paths.filter,
-                backends:Object.keys(report.filterBackends.sharpen?.backends || {})
-            };
+            const previousGPU = OS._gpuFilterDisabled;
+            const previousPhoton = OS._photonFilterDisabled;
+            OS._gpuFilterDisabled = true;
+            OS._photonFilterDisabled = true;
+            try {
+                await OS._runFilterWithPhoton('sharpen', new ImageData(sourcePixels, 64, 64), 64, 64, {});
+                const report = OS.aiBackendReport();
+                return {
+                    path:report.renderer.paths.filter,
+                    backends:Object.keys(report.filterBackends.sharpen?.backends || {})
+                };
+            } finally {
+                OS._gpuFilterDisabled = previousGPU;
+                OS._photonFilterDisabled = previousPhoton;
+            }
         }, { backend:'offscreen-filter-worker', worker:true, gpu:false, cpu:false });
 
         const rendererFallback = await timed('rendererFallback', async () => {
             const previous = {
                 capabilities:{ ...OS.renderer.capabilities },
-                paths:{ ...OS.renderer.paths }
+                paths:{ ...OS.renderer.paths },
+                gpuDisabled:OS._gpuFilterDisabled,
+                photonDisabled:OS._photonFilterDisabled
             };
             OS.renderer.capabilities.offscreenFilter = false;
             OS.renderer.paths.filter = 'filter-worker';
+            OS._gpuFilterDisabled = true;
+            OS._photonFilterDisabled = true;
             try {
                 const sourcePixels = new Uint8ClampedArray(64 * 64 * 4);
                 sourcePixels.fill(128);
@@ -288,6 +301,8 @@ async function runFixtureSample(page, fixture, slowMs, psdFixture) {
             } finally {
                 OS.renderer.capabilities = previous.capabilities;
                 OS.renderer.paths = previous.paths;
+                OS._gpuFilterDisabled = previous.gpuDisabled;
+                OS._photonFilterDisabled = previous.photonDisabled;
             }
         }, { backend:'filter-worker', worker:true, gpu:false, cpu:true });
 

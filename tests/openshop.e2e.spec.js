@@ -8017,6 +8017,69 @@ test('only runs Photon for operations that match the JavaScript worker exactly',
   expect(report.measured.emboss.alpha).toBe(2 * 16 + 2 * 14);
 });
 
+test('admits only GPU filters that stay within the measured parity tolerance', async ({ page }) => {
+  test.setTimeout(120000);
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).click();
+
+  const report = await page.evaluate(async () => {
+    const width = 16, height = 16;
+    const fixture = () => {
+      const data = new Uint8ClampedArray(width * height * 4);
+      for (let i = 0; i < width * height; i++) {
+        data[i * 4] = (i * 17) % 256;
+        data[i * 4 + 1] = (i * 41) % 256;
+        data[i * 4 + 2] = (i * 89) % 256;
+        data[i * 4 + 3] = (i * 29) % 256;
+      }
+      return new ImageData(data, width, height);
+    };
+    const compare = (a, b) => {
+      let colour = 0;
+      let alpha = 0;
+      for (let i = 0; i < a.data.length; i += 4) {
+        for (let c = 0; c < 3; c++) colour = Math.max(colour, Math.abs(a.data[i + c] - b.data[i + c]));
+        if (a.data[i + 3] !== b.data[i + 3]) alpha++;
+      }
+      return { colour, alpha };
+    };
+    const specs = [
+      ['invert', {}],
+      ['grayscale', {}],
+      ['threshold', { thr: 128 }],
+      ['brightness', { value: 0.2 }],
+      ['contrast', { value: 0.25 }],
+      ['blur', { radius: 1 }],
+      ['sharpen', {}]
+    ];
+    const out = { parityOps: [...OS._gpuParityOps], measured: {}, backends: {}, errors: {} };
+    for (const [op, params] of specs) {
+      try {
+        OS._gpuFilterDisabled = false;
+        const accelerated = await OS._runGPUFilterInWorker(op, fixture(), width, height, params);
+        const js = await OS._runFilterInWorker(op, fixture(), width, height, params);
+        out.measured[op] = compare(accelerated, js);
+        out.backends[op] = Object.keys(OS.filterBackendReport()[op]?.backends || {});
+      } catch (error) {
+        out.errors[op] = error?.message || String(error);
+      }
+    }
+    return out;
+  });
+
+  const expected = ['invert', 'grayscale', 'threshold', 'brightness', 'contrast', 'blur', 'sharpen'];
+  expect([...report.parityOps].sort()).toEqual([...expected].sort());
+  if (Object.keys(report.errors).length) {
+    throw new Error(`GPU parity probe failed: ${JSON.stringify(report.errors)}`);
+  }
+  for (const op of expected) {
+    expect(report.measured[op].colour, `${op} colour divergence`).toBeLessThanOrEqual(1);
+    expect(report.measured[op].alpha, `${op} alpha divergence`).toBe(0);
+    const acceleratedBackends = report.backends[op].filter(backend => ['webgpu', 'webgl2'].includes(backend));
+    expect(acceleratedBackends, `${op} backend report`).toHaveLength(1);
+  }
+});
+
 test('hands AI pipelines canvas pixels, and cancels or fails without touching the layer', async ({ page }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).click();

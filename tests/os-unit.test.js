@@ -955,6 +955,7 @@ describe('OpenShop core object', () => {
 
     const OS = loadOpenShop();
     OS._photonFilterDisabled = true;
+    OS._gpuFilterDisabled = true;
     OS._runFilterJob = vi.fn().mockResolvedValue('filtered');
     const imageData = new ImageData(new Uint8ClampedArray(4), 1, 1);
 
@@ -1238,9 +1239,19 @@ describe('OpenShop core object', () => {
     OS._runGPUFilterInWorker = vi.fn().mockResolvedValue(accelerated);
     OS._runPhotonFilterInWorker = vi.fn();
 
+    expect(OS._gpuParityOps).toEqual(['invert', 'grayscale', 'threshold', 'brightness', 'contrast', 'blur', 'sharpen']);
+
     await expect(OS._runFilterWithPhoton('invert', input, 1, 1, {})).resolves.toBe(accelerated);
     expect(OS._runGPUFilterInWorker).toHaveBeenCalledWith('invert', input, 1, 1, {});
     expect(OS._runPhotonFilterInWorker).not.toHaveBeenCalled();
+
+    for (const [op, params] of [
+      ['grayscale', {}], ['threshold', { thr:128 }], ['brightness', { value:0.2 }],
+      ['contrast', { value:0.25 }], ['blur', { radius:1 }], ['sharpen', {}]
+    ]) {
+      await expect(OS._runFilterWithPhoton(op, input, 1, 1, params)).resolves.toBe(accelerated);
+      expect(OS._runGPUFilterInWorker).toHaveBeenCalledWith(op, input, 1, 1, params);
+    }
 
     OS._recordFilterBenchmark('invert', 'webgpu', 4);
     OS._recordFilterBenchmark('invert', 'webgpu', 6);
