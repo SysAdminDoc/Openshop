@@ -2697,6 +2697,54 @@ describe('history eviction, coalescing, and commit guards', () => {
     expect(OS.history).toHaveLength(10);
   });
 
+  it('maintains cached history bytes without rescanning stable entries', () => {
+    const OS = primeHistory(loadOpenShop());
+    OS.maxHistory = 60;
+    OS.maxHistoryBytes = 0;
+    const entrySize = vi.spyOn(OS, '_historyEntryByteSize');
+
+    for (let step = 1; step <= 4; step++) {
+      OS.__state = `cached-${step}`;
+      OS.saveHistory(`Cached ${step}`);
+    }
+
+    const callsBeforeRead = entrySize.mock.calls.length;
+    const expected = OS.history.reduce((total, entry) => total + entry.byteSize, 0);
+    expect(OS._historyByteTotal).toBe(expected);
+    expect(OS.historyByteSize()).toBe(expected);
+    expect(entrySize).toHaveBeenCalledTimes(callsBeforeRead);
+
+    // Replacing the array is how a restored or branched history arrives; the
+    // first read rebuilds the cache once, then subsequent reads stay O(1).
+    OS.history = OS.history.slice();
+    expect(OS.historyByteSize()).toBe(expected);
+    const callsAfterRebuild = entrySize.mock.calls.length;
+    expect(OS.historyByteSize()).toBe(expected);
+    expect(entrySize).toHaveBeenCalledTimes(callsAfterRebuild);
+  });
+
+  it('bounds pixel reconstruction with periodic history checkpoints', () => {
+    const OS = primeHistory(loadOpenShop());
+    OS._historyCheckpointInterval = 4;
+    const pixels = {
+      'image-1': { width:2, height:2, tiles:{ '0:0': { width:2, height:2, data:'tile', hash:123 } } }
+    };
+    OS._historyBasePixelState = pixels;
+    OS._historyPixelState = pixels;
+
+    for (let step = 1; step <= 11; step++) {
+      OS.__state = `checkpoint-${step}`;
+      OS.saveHistory(`Checkpoint ${step}`);
+    }
+
+    expect(OS.history[3].pixelCheckpoint).toEqual(pixels);
+    expect(OS.history[7].pixelCheckpoint).toEqual(pixels);
+    const applyDelta = vi.spyOn(OS, '_applyHistoryPixelDelta');
+    expect(OS._historyPixelsForIndex(10)).toEqual(pixels);
+    expect(applyDelta).toHaveBeenCalledTimes(3);
+    expect(OS._historyReconstructionMetrics).toMatchObject({ checkpointIndex:7, deltaSteps:3 });
+  });
+
   it('coalesces same-key entries while keeping the original pre-coalesce state', () => {
     const OS = primeHistory(loadOpenShop());
 

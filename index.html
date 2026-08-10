@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-XJgdJI8nP8n+eL0MFaqYPgvAAvR6rMcHKqeUMacFm8g=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-POu1CKjfvMk45dkUTefpWFBE8pWCxG9uzeyyqHSuwCA=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -5358,6 +5358,10 @@ const OS = {
     _historyTileSize: 64,
     _historyTileDebug: false,
     _historyCaptureMetrics: null,
+    _historyByteTotal: 0,
+    _historyByteHistoryRef: null,
+    _historyCheckpointInterval: 16,
+    _historyReconstructionMetrics: null,
     _historyBaseSnapshot: null,
     _historyBasePixelState: null,
     _historyPixelState: null,
@@ -5937,6 +5941,9 @@ const OS = {
         this.activeLayerIdx = -1;
         this.history = [];
         this.historyIdx = -1;
+        this._historyByteTotal = 0;
+        this._historyByteHistoryRef = this.history;
+        this._historyReconstructionMetrics = null;
         this._historyBaseSnapshot = null;
         this._historyBasePixelState = null;
         this._historyPixelState = null;
@@ -10416,6 +10423,10 @@ self.onmessage = function(event) {
             documentRevision:this._documentRevision,
             history:this.history,
             historyIdx:this.historyIdx,
+            historyBasePixelState:this._historyBasePixelState,
+            historyPixelState:this._historyPixelState,
+            historyByteTotal:this._historyByteTotal,
+            historyReconstructionMetrics:this._historyReconstructionMetrics,
             historyBaseSnapshot:this._historyBaseSnapshot,
             historyBaseLabel:this._historyBaseLabel,
             historyCursorSnapshot:this._historyCursorSnapshot,
@@ -10479,6 +10490,11 @@ self.onmessage = function(event) {
             this._documentRevision = previous.documentRevision;
             this.history = previous.history;
             this.historyIdx = previous.historyIdx;
+            this._historyBasePixelState = previous.historyBasePixelState;
+            this._historyPixelState = previous.historyPixelState;
+            this._historyByteTotal = previous.historyByteTotal;
+            this._historyByteHistoryRef = this.history;
+            this._historyReconstructionMetrics = previous.historyReconstructionMetrics;
             this._historyBaseSnapshot = previous.historyBaseSnapshot;
             this._historyBaseLabel = previous.historyBaseLabel;
             this._historyCursorSnapshot = previous.historyCursorSnapshot;
@@ -14627,9 +14643,11 @@ self.onmessage = function(event) {
             const surface = next[change.id] ||= { width:change.width, height:change.height, tiles:{} };
             surface.width = change.width; surface.height = change.height;
             (change.tiles || []).forEach(tile => {
-                surface.tiles[`${tile.x}:${tile.y}`] = {
+                const nextTile = {
                     width:tile.width, height:tile.height, data:tile.data
                 };
+                if (tile.hash) nextTile.hash = tile.hash;
+                surface.tiles[`${tile.x}:${tile.y}`] = nextTile;
             });
         });
         return next;
@@ -14673,9 +14691,37 @@ self.onmessage = function(event) {
         };
     },
     _historyPixelsForIndex(targetIndex) {
+        const requestedIndex = Number.isFinite(Number(targetIndex)) ? Math.trunc(Number(targetIndex)) : -1;
+        const effectiveIndex = Math.min(requestedIndex, this.history.length - 1);
+        let checkpointIndex = -1;
         let pixels = this._cloneHistoryPixelState(this._historyBasePixelState);
-        if (targetIndex < 0) return pixels;
-        for (let index = 0; index <= targetIndex && index < this.history.length; index++) pixels = this._applyHistoryPixelDelta(pixels, this.history[index].pixelDelta);
+        if (effectiveIndex >= 0) {
+            for (let index = effectiveIndex; index >= 0; index--) {
+                const checkpoint = this.history[index]?.pixelCheckpoint;
+                if (!checkpoint) continue;
+                checkpointIndex = index;
+                pixels = this._cloneHistoryPixelState(checkpoint);
+                break;
+            }
+            let deltaSteps = 0;
+            for (let index = checkpointIndex + 1; index <= effectiveIndex; index++) {
+                pixels = this._applyHistoryPixelDelta(pixels, this.history[index].pixelDelta);
+                deltaSteps++;
+            }
+            this._historyReconstructionMetrics = {
+                targetIndex:requestedIndex,
+                effectiveIndex,
+                checkpointIndex,
+                deltaSteps
+            };
+            return pixels;
+        }
+        this._historyReconstructionMetrics = {
+            targetIndex:requestedIndex,
+            effectiveIndex,
+            checkpointIndex:-1,
+            deltaSteps:0
+        };
         return pixels;
     },
     _materializeHistorySnapshot(snapshot, targetIndex) {
@@ -14704,6 +14750,9 @@ self.onmessage = function(event) {
     _initializeHistory(label = 'Document Baseline') {
         this.history = [];
         this.historyIdx = -1;
+        this._historyByteTotal = 0;
+        this._historyByteHistoryRef = this.history;
+        this._historyReconstructionMetrics = null;
         this._historyBaseLabel = this._safeText(label, 100) || 'Document Baseline';
         const snapshot = JSON.stringify(this._captureDocumentState());
         const pixels = this._captureHistoryPixelSurfaces({ forceFull:true });
@@ -14717,7 +14766,44 @@ self.onmessage = function(event) {
         this.updateHistoryPanel();
         this.updateStatus();
     },
+    _historyCheckpointIsDue(index) {
+        const interval = Math.max(1, Math.trunc(Number(this._historyCheckpointInterval) || 16));
+        return index >= 0 && (index + 1) % interval === 0;
+    },
+    _historyCheckpointByteSize(state) {
+        return Object.entries(state || {}).reduce((total, [id, surface]) => total
+            + id.length + 32
+            + Object.keys(surface?.tiles || {}).reduce((tileTotal, key) => tileTotal + key.length + 24, 0), 0);
+    },
+    _historyEntryByteSize(entry) {
+        if (!entry) return 0;
+        return (entry.snapshot?.length || 0)
+            + (entry.beforeSnapshot?.length || 0)
+            + (entry.fullSnapshot?.length || 0)
+            + (entry.pixelDelta ? JSON.stringify(entry.pixelDelta).length : 0)
+            + this._historyCheckpointByteSize(entry.pixelCheckpoint);
+    },
+    _rebuildHistoryByteTotal() {
+        this._historyByteTotal = this.history.reduce((total, entry) => {
+            entry.byteSize = this._historyEntryByteSize(entry);
+            return total + entry.byteSize;
+        }, 0);
+        this._historyByteHistoryRef = this.history;
+        return this._historyByteTotal;
+    },
+    _ensureHistoryByteTotal() {
+        if (this._historyByteHistoryRef !== this.history
+            || this.history.some(entry => !Number.isFinite(entry?.byteSize))) this._rebuildHistoryByteTotal();
+        return this._historyByteTotal;
+    },
+    _historyCheckpointForEntry(index, pixelState, previousCheckpoint = null) {
+        if (pixelState && (this._historyCheckpointIsDue(index) || previousCheckpoint)) {
+            return this._cloneHistoryPixelState(pixelState);
+        }
+        return previousCheckpoint || null;
+    },
     _pushHistoryEntry(action, snapshot, { markDirty = true, command = null, coalesceKey = null, recordMacro = true, beforeSnapshot = null, pixelEdit = true, dirtyRects = null } = {}) {
+        this._ensureHistoryByteTotal();
         const previousSnapshot = this._currentHistorySnapshot();
         if (!pixelEdit && snapshot === previousSnapshot) return false;
         const pixelState = pixelEdit ? this._captureHistoryPixelSurfaces({ dirtyRects }) : null;
@@ -14735,6 +14821,7 @@ self.onmessage = function(event) {
             // Keep it as a branch instead, so the other future is still there.
             this._archiveHistoryBranch(this.history.slice(this.historyIdx + 1), action);
             this.history = this.history.slice(0, this.historyIdx + 1);
+            this._rebuildHistoryByteTotal();
         }
         const normalizedCommand = command ? this._normalizeCommand(command) : null;
         const entry = {
@@ -14747,22 +14834,36 @@ self.onmessage = function(event) {
             snapshot,
             pixelEdit:Boolean(pixelEdit),
             pixelDelta:prepared.pixelDelta,
-            fullSnapshot:prepared.fullSnapshot
+            fullSnapshot:prepared.fullSnapshot,
+            pixelCheckpoint:null,
+            byteSize:0
         };
         const current = this.history[this.historyIdx];
         if (entry.coalesceKey && this.historyIdx === this.history.length - 1 && current?.coalesceKey === entry.coalesceKey) {
+            const currentByteSize = current.byteSize;
             entry.beforeSnapshot = current.beforeSnapshot;
             if (prepared.pixelState && current.pixelDelta) {
                 const predecessor = this._historyPixelsForIndex(this.historyIdx - 1);
                 entry.pixelDelta = this._historyPixelDelta(predecessor, prepared.pixelState);
             }
+            entry.pixelCheckpoint = this._historyCheckpointForEntry(
+                this.historyIdx,
+                prepared.pixelState || this._historyPixelState,
+                current.pixelCheckpoint
+            );
+            entry.byteSize = this._historyEntryByteSize(entry);
             this.history[this.historyIdx] = entry;
+            this._historyByteTotal += entry.byteSize - currentByteSize;
         } else {
+            const newIndex = this.history.length;
+            entry.pixelCheckpoint = this._historyCheckpointForEntry(newIndex, prepared.pixelState || this._historyPixelState);
+            entry.byteSize = this._historyEntryByteSize(entry);
             this.history.push(entry);
             this.historyIdx = this.history.length - 1;
+            this._historyByteTotal += entry.byteSize;
             while (this.history.length > this.maxHistory) this._evictOldestHistoryEntry();
-            this._enforceHistoryByteBudget();
         }
+        this._enforceHistoryByteBudget();
         if (prepared.pixelState) this._historyPixelState = prepared.pixelState;
         this._historyCursorSnapshot = snapshot;
         this._lastAction = entry.action;
@@ -14774,6 +14875,7 @@ self.onmessage = function(event) {
         return true;
     },
     _evictOldestHistoryEntry() {
+        this._ensureHistoryByteTotal();
         if (this.history.length <= 1) return false;
         const dropped = this.history.shift();
         this._historyBasePixelState = this._applyHistoryPixelDelta(this._historyBasePixelState, dropped.pixelDelta);
@@ -14782,25 +14884,20 @@ self.onmessage = function(event) {
         this._historyBaseSnapshot = this.history[0]?.beforeSnapshot || dropped.snapshot;
         this._historyBaseLabel = dropped.action;
         this.historyIdx -= 1;
+        this._historyByteTotal = Math.max(0, this._historyByteTotal - dropped.byteSize);
         return true;
     },
     historyByteSize() {
-        return this.history.reduce(
-            (total, entry) => total
-                + (entry.snapshot?.length || 0)
-                + (entry.beforeSnapshot?.length || 0)
-                + (entry.fullSnapshot?.length || 0)
-                + (entry.pixelDelta ? JSON.stringify(entry.pixelDelta).length : 0),
-            0
-        );
+        return this._ensureHistoryByteTotal();
     },
     _enforceHistoryByteBudget() {
+        this._ensureHistoryByteTotal();
         const budget = Number(this.maxHistoryBytes);
         if (!Number.isFinite(budget) || budget <= 0) return 0;
         let evicted = 0;
         // Always leave one entry: an empty history would make undo impossible
         // and is worse than briefly exceeding the budget.
-        while (this.history.length > 1 && this.historyByteSize() > budget) {
+        while (this.history.length > 1 && this._historyByteTotal > budget) {
             if (!this._evictOldestHistoryEntry()) break;
             evicted++;
         }
@@ -14831,6 +14928,7 @@ self.onmessage = function(event) {
     },
     _beginHistoryTransaction(command, { label = null, markDirty = true, recordMacro = true } = {}) {
         if (this._historyTransaction) throw new Error('A document transaction is already active');
+        this._ensureHistoryByteTotal();
         const normalizedCommand = this._normalizeCommand(command);
         this._historyTransaction = {
             command:normalizedCommand,
@@ -14841,7 +14939,10 @@ self.onmessage = function(event) {
             beforeSnapshot:JSON.stringify(this._captureDocumentState()),
             history:this.history.slice(),
             historyIdx:this.historyIdx,
+            historyByteTotal:this._historyByteTotal,
             historyBaseSnapshot:this._historyBaseSnapshot,
+            historyBasePixelState:this._historyBasePixelState,
+            historyPixelState:this._historyPixelState,
             historyBaseLabel:this._historyBaseLabel,
             historyCursorSnapshot:this._historyCursorSnapshot,
             lastAction:this._lastAction,
@@ -14874,7 +14975,11 @@ self.onmessage = function(event) {
         } finally {
             this.history = transaction.history;
             this.historyIdx = transaction.historyIdx;
+            this._historyByteTotal = transaction.historyByteTotal;
+            this._historyByteHistoryRef = this.history;
             this._historyBaseSnapshot = transaction.historyBaseSnapshot;
+            this._historyBasePixelState = transaction.historyBasePixelState;
+            this._historyPixelState = transaction.historyPixelState;
             this._historyBaseLabel = transaction.historyBaseLabel;
             this._historyCursorSnapshot = transaction.beforeSnapshot;
             this._lastAction = transaction.lastAction;

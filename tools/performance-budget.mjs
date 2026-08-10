@@ -26,6 +26,7 @@ const baselineP95Ms = Object.freeze({
     filterPreview:150,
     filterApply:4_000,
     historyCapture:1_000,
+    historyReplay:1_000,
     undoRedo:1_000,
     export:500,
     batch:2_500,
@@ -98,6 +99,9 @@ function checkReport(report) {
         }
         if (name === 'historyCapture' && result.historyCapture?.capturedTiles !== 0) {
             failures.push(`${fixture.name}.historyCapture read ${result.historyCapture.capturedTiles} raster tiles`);
+        }
+        if (name === 'historyReplay' && result.historyReplay?.reconstructionSteps > result.historyReplay?.checkpointInterval - 1) {
+            failures.push(`${fixture.name}.historyReplay replayed ${result.historyReplay.reconstructionSteps} deltas without a nearby checkpoint`);
         }
     }));
     if (failures.length) throw new Error(`Performance budget failure: ${failures.join(', ')}`);
@@ -195,6 +199,36 @@ async function runFixtureSample(page, fixture, slowMs) {
             };
         }, pathFor(null, 'CanvasRenderingContext2D'));
 
+        const historyReplay = await timed('historyReplay', () => {
+            const previousMaxHistory = OS.maxHistory;
+            const previousMaxHistoryBytes = OS.maxHistoryBytes;
+            const previousCaptureDocumentState = OS._captureDocumentState;
+            OS.maxHistory = Math.max(previousMaxHistory, 200);
+            OS.maxHistoryBytes = 0;
+            try {
+                // Keep the real 8K raster state and checkpoint maps in place,
+                // but avoid timing 119 repeated PNG-sized metadata snapshots.
+                OS._captureDocumentState = () => ({ kind:'history-replay-probe', step:OS.history.length });
+                for (let step = 0; step < 119; step++) {
+                    if (!OS.saveHistory(`History replay ${step}`)) throw new Error('History replay probe could not append metadata history');
+                }
+                const targetIndex = OS.history.length - 1;
+                OS._historyPixelsForIndex(targetIndex);
+                const metrics = { ...OS._historyReconstructionMetrics };
+                return {
+                    steps:119,
+                    historyLength:OS.history.length,
+                    checkpointInterval:Number(OS._historyCheckpointInterval),
+                    reconstructionSteps:Number(metrics.deltaSteps || 0),
+                    checkpointIndex:Number(metrics.checkpointIndex ?? -1)
+                };
+            } finally {
+                OS._captureDocumentState = previousCaptureDocumentState;
+                OS.maxHistory = previousMaxHistory;
+                OS.maxHistoryBytes = previousMaxHistoryBytes;
+            }
+        }, pathFor(null, 'CanvasRenderingContext2D'));
+
         const exported = await timed('export', async () => {
             const captured = await OS._captureExportedBlob('png');
             if (!captured?.blob?.size) throw new Error('Export probe produced an empty blob');
@@ -248,6 +282,7 @@ async function runFixtureSample(page, fixture, slowMs) {
             filterPreview:{ ...preview, value:previewMetrics },
             filterApply:{ ...applied, value:applyMetrics },
             historyCapture,
+            historyReplay,
             export:exported,
             undoRedo:history,
             batch,
@@ -270,6 +305,7 @@ async function benchmark(page) {
                     durationMs:result.durationMs,
                     executionPaths:result.executionPaths,
                     historyCapture:name === 'historyCapture' ? result.value : undefined,
+                    historyReplay:name === 'historyReplay' ? result.value : undefined,
                     cancellation:name === 'cancel' ? { tested:true, observed:Boolean(result.value?.observed && result.value.signalAborted) } : undefined,
                     staleResultHandling:name === 'staleResult' ? { tested:true, discarded:Boolean(result.value?.discarded) } : undefined
                 });
@@ -281,6 +317,7 @@ async function benchmark(page) {
                 p95Ms:Number(percentile(values.map(value => value.durationMs), 0.95).toFixed(3)),
                 executionPaths:values.at(-1).executionPaths,
                 historyCapture:values.at(-1).historyCapture,
+                historyReplay:values.at(-1).historyReplay,
                 cancellation:values.at(-1).cancellation,
                 staleResultHandling:values.at(-1).staleResultHandling
         }]));
