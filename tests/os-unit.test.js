@@ -1594,18 +1594,22 @@ describe('OpenShop core object', () => {
     ]);
   });
 
-  it('normalizes animated file formats and resolves drop intent from workspace state', () => {
+  it('normalizes animated file formats and resolves drop intent from workspace state', async () => {
     const OS = loadOpenShop();
     const animatedGif = { name:'clip.gif', type:'image/gif', size:10 };
     const animatedPng = { name:'clip.apng', type:'image/apng', size:10 };
     const webp = { name:'clip.webp', type:'image/webp', size:10 };
     const avif = { name:'clip.avif', type:'image/avif', size:10 };
+    const jxl = { name:'clip.jxl', type:'image/jxl', size:10 };
+    const heic = { name:'clip.heic', type:'image/heic', size:10 };
     const project = { name:'clip.openshop', type:'application/vnd.openshop+json', size:10 };
 
     expect(OS._describeImportFormat(animatedGif)).toMatchObject({ format:'gif', animated:true, placeable:true });
     expect(OS._describeImportFormat(animatedPng)).toMatchObject({ format:'apng', animated:true, placeable:true });
     expect(OS._describeImportFormat(webp)).toMatchObject({ format:'webp', animated:true, placeable:true });
     expect(OS._describeImportFormat(avif)).toMatchObject({ format:'avif', animated:false, placeable:true });
+    expect(OS._describeImportFormat(jxl)).toMatchObject({ format:'jxl', animated:false, placeable:true });
+    expect(OS._describeImportFormat(heic)).toMatchObject({ format:'heic', animated:false, placeable:true });
     expect(OS._describeImportFormat(project)).toMatchObject({ format:'project', animated:false, placeable:false });
 
     OS._documentId = 'document-1';
@@ -1616,9 +1620,23 @@ describe('OpenShop core object', () => {
     expect(OS._resolveImportIntent(animatedGif, 'drop')).toBe('place');
     expect(OS._resolveImportIntent(project, 'drop')).toBe('open');
 
+    OS._loadPortableImageFile = vi.fn().mockResolvedValue(true);
+    await expect(OS._routeFileImport(jxl, 'place')).resolves.toBe(true);
+    expect(OS._loadPortableImageFile).toHaveBeenCalledWith(jxl, 'jxl', 'place', { historyMode:'place' });
+
     OS._blankWorkspace = true;
     expect(OS._resolveImportIntent(animatedGif, 'drop')).toBe('open');
     expect(OS._resolveImportIntent(animatedGif, 'paste')).toBe('open');
+  });
+
+  it('normalizes portable decoder RGB/RGBA output without trusting dimensions', () => {
+    const OS = loadOpenShop();
+    const rgba = OS._normalizePortableDecodedImage({ width:1, height:1, data:new Uint8Array([1, 2, 3, 4]) }, 'HEIC');
+    expect([...rgba.data]).toEqual([1, 2, 3, 4]);
+    const rgb = OS._normalizePortableDecodedImage({ width:2, height:1, data:new Uint8Array([1, 2, 3, 4, 5, 6]) }, 'JPEG XL');
+    expect([...rgb.data]).toEqual([1, 2, 3, 255, 4, 5, 6, 255]);
+    expect(() => OS._normalizePortableDecodedImage({ width:2, height:2, data:new Uint8Array(3) }, 'HEIC'))
+      .toThrow(/returned invalid pixels/);
   });
 
   it('caches a measured canvas ceiling and rejects both side and area overflow', () => {

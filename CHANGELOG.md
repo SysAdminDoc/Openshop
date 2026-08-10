@@ -5,6 +5,7 @@ All notable changes to Openshop will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Added native-first HEIC/HEIF and JPEG XL import with separately SHA-384-verified, lazy WASM decoder fallbacks and installed-app file-handler coverage.
 - Added read-only C2PA Content Credentials import validation with marker-gated, SHA-384-verified lazy runtimes, bounded manifest-chain and validation reporting in Image Information, project metadata persistence, and explicit no-signing export notices.
 - Added per-range text formatting for Fabric text objects with selected-range fill, size, weight, and decoration controls, schema-3 save/load migration, SVG `<tspan>` preservation, and explicit PSD rasterization loss reporting.
 - Added release-surface checks for local social preview, manifest, icon, and install-screenshot assets in standalone-file and hosted lanes, plus an explicit release manifest for the required Chromium visual baselines.

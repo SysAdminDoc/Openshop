@@ -25,11 +25,11 @@ describe('canonical runtime asset manifest', () => {
   });
 
   test('matches the shipped page and service-worker manifests', () => {
-    expect(check(html)).toMatchObject({ bootAssets: 3, lazyAssets: 27 });
+    expect(check(html)).toMatchObject({ bootAssets: 3, lazyAssets: 31 });
     expect(checkServiceWorker(serviceWorker)).toMatchObject({
       requiredAssets: 12,
       optionalAssets: 4,
-      cacheableAssets: 30
+      cacheableAssets: 34
     });
   });
 
@@ -48,11 +48,13 @@ describe('canonical runtime asset manifest', () => {
 
   test('can produce a traceable package/license inventory', () => {
     const report = licenseReport();
-    expect(report).toHaveLength(30);
+    expect(report).toHaveLength(34);
     expect(report.every(asset => asset.packageName && asset.version && asset.url && asset.license)).toBe(true);
     expect(report.every(asset => !/not declared|unknown/i.test(asset.license))).toBe(true);
     expect(report.filter(asset => asset.packageName === 'modern-gif').every(asset => asset.license === 'MIT')).toBe(true);
     expect(report.filter(asset => asset.packageName === 'libraw-wasm').every(asset => asset.license === 'ISC')).toBe(true);
+    expect(report.filter(asset => ['@discourse/heic', '@jsquash/jxl'].includes(asset.packageName))
+      .every(asset => asset.license === 'Apache-2.0')).toBe(true);
   });
 
   test('fails closed for unresolved and non-SPDX license values', () => {
@@ -100,5 +102,20 @@ describe('canonical runtime asset manifest', () => {
         reachable:false
       })
     ]);
+    const heic = report.find(asset => asset.key === 'heicDecoderModule');
+    expect(heic.provenance).toMatchObject({
+      verifiedFor:'1.0.0',
+      verifiedUrl:'https://cdn.jsdelivr.net/npm/@discourse/heic@1.0.0/codec/dec/heic_dec.js',
+      embeddedDependencies:[
+        { packageName:'libheif', version:'1.19.7' },
+        { packageName:'libde265', version:'1.0.15' }
+      ]
+    });
+    const jxl = report.find(asset => asset.key === 'jxlDecoderModule');
+    expect(jxl.provenance).toMatchObject({
+      verifiedFor:'1.3.0',
+      verifiedUrl:'https://cdn.jsdelivr.net/npm/@jsquash/jxl@1.3.0/codec/dec/jxl_dec.js',
+      embeddedDependencies:[{ packageName:'libjxl', version:'9f544641ec83f6abd9da598bdd08178ee8a003e0' }]
+    });
   });
 });

@@ -3678,6 +3678,86 @@ test('encodes deterministic verified AVIF and reopens it @cross-browser', async 
   expect(pageErrors).toEqual([]);
 });
 
+test('imports HEIC and JPEG XL through native-first verified decoder paths @cross-browser', async ({ page, request }) => {
+  const pageErrors = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  const jxlResponse = await request.get('https://chromium.googlesource.com/chromium/src/+/750db13c3097a50ee1c55dc3a006229239cea745/third_party/blink/web_tests/images/resources/jxl/3x3_srgb_lossless.jxl?format=TEXT');
+  expect(jxlResponse.ok()).toBe(true);
+  const jxlText = (await jxlResponse.text()).replace(/^\)\]\}'\n/, '').trim();
+  const heicResponse = await request.get('https://raw.githubusercontent.com/nokiatech/heif_conformance/master/conformance_files/C002.heic');
+  expect(heicResponse.ok()).toBe(true);
+  const jxlBase64 = Buffer.from(jxlText, 'base64').toString('base64');
+  const heicBase64 = (await heicResponse.body()).toString('base64');
+
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).click();
+
+  const result = await page.evaluate(async ({ jxlBase64: jxlSource, heicBase64: heicSource }) => {
+    const decodeBase64 = value => {
+      const binary = atob(value);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+      return bytes;
+    };
+    const originalFetch = window.fetch;
+    const fetched = [];
+    window.fetch = (...args) => {
+      fetched.push(String(args[0]));
+      return originalFetch(...args);
+    };
+    const nativeImageDecoder = window.ImageDecoder;
+    const nativeCreateImageBitmap = window.createImageBitmap;
+    try {
+      OS._confirmDiscardUnsaved = async () => true;
+      window.ImageDecoder = undefined;
+      window.createImageBitmap = undefined;
+      const load = async (format, name, type, source) => {
+        await OS._loadPortableImageFile(new File([decodeBase64(source)], name, { type }), format, 'open', { historyMode:'open' });
+        return {
+          path:OS._lastPortableDecodePath,
+          dimensions:[OS.canvasW, OS.canvasH],
+          objectType:OS.canvas.getObjects().at(-1)?.type,
+          loaded:[`${format}DecoderModule`, `${format}DecoderWasm`].map(asset => OS._runtimeLoadedAssets.has(asset))
+        };
+      };
+      const jxl = await load('jxl', 'verified-fixture.jxl', 'image/jxl', jxlSource);
+      const heic = await load('heic', 'verified-fixture.heic', 'image/heic', heicSource);
+      const declared = [
+        OS._runtimeAssets.jxlDecoderModule,
+        OS._runtimeAssets.jxlDecoderWasm,
+        OS._runtimeAssets.heicDecoderModule,
+        OS._runtimeAssets.heicDecoderWasm
+      ].map(asset => ({ url:asset.url, integrity:asset.integrity }));
+      return {
+        jxl,
+        heic,
+        declared,
+        fetched:[...new Set(fetched)].filter(url => url.includes('@jsquash/jxl@1.3.0') || url.includes('@discourse/heic@1.0.0'))
+      };
+    } finally {
+      window.fetch = originalFetch;
+      window.ImageDecoder = nativeImageDecoder;
+      window.createImageBitmap = nativeCreateImageBitmap;
+    }
+  }, { jxlBase64, heicBase64 });
+
+  expect(result.jxl).toEqual({
+    path:'wasm',
+    dimensions:[3, 3],
+    objectType:'image',
+    loaded:[true, true]
+  });
+  expect(result.heic).toEqual({
+    path:'wasm',
+    dimensions:[1280, 720],
+    objectType:'image',
+    loaded:[true, true]
+  });
+  expect(result.fetched).toEqual(result.declared.map(asset => asset.url));
+  expect(result.declared.every(asset => asset.integrity.startsWith('sha384-'))).toBe(true);
+  expect(pageErrors).toEqual([]);
+});
+
 test('round-trips OpenRaster layer order, geometry, opacity, visibility, and required files @cross-browser', async ({ page }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).click();

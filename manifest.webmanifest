@@ -155,6 +155,15 @@
         "image/avif": [
           ".avif"
         ],
+        "image/jxl": [
+          ".jxl"
+        ],
+        "image/heic": [
+          ".heic"
+        ],
+        "image/heif": [
+          ".heif"
+        ],
         "image/svg+xml": [
           ".svg"
         ],

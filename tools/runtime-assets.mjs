@@ -323,6 +323,89 @@ export const OPENSHOP_RUNTIME_ASSETS = Object.freeze([
     'MIT'
   ),
   asset(
+    'heicDecoderModule',
+    'HEIC decoder module',
+    '@discourse/heic',
+    '1.0.0',
+    'https://cdn.jsdelivr.net/npm/@discourse/heic@1.0.0/codec/dec/heic_dec.js',
+    'sha384-F9T0mt1CuLFFYi6Bhsty/mYlCq3u5nIA73KNNpAKzdWjsrq9eUnHjyYlMhCXuxsN',
+    'application/javascript',
+    'Apache-2.0',
+    makeProvenance({
+      verifiedFor:'1.0.0',
+      verifiedUrl:'https://cdn.jsdelivr.net/npm/@discourse/heic@1.0.0/codec/dec/heic_dec.js',
+      embeddedDependencies:[
+        { packageName:'libheif', version:'1.19.7' },
+        { packageName:'libde265', version:'1.0.15' }
+      ],
+      dependencyFindings:[
+        {
+          packageName:'libheif',
+          declaredRange:'compiled into @discourse/heic 1.0.0',
+          observedVersion:'1.19.7',
+          embedded:true,
+          reachable:true,
+          evidence:'The @discourse/heic 1.0.0 build Makefile pins libheif v1.19.7; the WASM is loaded only for a HEIC import.'
+        },
+        {
+          packageName:'libde265',
+          declaredRange:'compiled into @discourse/heic 1.0.0',
+          observedVersion:'1.0.15',
+          embedded:true,
+          reachable:true,
+          evidence:'The @discourse/heic 1.0.0 build Makefile pins libde265 v1.0.15; the WASM is loaded only for a HEIC import.'
+        }
+      ]
+    })
+  ),
+  asset(
+    'heicDecoderWasm',
+    'HEIC decoder WebAssembly',
+    '@discourse/heic',
+    '1.0.0',
+    'https://cdn.jsdelivr.net/npm/@discourse/heic@1.0.0/codec/dec/heic_dec.wasm',
+    'sha384-MUbrD0AkP7bJ+T8RT47EJYUCRoHzjn8+35nwLd62Kwn4OHm+MNkqiUzlIwpHe+fR',
+    'application/wasm',
+    'Apache-2.0'
+  ),
+  asset(
+    'jxlDecoderModule',
+    'JPEG XL decoder module',
+    '@jsquash/jxl',
+    '1.3.0',
+    'https://cdn.jsdelivr.net/npm/@jsquash/jxl@1.3.0/codec/dec/jxl_dec.js',
+    'sha384-OVUtDrf9Am51biP6vZWJC1BeSlKKo6nQQPjlB+KF9eWNuazANiijG+IBV4RDRUMA',
+    'application/javascript',
+    'Apache-2.0',
+    makeProvenance({
+      verifiedFor:'1.3.0',
+      verifiedUrl:'https://cdn.jsdelivr.net/npm/@jsquash/jxl@1.3.0/codec/dec/jxl_dec.js',
+      embeddedDependencies:[
+        { packageName:'libjxl', version:'9f544641ec83f6abd9da598bdd08178ee8a003e0' }
+      ],
+      dependencyFindings:[
+        {
+          packageName:'libjxl',
+          declaredRange:'compiled from the pinned source commit in @jsquash/jxl 1.3.0',
+          observedVersion:'9f544641ec83f6abd9da598bdd08178ee8a003e0',
+          embedded:true,
+          reachable:true,
+          evidence:'The @jsquash/jxl 1.3.0 codec Makefile pins libjxl commit 9f544641ec83f6abd9da598bdd08178ee8a003e0; the WASM is loaded only for a JXL import.'
+        }
+      ]
+    })
+  ),
+  asset(
+    'jxlDecoderWasm',
+    'JPEG XL decoder WebAssembly',
+    '@jsquash/jxl',
+    '1.3.0',
+    'https://cdn.jsdelivr.net/npm/@jsquash/jxl@1.3.0/codec/dec/jxl_dec.wasm',
+    'sha384-nJrefhoZ7HToq7VA6kbP3TG/g8+eD4UjhgDkyl0D6a6JtkP/2kj3MlygJWP6k/Ex',
+    'application/wasm',
+    'Apache-2.0'
+  ),
+  asset(
     'onnxWasm',
     'ONNX Runtime WebAssembly',
     'onnxruntime-web',

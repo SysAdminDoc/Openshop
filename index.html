@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10" id="theme-color-meta">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-AI1RkMtQdXpsyI97xMvbcaXhxaPFGso1GTonDhNDAs8=' 'sha256-7yFrtV+9yEIlONCikC6UNvaJ2ti4Ir0uwN+eUf7UQ4s=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-AI1RkMtQdXpsyI97xMvbcaXhxaPFGso1GTonDhNDAs8=' 'sha256-BtdSFtWsCh+EJwoNgFaPCkGmhNUA1M5AKUwN9c4Pypg=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // OpenShop-specific Fabric configuration. The editor uses Fabric 7's native
@@ -4098,7 +4098,7 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
         <div class="ba-label after">After</div>
     </div>
 </div>
-<input type="file" id="file-input" accept="image/*,.ora,image/openraster,.pdf,application/pdf,.cr2,.cr3,.nef,.arw,.dng,.raf,.rw2,.orf,.srw,.pef,.raw" style="display:none" data-os-change="change-034">
+<input type="file" id="file-input" accept="image/*,.ora,image/openraster,.pdf,application/pdf,.jxl,image/jxl,.heic,.heif,image/heic,image/heif,.cr2,.cr3,.nef,.arw,.dng,.raf,.rw2,.orf,.srw,.pef,.raw" style="display:none" data-os-change="change-034">
 <input type="file" id="psd-input" accept=".psd" style="display:none" data-os-change="change-035">
 <input type="file" id="project-input" accept=".openshop,.json,application/vnd.openshop+json,application/json" style="display:none" data-os-change="change-036">
 
@@ -4604,6 +4604,26 @@ const OS = {
             integrity:"sha384-Ulh60/CRTblPxnFr7UHZiHmqQk0Sd9E1gwgUwKmB7nFSjLIxABXVRsh5AQ58G06C",
             type:"application/wasm"
         }),
+        heicDecoderModule: Object.freeze({
+            url:"https://cdn.jsdelivr.net/npm/@discourse/heic@1.0.0/codec/dec/heic_dec.js",
+            integrity:"sha384-F9T0mt1CuLFFYi6Bhsty/mYlCq3u5nIA73KNNpAKzdWjsrq9eUnHjyYlMhCXuxsN",
+            type:"application/javascript"
+        }),
+        heicDecoderWasm: Object.freeze({
+            url:"https://cdn.jsdelivr.net/npm/@discourse/heic@1.0.0/codec/dec/heic_dec.wasm",
+            integrity:"sha384-MUbrD0AkP7bJ+T8RT47EJYUCRoHzjn8+35nwLd62Kwn4OHm+MNkqiUzlIwpHe+fR",
+            type:"application/wasm"
+        }),
+        jxlDecoderModule: Object.freeze({
+            url:"https://cdn.jsdelivr.net/npm/@jsquash/jxl@1.3.0/codec/dec/jxl_dec.js",
+            integrity:"sha384-OVUtDrf9Am51biP6vZWJC1BeSlKKo6nQQPjlB+KF9eWNuazANiijG+IBV4RDRUMA",
+            type:"application/javascript"
+        }),
+        jxlDecoderWasm: Object.freeze({
+            url:"https://cdn.jsdelivr.net/npm/@jsquash/jxl@1.3.0/codec/dec/jxl_dec.wasm",
+            integrity:"sha384-nJrefhoZ7HToq7VA6kbP3TG/g8+eD4UjhgDkyl0D6a6JtkP/2kj3MlygJWP6k/Ex",
+            type:"application/wasm"
+        }),
         onnxWasm: Object.freeze({
             url:"https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0-dev.20260416-b7804b056c/dist/ort-wasm-simd-threaded.asyncify.wasm",
             integrity:"sha384-ppxy8GpR5oK0pciZqI/PSDs0fl2gPFvA509fIkdyEwIAvXabDahpzW9fPyZq/fLs",
@@ -4656,6 +4676,9 @@ const OS = {
     _libRawBlobUrls: null,
     _avifEncoderPromise: null,
     _avifDecoderPromise: null,
+    _heicDecoderPromise: null,
+    _jxlDecoderPromise: null,
+    _lastPortableDecodePath: null,
     _c2paPromise: null,
     _c2paRuntime: null,
     _c2paModuleUrl: null,
@@ -4738,6 +4761,9 @@ const OS = {
         this._libRawPromise = null;
         this._avifEncoderPromise = null;
         this._avifDecoderPromise = null;
+        this._heicDecoderPromise = null;
+        this._jxlDecoderPromise = null;
+        this._lastPortableDecodePath = null;
         ['modernGif', 'ImageTracer', 'fabricExtensions', 'svg2pdf'].forEach(name => {
             try { delete globalThis[name]; } catch { globalThis[name] = undefined; }
         });
@@ -5143,6 +5169,195 @@ const OS = {
             throw new Error('AVIF decoder returned invalid pixels');
         }
         return new ImageData(new Uint8ClampedArray(decoded.data), decoded.width, decoded.height);
+    },
+    async _loadPortableDecoder(format) {
+        const normalized = String(format || '').toLowerCase();
+        const config = {
+            heic: {
+                promiseKey:'_heicDecoderPromise',
+                module:'heicDecoderModule',
+                wasm:'heicDecoderWasm',
+                label:'HEIC',
+                wasmFile:'heic_dec.wasm'
+            },
+            jxl: {
+                promiseKey:'_jxlDecoderPromise',
+                module:'jxlDecoderModule',
+                wasm:'jxlDecoderWasm',
+                label:'JPEG XL',
+                wasmFile:'jxl_dec.wasm'
+            }
+        }[normalized];
+        if (!config) throw new Error(`Unsupported portable decoder: ${format}`);
+        if (!this[config.promiseKey]) {
+            const runtimeAssets = [config.module, config.wasm];
+            this[config.promiseKey] = (async () => {
+                const [moduleAsset, wasmAsset] = await Promise.all(runtimeAssets.map(name => this._fetchVerifiedRuntimeAsset(name)));
+                const moduleUrl = this._createRuntimeScriptBlobUrl(new Blob([moduleAsset.bytes], { type:moduleAsset.asset.type }));
+                try {
+                    const codec = await import(OPENSHOP_TRUSTED_SCRIPT_URL(moduleUrl));
+                    if (typeof codec.default !== 'function') throw new Error(`Verified ${config.label} decoder has an unexpected interface`);
+                    const instance = await codec.default({
+                        noInitialRun:true,
+                        wasmBinary:new Uint8Array(wasmAsset.bytes),
+                        locateFile:path => {
+                            if (path !== config.wasmFile) throw new Error(`Unexpected ${config.label} runtime dependency: ${path}`);
+                            return `blob:openshop-${normalized}-decoder`;
+                        }
+                    });
+                    if (typeof instance?.decode !== 'function') throw new Error(`Verified ${config.label} decoder did not initialize`);
+                    return instance;
+                } finally {
+                    this._revokeRuntimeScriptUrl(moduleUrl);
+                }
+            })().finally(() => {
+                runtimeAssets.forEach(name => this._releaseVerifiedRuntimeAsset(name));
+            }).catch(error => {
+                this[config.promiseKey] = null;
+                throw error;
+            });
+        }
+        return this[config.promiseKey];
+    },
+    _normalizePortableDecodedImage(decoded, format) {
+        const width = Math.round(Number(decoded?.width || 0));
+        const height = Math.round(Number(decoded?.height || 0));
+        this._validateDecodedImage({ width, height });
+        const source = decoded?.data || decoded?.pixels || decoded?.rgba;
+        const view = source instanceof ArrayBuffer
+            ? new Uint8Array(source)
+            : ArrayBuffer.isView(source) && source.BYTES_PER_ELEMENT === 1
+                ? new Uint8Array(source.buffer, source.byteOffset, source.byteLength)
+                : null;
+        const pixels = width * height;
+        if (!view || !pixels) throw new Error(`${String(format || 'Portable')} decoder returned no pixels`);
+        if (view.length === pixels * 4) return new ImageData(new Uint8ClampedArray(view), width, height);
+        if (view.length !== pixels * 3) throw new Error(`${String(format || 'Portable')} decoder returned invalid pixels`);
+        const rgba = new Uint8ClampedArray(pixels * 4);
+        for (let index = 0, sourceIndex = 0; index < rgba.length; index += 4, sourceIndex += 3) {
+            rgba[index] = view[sourceIndex];
+            rgba[index + 1] = view[sourceIndex + 1];
+            rgba[index + 2] = view[sourceIndex + 2];
+            rgba[index + 3] = 255;
+        }
+        return new ImageData(rgba, width, height);
+    },
+    async _decodePortableImage(format, bytes) {
+        const source = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+        const decoder = await this._loadPortableDecoder(format);
+        const input = source.byteOffset === 0 && source.byteLength === source.buffer.byteLength
+            ? source.buffer
+            : source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength);
+        const decoded = decoder.decode(input);
+        return this._normalizePortableDecodedImage(decoded, format);
+    },
+    async _decodeNativePortableImage(buffer, mime, targetSpace = 'srgb') {
+        const sourceBlob = new Blob([buffer], { type:mime });
+        let decoder = null;
+        let source = null;
+        let canvas = null;
+        try {
+            if (typeof ImageDecoder === 'function') {
+                try {
+                    const supported = typeof ImageDecoder.isTypeSupported === 'function'
+                        ? await ImageDecoder.isTypeSupported(mime)
+                        : true;
+                    if (supported) {
+                        decoder = new ImageDecoder({ data:new Uint8Array(buffer), type:mime, preferAnimation:false });
+                        await decoder.tracks.ready;
+                        source = (await decoder.decode({ frameIndex:0 })).image;
+                    }
+                } catch (_) {
+                    try { decoder?.close?.(); } catch {}
+                    decoder = null;
+                    source = null;
+                }
+            }
+            if (!source && typeof createImageBitmap === 'function') source = await createImageBitmap(sourceBlob);
+            if (!source) throw new Error(`No native ${mime} decoder is available`);
+            const width = Math.round(Number(source.displayWidth || source.codedWidth || source.width || 0));
+            const height = Math.round(Number(source.displayHeight || source.codedHeight || source.height || 0));
+            this._validateDecodedImage({ width, height });
+            canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            let context = null;
+            try {
+                context = canvas.getContext('2d', { alpha:true, colorSpace:targetSpace });
+            } catch (_) {}
+            if (!context) context = canvas.getContext('2d', { alpha:true });
+            if (!context) throw new Error('Could not create the native import canvas');
+            context.drawImage(source, 0, 0, width, height);
+            return context.getImageData(0, 0, width, height);
+        } finally {
+            try { source?.close?.(); } catch {}
+            try { decoder?.close?.(); } catch {}
+            if (canvas) { canvas.width = 1; canvas.height = 1; }
+        }
+    },
+    async _loadPortableImageFile(file, format, mode = 'open', { historyMode = null } = {}) {
+        const normalized = String(format || '').toLowerCase();
+        const config = {
+            heic:{ label:'HEIC', mime:'image/heic' },
+            jxl:{ label:'JPEG XL', mime:'image/jxl' }
+        }[normalized];
+        if (!config) throw new Error(`Unsupported portable image format: ${format}`);
+        const actionModeSource = historyMode || mode;
+        mode = this._resolveImportIntent(file, mode);
+        try {
+            if (!file || file.size > this._importLimits.maxImageBytes) throw new Error('Image file exceeds 100 MB limit');
+            const buffer = await file.arrayBuffer();
+            const mime = String(file.type || config.mime).toLowerCase().startsWith('image/') ? String(file.type || config.mime).toLowerCase() : config.mime;
+            const imageMetadata = this._readImageMetadata(buffer, mime);
+            const c2pa = await this._readC2PAMetadata(buffer, file.type || file.name || config.mime);
+            if (c2pa) imageMetadata.c2pa = c2pa;
+            const embeddedProfile = await this._readEmbeddedColorProfile(buffer, file.type || file.name || config.mime);
+            const colorContext = embeddedProfile
+                ? this._colorProfileImportContext(embeddedProfile, mode)
+                : {
+                    profile:this._normalizeColorProfile({ name:'sRGB', sourceKind:'assumed' }),
+                    targetSpace:mode === 'open' ? 'srgb' : this._workingColorSpace,
+                    conversion:'identity'
+                };
+            let decoded;
+            try {
+                decoded = await this._decodeNativePortableImage(buffer, mime, colorContext.targetSpace);
+                this._lastPortableDecodePath = 'native';
+            } catch (nativeError) {
+                console.info(`${config.label} native decode unavailable; using verified WASM`, nativeError.message);
+                decoded = await this._decodePortableImage(normalized, buffer);
+                this._lastPortableDecodePath = 'wasm';
+            }
+            const converted = embeddedProfile
+                ? this._convertImageDataColorProfile(decoded, colorContext.profile, colorContext.targetSpace)
+                : { imageData:decoded, conversion:'identity' };
+            const canvas = document.createElement('canvas');
+            canvas.width = decoded.width;
+            canvas.height = decoded.height;
+            const context = canvas.getContext('2d', colorContext.targetSpace === 'display-p3' ? { colorSpace:'display-p3' } : { colorSpace:'srgb' });
+            if (!context) throw new Error(`Could not create the ${config.label} import canvas`);
+            context.putImageData(converted.imageData, 0, 0);
+            const image = await fabric.FabricImage.fromURL(canvas.toDataURL('image/png'));
+            this._lastImportExif = null;
+            const added = await this._addDecodedImageToCanvas(image, {
+                name:file.name || `Imported ${config.label}`,
+                mode,
+                colorProfile:embeddedProfile,
+                imageMetadata,
+                workingColorSpace:colorContext.targetSpace,
+                colorConversion:converted.conversion,
+                historyMode:actionModeSource
+            });
+            canvas.width = 1;
+            canvas.height = 1;
+            if (added !== false && embeddedProfile && converted.conversion !== 'identity') {
+                this.toast(`${embeddedProfile.name} converted to ${colorContext.targetSpace === 'display-p3' ? 'Display P3' : 'sRGB'} for editing`, 'info');
+            }
+            return added;
+        } catch (error) {
+            this.toast(`${config.label} import failed: ${error.message}`, 'error');
+            return false;
+        }
     },
     _prepareClassicPhotonSource(bytes) {
         const source = new TextDecoder().decode(bytes);
@@ -7123,7 +7338,10 @@ const OS = {
         if (file && file.size > this._importLimits.maxJsonBytes) throw new Error(`${label} file exceeds 10 MB limit`);
     },
     _validateImageFile(file) {
-        if (!file || !file.type || !file.type.startsWith('image/')) throw new Error('Unsupported image file');
+        const type = String(file?.type || '').toLowerCase();
+        const name = String(file?.name || '').toLowerCase();
+        const knownExtension = /\.(?:png|apng|jpe?g|webp|gif|avif|jxl|heic|heif|bmp|svg)$/i.test(name);
+        if (!file || (!type.startsWith('image/') && !knownExtension)) throw new Error('Unsupported image file');
         if (file.size > this._importLimits.maxImageBytes) throw new Error('Image file exceeds 100 MB limit');
     },
     _validateDecodedImage(img) {
@@ -8930,7 +9148,7 @@ const OS = {
         if (window.showOpenFilePicker) {
             try {
                 const [handle] = await window.showOpenFilePicker({
-                    types: [{ description: intent === 'place' ? 'Place an image' : 'Images, OpenRaster, PDF, and RAW', accept: { 'image/*': ['.png','.jpg','.jpeg','.webp','.gif','.apng','.avif','.bmp','.svg'], 'image/openraster': ['.ora'], 'application/pdf': ['.pdf'], 'application/octet-stream': ['.cr2','.cr3','.nef','.arw','.dng','.raf','.rw2','.orf','.srw','.pef','.raw'] } }]
+                    types: [{ description: intent === 'place' ? 'Place an image' : 'Images, OpenRaster, PDF, and RAW', accept: { 'image/*': ['.png','.jpg','.jpeg','.webp','.gif','.apng','.avif','.jxl','.heic','.heif','.bmp','.svg'], 'image/jxl': ['.jxl'], 'image/heic': ['.heic'], 'image/heif': ['.heif'], 'image/openraster': ['.ora'], 'application/pdf': ['.pdf'], 'application/octet-stream': ['.cr2','.cr3','.nef','.arw','.dng','.raf','.rw2','.orf','.srw','.pef','.raw'] } }]
                 });
                 const file = await handle.getFile();
                 return this._handleFileLoad(file, intent);
@@ -9634,13 +9852,15 @@ const OS = {
         else if (this._isAPNGFile(file)) format = 'apng';
         else if (this._isWebPFile(file)) format = 'webp';
         else if (this._isAvifFile(file)) format = 'avif';
+        else if (this._isJxlFile(file)) format = 'jxl';
+        else if (this._isHeicFile(file)) format = 'heic';
         else if (this._isSVGFile(file)) format = 'svg';
         return {
             format,
             type,
             extension,
             animated:['gif', 'apng', 'webp'].includes(format),
-            placeable:['raster', 'gif', 'apng', 'webp', 'avif', 'svg'].includes(format)
+            placeable:['raster', 'gif', 'apng', 'webp', 'avif', 'jxl', 'heic', 'svg'].includes(format)
         };
     },
     _normalizeImportIntent(intent) {
@@ -9681,6 +9901,7 @@ const OS = {
         try { this._validateImageFile(file); } catch(e) { this.toast(e.message, 'error'); return false; }
         if (descriptor.format === 'gif') return this._importGifFrames(file, intent, { historyIntent:requested });
         if (descriptor.format === 'apng' || descriptor.format === 'webp') return this._importImageDecoderFrames(file, intent, { historyIntent:requested });
+        if (descriptor.format === 'jxl' || descriptor.format === 'heic') return this._loadPortableImageFile(file, descriptor.format, intent, { historyMode:requested });
         if (descriptor.format === 'svg') return this._loadSVGFile(file, intent, { historyMode:requested });
         return this._loadRasterFile(file, intent, { historyMode:requested });
     },
@@ -9699,6 +9920,15 @@ const OS = {
     _isAvifFile(file) {
         return String(file?.type || '').toLowerCase() === 'image/avif'
             || String(file?.name || '').toLowerCase().endsWith('.avif');
+    },
+    _isJxlFile(file) {
+        return String(file?.type || '').toLowerCase() === 'image/jxl'
+            || String(file?.name || '').toLowerCase().endsWith('.jxl');
+    },
+    _isHeicFile(file) {
+        const type = String(file?.type || '').toLowerCase();
+        return ['image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence'].includes(type)
+            || /\.(?:heic|heif)$/i.test(String(file?.name || ''));
     },
     _isSVGFile(file) {
         return String(file?.type || '').toLowerCase() === 'image/svg+xml'
@@ -9755,11 +9985,13 @@ const OS = {
             return false;
         }
     },
-    async _loadRasterFile(file, mode = 'open', { historyMode = null } = {}) {
+    async _loadRasterFile(file, mode = 'open', { historyMode = null, skipPortable = false } = {}) {
         const sourceMode = mode;
         const actionModeSource = historyMode || sourceMode;
         mode = this._resolveImportIntent(file, mode);
         if (this._isAvifFile(file)) return this._loadAvifFile(file, mode, { historyMode:actionModeSource });
+        if (!skipPortable && this._isJxlFile(file)) return this._loadPortableImageFile(file, 'jxl', mode, { historyMode:actionModeSource });
+        if (!skipPortable && this._isHeicFile(file)) return this._loadPortableImageFile(file, 'heic', mode, { historyMode:actionModeSource });
         if (this._isSVGFile(file)) return this._loadSVGFile(file, mode, { historyMode:actionModeSource });
         try {
             const buffer = typeof file.arrayBuffer === 'function' ? await file.arrayBuffer() : null;
@@ -21136,7 +21368,8 @@ self.onmessage = function(event) {
         Object.freeze({ label:'Trace to Vector', assets:Object.freeze(['imageTracer']) }),
         Object.freeze({ label:'On-canvas gradient handles', assets:Object.freeze(['fabricExtensions']) }),
         Object.freeze({ label:'AI features (model weights are fetched separately)', assets:Object.freeze(['transformers', 'onnxWasm', 'onnxWasmFactory']) }),
-        Object.freeze({ label:'Content Credentials validation', assets:Object.freeze(['c2paModule', 'c2paWasm', 'c2paHighgain', 'c2paDeepmerge']) })
+        Object.freeze({ label:'Content Credentials validation', assets:Object.freeze(['c2paModule', 'c2paWasm', 'c2paHighgain', 'c2paDeepmerge']) }),
+        Object.freeze({ label:'HEIC and JPEG XL import', assets:Object.freeze(['heicDecoderModule', 'heicDecoderWasm', 'jxlDecoderModule', 'jxlDecoderWasm']) })
     ]),
     _network() {
         return window.__openshopNetwork || null;
@@ -21802,6 +22035,9 @@ self.onmessage = function(event) {
             '.gif':'image/gif',
             '.apng':'image/apng',
             '.avif':'image/avif',
+            '.jxl':'image/jxl',
+            '.heic':'image/heic',
+            '.heif':'image/heif',
             '.svg':'image/svg+xml',
             '.bmp':'image/bmp',
             '.pdf':'application/pdf',

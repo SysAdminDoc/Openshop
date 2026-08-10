@@ -55,6 +55,8 @@ Or download `index.html` and open it locally. Everything runs client-side. Your 
 | **WebP** | Yes (animated frames with timing) | Yes |
 | **APNG** | Yes (animated frames with timing) | — |
 | **AVIF** | Yes (verified WASM decoder) | Yes (deterministic verified WASM encoder) |
+| **HEIC / HEIF** | Yes (native-first, verified WASM decoder; first image for sequences) | — |
+| **JPEG XL** | Yes (native-first, verified WASM decoder) | — |
 | **SVG** | Yes (editable shapes, text, groups, and per-range text spans — not rasterized) | Yes |
 | **Vector PDF** | — | Yes (real path operators when no raster layer is visible) |
 | **PDF** | Yes (page per layer) | Yes |
@@ -232,6 +234,8 @@ Preferences.
 | [Transformers.js](https://huggingface.co/docs/transformers.js) — `@huggingface/transformers` 4.2.0 (Apache-2.0) | Client-side AI inference via WebGPU/WASM (loaded on demand) |
 | [Photon](https://github.com/silvia-odwyer/photon) — `@silvia-odwyer/photon` 0.3.3 (Apache-2.0) | Optional WASM acceleration for supported pixel filters (loaded on demand) |
 | [jSquash AVIF](https://github.com/jamsinclair/jSquash) — `@jsquash/avif` 2.1.1 (Apache-2.0) | Deterministic AVIF encode/decode via libavif WASM (loaded on demand) |
+| [jSquash HEIC](https://github.com/discourse/jSquash) — `@discourse/heic` 1.0.0 (Apache-2.0) | Native-first HEIC/HEIF import fallback through separately verified decoder WASM (loaded on demand) |
+| [jSquash JPEG XL](https://github.com/jamsinclair/jSquash) — `@jsquash/jxl` 1.3.0 (Apache-2.0) | Native-first JPEG XL import fallback through separately verified decoder WASM (loaded on demand) |
 | [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) — `onnxruntime-web` 1.26.0-dev.20260416-b7804b056c (MIT) | WebAssembly inference runtime for AI features (loaded on demand) |
 | [C2PA web](https://github.com/contentauth/c2pa-js) — `@contentauth/c2pa-web` 0.13.4 (MIT) | Read-only Content Credentials manifest and validation reader (loaded only when a C2PA marker is detected) |
 | [C2PA WebAssembly](https://github.com/contentauth/c2pa-js) — `@contentauth/c2pa-wasm` 0.11.2 (MIT) | Content Credentials verification engine (loaded on demand with the reader) |
@@ -247,6 +251,11 @@ does not bundle DOMPurify, and OpenShop never calls jsPDF's `.html()` path, so
 that optional dependency is not reachable. `tests/runtime-assets.test.js` ties
 the finding to the exact URL and version and fails if a future pin makes it
 stale.
+
+The HEIC decoder records its embedded libheif 1.19.7 and libde265 1.0.15
+builds. The JPEG XL decoder records its pinned libjxl source commit
+(`9f544641ec83f6abd9da598bdd08178ee8a003e0`); these notices are kept in the
+canonical manifest alongside the Apache-2.0 package licenses.
 
 OpenShop `.openshop` files are JSON-encoded document schema v3. The same envelope drives project save/open, recovery, and undo/redo so live layer hierarchy and order, masks, guides, selections, animation frames, per-character text styles, color-profile metadata/bytes, AI segment masks, and active state stay synchronized. Schema v1/v2 projects and legacy `.json`, Fabric 5, and OpenShop 0.18.13 projects are migrated on load through an explicit version registry; unknown future schemas are rejected before the active document is touched. Native project import/export records a structured compatibility report, and PSD import/export reports unsupported fields, color modes, metadata, and approximations. JPEG APP2, PNG `iCCP`, WebP `ICCP`, AVIF `colr`, and PSD profiles are parsed when present; matrix/TRC profiles are converted into the browser's sRGB working space or a supported Display P3 canvas, with the conversion recorded in the import/export report. PNG, JPEG, WebP, AVIF, and PSD exports embed the active working profile when their writer/container supports it, and explicitly report when embedding is unavailable.
 
@@ -344,7 +353,7 @@ What OpenShop *does* fetch is program code — and, the first time you use an AI
 
 | Host | What comes from it | When |
 |---|---|---|
-| `cdn.jsdelivr.net` | Pinned, SHA-384-verified libraries and codecs (Fabric, ag-psd, jsPDF, Photon, GIF, AVIF, Transformers.js, ONNX Runtime, C2PA reader) | Three at startup; the rest only when a feature that needs them is used |
+| `cdn.jsdelivr.net` | Pinned, SHA-384-verified libraries and codecs (Fabric, ag-psd, jsPDF, Photon, GIF, AVIF, HEIC, JPEG XL, Transformers.js, ONNX Runtime, C2PA reader) | Three at startup; the rest only when a feature that needs them is used |
 | `huggingface.co` / `*.hf.co` | Pinned AI model weights | First use of a given AI feature |
 | *(none)* | UI fonts use the device's system and monospace stacks | Page load |
 
@@ -357,7 +366,7 @@ One honest limitation: on the standalone `file://` lane a cold start needs the t
 ## Security
 
 - Core startup CDN scripts are version-pinned and loaded with [Subresource Integrity (SRI)](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity) hashes
-- PSD, Photon, GIF, AVIF, Transformers.js, ONNX, and C2PA lazy runtime bytes are version-pinned, SHA-384 verified before execution, and discarded on any digest mismatch
+- PSD, Photon, GIF, AVIF, HEIC, JPEG XL, Transformers.js, ONNX, and C2PA lazy runtime bytes are version-pinned, SHA-384 verified before execution, and discarded on any digest mismatch
 - Verified lazy runtime byte buffers are released after initialization, temporary executable blob URLs are revoked at their last safe owner, and the lifecycle disposer clears shared codec, PDF, RAW, AI, and worker resources without retaining duplicate payloads
 - Static controls carry opaque action IDs resolved by a frozen listener registry; executable HTML event attributes are forbidden by the release security check
 - Recent files, saved palettes, templates, and photo presets render through DOM APIs so persisted values remain inert text
@@ -384,7 +393,7 @@ OpenShop has two explicit distribution contracts:
 
 Hosted updates install into a separate cache and remain waiting until applied. The new shell must complete an editor health check; if it does not, the next launch returns to the last verified shell. The Offline & Install dialog exposes update, rollback, connection, install, optional-helper, and pinned AI-model cache state. Apply Update, Restore Previous Shell, and Rebuild Offline Shell first ask dirty documents whether to Save a verified recovery generation, Discard it explicitly, or Cancel without changing the worker or document; a failed Save leaves the current shell active.
 
-Installed-app file launch is progressively enhanced through `launchQueue`. Supporting Chromium releases can launch raster, vector, AVIF/APNG, PDF, RAW, PSD, OpenRaster, and `.openshop` project files. Installed browsers can also receive image files from the system share sheet; OpenShop stores the multipart handoff locally before opening it, so document pixels never upload. Other browsers retain Open, drag/drop, and file-picker workflows. AI models are intentionally outside the core shell and require one successful online use before their own cache can help offline.
+Installed-app file launch is progressively enhanced through `launchQueue`. Supporting Chromium releases can launch raster, vector, AVIF/APNG, HEIC/HEIF, JPEG XL, PDF, RAW, PSD, OpenRaster, and `.openshop` project files. Installed browsers can also receive image files from the system share sheet; OpenShop stores the multipart handoff locally before opening it, so document pixels never upload. Other browsers retain Open, drag/drop, and file-picker workflows. AI models are intentionally outside the core shell and require one successful online use before their own cache can help offline.
 
 ## Self-Hosting
 
