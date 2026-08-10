@@ -6,7 +6,8 @@ import { check, checkServiceWorker } from '../tools/security.mjs';
 import {
   OPENSHOP_BOOT_ASSETS,
   OPENSHOP_RUNTIME_ASSETS,
-  licenseReport
+  licenseReport,
+  validateRuntimeProvenance
 } from '../tools/runtime-assets.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -48,5 +49,25 @@ describe('canonical runtime asset manifest', () => {
     const report = licenseReport();
     expect(report).toHaveLength(26);
     expect(report.every(asset => asset.packageName && asset.version && asset.url && asset.license)).toBe(true);
+  });
+
+  test('keeps embedded dependency findings tied to the exact pinned bundle', () => {
+    expect(validateRuntimeProvenance()).toBe(true);
+    const report = licenseReport();
+    const jsPdf = report.find(asset => asset.key === 'jsPdf');
+    expect(jsPdf.provenance).toMatchObject({
+      verifiedFor:'4.2.1',
+      verifiedUrl:'https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js',
+      embeddedDependencies:[]
+    });
+    expect(jsPdf.provenance.dependencyFindings).toEqual([
+      expect.objectContaining({
+        packageName:'dompurify',
+        declaredRange:'^3.3.1',
+        observedVersion:null,
+        embedded:false,
+        reachable:false
+      })
+    ]);
   });
 });

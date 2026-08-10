@@ -220,6 +220,13 @@ requests without revoking consent.
 | [jSquash AVIF 2.1.1](https://github.com/jamsinclair/jSquash) (Apache-2.0) | Deterministic AVIF encode/decode via libavif WASM (loaded on demand) |
 | System font stacks | UI and monospace text without a third-party font request |
 
+The canonical runtime manifest also records embedded-dependency provenance per
+asset. The pinned jsPDF 4.2.1 UMD contains optional DOMPurify loader hooks but
+does not bundle DOMPurify, and OpenShop never calls jsPDF's `.html()` path, so
+that optional dependency is not reachable. `tests/runtime-assets.test.js` ties
+the finding to the exact URL and version and fails if a future pin makes it
+stale.
+
 OpenShop `.openshop` files are JSON-encoded document schema v2. The same envelope drives project save/open, recovery, and undo/redo so live layer hierarchy and order, masks, guides, selections, animation frames, color-profile metadata/bytes, AI segment masks, and active state stay synchronized. Schema v1 projects and legacy `.json`, Fabric 5, and OpenShop 0.18.13 projects are migrated on load through an explicit version registry; unknown future schemas are rejected before the active document is touched. Native project import/export records a structured compatibility report, and PSD import/export reports unsupported fields, color modes, metadata, and approximations. JPEG APP2, PNG `iCCP`, WebP `ICCP`, AVIF `colr`, and PSD profiles are parsed when present; matrix/TRC profiles are converted into the browser's sRGB working space or a supported Display P3 canvas, with the conversion recorded in the import/export report. PNG, JPEG, WebP, AVIF, and PSD exports embed the active working profile when their writer/container supports it, and explicitly report when embedding is unavailable.
 
 At startup, the editor probes the active browser engine's usable canvas dimension and pixel-area ceiling, caches the result for the current browser/device profile, and applies it to New Image and every raster import path. A document above the measured ceiling is refused before allocation, with the measured per-side and total-pixel limits included in the error.

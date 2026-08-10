@@ -1,4 +1,12 @@
-const asset = (key, name, packageName, version, url, integrity, type, license = null) => Object.freeze({
+const freezeRecords = records => Object.freeze(records.map(record => Object.freeze({ ...record })));
+const makeProvenance = ({ verifiedFor, verifiedUrl, embeddedDependencies = [], dependencyFindings = [] }) => Object.freeze({
+  verifiedFor,
+  verifiedUrl,
+  embeddedDependencies: freezeRecords(embeddedDependencies),
+  dependencyFindings: freezeRecords(dependencyFindings)
+});
+
+const asset = (key, name, packageName, version, url, integrity, type, license = null, provenance = null) => Object.freeze({
   key,
   name,
   packageName,
@@ -6,7 +14,8 @@ const asset = (key, name, packageName, version, url, integrity, type, license = 
   url,
   integrity,
   type,
-  license
+  license,
+  provenance
 });
 
 export const OPENSHOP_BOOT_ASSETS = Object.freeze([
@@ -38,7 +47,19 @@ export const OPENSHOP_BOOT_ASSETS = Object.freeze([
     'https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js',
     'sha384-qovJwSBbRDPP5cEjCp8S0UP66wrvnjaa60XMOGzTNanrThcrGfXfnZkvgY8N1KT3',
     'application/javascript',
-    'MIT'
+    'MIT',
+    makeProvenance({
+      verifiedFor:'4.2.1',
+      verifiedUrl:'https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js',
+      dependencyFindings:[{
+        packageName:'dompurify',
+        declaredRange:'^3.3.1',
+        observedVersion:null,
+        embedded:false,
+        reachable:false,
+        evidence:'The jsPDF 4.2.1 UMD contains optional DOMPurify loader hooks but no DOMPurify bytes; OpenShop does not invoke jsPDF.html().'
+      }]
+    })
   )
 ]);
 
@@ -307,10 +328,39 @@ export function assetsForKeys(keys) {
 }
 
 export function licenseReport() {
-  return [...OPENSHOP_CACHEABLE_RUNTIME_ASSETS].map(({ packageName, version, url, license }) => ({
-    packageName,
-    version,
-    url,
-    license: license || 'not declared in manifest; verify package metadata'
+  validateRuntimeProvenance();
+  return [...OPENSHOP_CACHEABLE_RUNTIME_ASSETS].map(value => ({
+    key:value.key,
+    name:value.name,
+    packageName:value.packageName,
+    version:value.version,
+    url:value.url,
+    license:value.license || 'not declared in manifest; verify package metadata',
+    provenance:value.provenance || makeProvenance({ verifiedFor:value.version, verifiedUrl:value.url })
   }));
+}
+
+export function validateRuntimeProvenance() {
+  const failures = [];
+  OPENSHOP_CACHEABLE_RUNTIME_ASSETS.forEach(value => {
+    if (!value.provenance) return;
+    if (value.provenance.verifiedFor !== value.version) {
+      failures.push(`${value.key} provenance is verified for ${value.provenance.verifiedFor}, not ${value.version}`);
+    }
+    if (value.provenance.verifiedUrl !== value.url) {
+      failures.push(`${value.key} provenance URL does not match its pinned asset`);
+    }
+    value.provenance.embeddedDependencies.forEach(dependency => {
+      if (!dependency.packageName || !dependency.version) {
+        failures.push(`${value.key} has an embedded dependency without an exact package/version`);
+      }
+    });
+    value.provenance.dependencyFindings.forEach(finding => {
+      if (!finding.packageName || typeof finding.embedded !== 'boolean' || typeof finding.reachable !== 'boolean') {
+        failures.push(`${value.key} has an incomplete dependency finding`);
+      }
+    });
+  });
+  if (failures.length) throw new Error(`Runtime provenance failed:\n- ${failures.join('\n- ')}`);
+  return true;
 }
