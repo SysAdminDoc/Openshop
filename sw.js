@@ -85,8 +85,8 @@ const RUNTIME_ORIGINS = new Set([
 const CACHEABLE_RUNTIME_URLS = new Set([
     ...REQUIRED_ASSETS,
     ...OPTIONAL_ASSETS,
-    "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.7.284/build/pdf.min.mjs",
-    "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.7.284/build/pdf.worker.min.mjs",
+    "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/build/pdf.min.mjs",
+    "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/build/pdf.worker.min.mjs",
     "https://cdn.jsdelivr.net/npm/libraw-wasm@1.6.0/dist/index.js",
     "https://cdn.jsdelivr.net/npm/libraw-wasm@1.6.0/dist/worker.js",
     "https://cdn.jsdelivr.net/npm/libraw-wasm@1.6.0/dist/libraw.js",

@@ -8,7 +8,7 @@
     "shellRevision": 2
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.22.2"
   },
   "scripts": {
     "test": "vitest run",
@@ -25,10 +25,10 @@
     "test:cross-browser": "playwright test --project=firefox --project=webkit"
   },
   "devDependencies": {
-    "@playwright/test": "^1.56.1",
+    "@playwright/test": "^1.62.1",
     "@vitest/coverage-v8": "^4.1.10",
     "css-tree": "^3.2.1",
-    "jsdom": "^27.2.0",
+    "jsdom": "^30.0.1",
     "vitest": "^4.0.15",
     "vitest-canvas-mock": "^0.3.3"
   }

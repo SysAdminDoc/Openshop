@@ -384,6 +384,8 @@ to that deployment; it is deliberately not baked into the portable HTML file.
 
 The app still ships as a single HTML file. The Node tooling is only for local contributor verification:
 
+Contributor verification requires Node.js 22.22.2 or newer; the shipped editor itself has no Node.js runtime dependency.
+
 ```bash
 npm install
 npm test

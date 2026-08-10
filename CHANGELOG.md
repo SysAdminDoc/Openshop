@@ -63,6 +63,7 @@ All notable changes to Openshop will be documented in this file.
   fullscreen now expose their current state visually and through `aria-checked`.
 
 ### Fixed
+- Refreshed the contributor toolchain to PDF.js 6.2.108, jsdom 30.0.1, and Playwright 1.62.1/WebKit 26.5; the Node.js floor is now explicit at 22.22.2 and the transitive nanoid advisory is resolved.
 - Retired the Fabric v5 compatibility layer: editor call sites now use Fabric 7's native promises, current scene/size/filter APIs, and local async failure handling; cancelled accelerated filters no longer fall through into a second worker job.
 - Added a capability-tested OffscreenCanvas renderer worker for supported
   filter application and capped previews, with the existing Fabric/main-thread

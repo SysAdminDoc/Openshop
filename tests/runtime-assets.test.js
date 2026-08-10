@@ -38,7 +38,7 @@ describe('canonical runtime asset manifest', () => {
 
   test('refuses a service worker that omits a lazy asset from its cache allowlist', () => {
     const changed = serviceWorker.replace(
-      '    "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.7.284/build/pdf.min.mjs",\n',
+      '    "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/build/pdf.min.mjs",\n',
       ''
     );
     expect(() => checkServiceWorker(changed)).toThrow(/not cache-allowlisted/);
