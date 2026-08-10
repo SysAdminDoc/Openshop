@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-IYyWFWJflGl9O6ZIDF9iI6TbnfsZyhJOWG2dKM4n0UI=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-6ZFD0ZAKBU8bnlFX4xDaWjPnFXRjiwRlTcDlEe2nL4Q=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -3410,6 +3410,8 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
         <input type="range" id="brush-opacity" min="1" max="100" value="100" data-os-input="input-002">
         <span class="opt-val" id="brush-opacity-val">100</span>
         <span class="opt-val" id="brush-pressure-status" title="Pressure changes are enabled after a pen stroke reports varying pressure">Stylus: ready</span>
+        <label title="Use pen tilt to rotate and flatten brush stamps"><input type="checkbox" id="brush-tilt" data-os-change="change-047"> Tilt dynamics</label>
+        <span class="opt-val" id="brush-tilt-status" title="Tilt is enabled after a pen reports tilt data">Tilt: off</span>
     </div>
     <div class="opt-group" id="opt-spray" style="display:none">
         <label>Density</label>
@@ -4277,7 +4279,8 @@ const OS_EVENT_HANDLERS = Object.freeze({
         "change-043": function(event) { OS.setWorkspaceMode(this.value) },
         "change-044": function(event) { OS.selectGradientPreset(this.value) },
         "change-045": function(event) { OS.setAutoSelect(this.checked) },
-        "change-046": function(event) { OS.setTransformControls(this.checked) }
+        "change-046": function(event) { OS.setTransformControls(this.checked) },
+        "change-047": function(event) { OS.setTiltDynamics(this.checked) }
     }),
     input: Object.freeze({
         "input-001": function(event) { OS.setBrushSize(this.value) },
@@ -5416,9 +5419,10 @@ const OS = {
     _macroRecording: false, _macroPlaying: false, _macroSteps: [],
     _liquifyData: null,
     _symmetryMode: 'off',
+    _tiltEnabled: false,
     _pressureStroke: null,
     _pressureSupported: false,
-    _inputCapabilityObservations: { visualViewportResize:0, orientationChange:0 },
+    _inputCapabilityObservations: { visualViewportResize:0, orientationChange:0, coalescedSamples:0, predictedSamples:0, tiltSamples:0 },
     _inputCapabilityObserversReady: false,
     _preferenceSchemaVersion: 2,
     _preferenceMigrationRegistry: Object.freeze({
@@ -11717,7 +11721,7 @@ self.onmessage = function(event) {
         this._toolOptionSchemaCache = Object.freeze({
             none: schema(null, false),
             select: schema('opt-select', true, ['select-auto', 'select-transform']),
-            brush: schema('opt-brush', true, ['brush-preset', 'brush-size', 'brush-opacity']),
+            brush: schema('opt-brush', true, ['brush-preset', 'brush-size', 'brush-opacity', 'brush-tilt']),
             spray: schema('opt-spray', true, ['spray-density', 'spray-width']),
             marquee: schema('opt-marquee', true),
             lasso: schema('opt-lasso', true),
@@ -11726,7 +11730,7 @@ self.onmessage = function(event) {
             healing: schema('opt-healing', true, ['healing-size']),
             clone: schema('opt-clone', true, ['clone-size']),
             history: schema(null, true),
-            eraser: schema('opt-brush', true, ['brush-size', 'brush-opacity']),
+            eraser: schema('opt-brush', true, ['brush-size', 'brush-opacity', 'brush-tilt']),
             fill: schema('opt-gradient', true, ['gradient-preset', 'grad-from', 'grad-to', 'grad-type']),
             pattern: schema('opt-pattern', true, ['pattern-type', 'pattern-scale', 'pattern-color']),
             blur: schema(null, true),
@@ -11907,12 +11911,14 @@ self.onmessage = function(event) {
             case 'eraser':
                 c.isDrawingMode=true; c.freeDrawingBrush = new fabric.PencilBrush(c);
                 c.freeDrawingBrush.color = 'rgba(0,0,0,1)'; c.freeDrawingBrush.width = this.state.brushSize;
+                this._bindPointerStreamBrush(c.freeDrawingBrush);
                 document.getElementById('opt-brush').style.display='flex'; break;
             case 'spray':
                 c.isDrawingMode=true; c.freeDrawingBrush = new fabric.SprayBrush(c);
                 c.freeDrawingBrush.color = this.state.fgColor;
                 c.freeDrawingBrush.density = this.state.sprayDensity;
                 c.freeDrawingBrush.width = this.state.sprayWidth;
+                this._bindPointerStreamBrush(c.freeDrawingBrush);
                 document.getElementById('opt-spray').style.display='flex'; break;
             case 'clone': c.defaultCursor='crosshair'; document.getElementById('opt-clone').style.display='flex'; break;
             case 'healing': c.defaultCursor='crosshair'; document.getElementById('opt-healing').style.display='flex'; break;
@@ -11965,6 +11971,136 @@ self.onmessage = function(event) {
         this.state.brushOpacity=+v; document.getElementById('brush-opacity-val').textContent=v;
         this._applyBrushColor();
     },
+    setTiltDynamics(enabled) {
+        this._tiltEnabled = Boolean(enabled);
+        const control = document.getElementById('brush-tilt');
+        if (control) control.checked = this._tiltEnabled;
+        this._updateTiltStatus();
+        return this._tiltEnabled;
+    },
+    _updateTiltStatus() {
+        const status = document.getElementById('brush-tilt-status');
+        if (!status) return;
+        if (!this._tiltEnabled) status.textContent = 'Tilt: off';
+        else if (this._inputCapabilityObservations.tiltSamples > 0) status.textContent = 'Tilt: active';
+        else status.textContent = 'Tilt: on';
+    },
+    _pointerEventsFor(event, { predicted = false } = {}) {
+        if (!event) return [];
+        const method = predicted ? 'getPredictedEvents' : 'getCoalescedEvents';
+        let samples = [];
+        try {
+            if (typeof event[method] === 'function') samples = Array.from(event[method]() || []).filter(Boolean);
+        } catch (_) { samples = []; }
+        if (predicted) return samples;
+        if (!samples.length) return [event];
+        const last = samples.at(-1);
+        const lastTime = Number(last?.timeStamp);
+        const eventTime = Number(event?.timeStamp);
+        const sameEndpoint = last === event
+            || (Number.isFinite(Number(last?.clientX)) && Number.isFinite(Number(event?.clientX))
+                && Number(last.clientX) === Number(event.clientX)
+                && Number(last.clientY) === Number(event.clientY)
+                && (!Number.isFinite(lastTime) || !Number.isFinite(eventTime) || lastTime === eventTime));
+        return sameEndpoint ? samples : [...samples, event];
+    },
+    _pointerTiltFromEvent(event) {
+        const pointerType = String(event?.pointerType || '').toLowerCase();
+        const tiltX = Number(event?.tiltX);
+        const tiltY = Number(event?.tiltY);
+        const azimuthValue = Number(event?.azimuthAngle);
+        const altitudeValue = Number(event?.altitudeAngle);
+        const hasTilt = pointerType === 'pen'
+            && (Number.isFinite(azimuthValue) || Number.isFinite(altitudeValue) || Number.isFinite(tiltX) || Number.isFinite(tiltY));
+        if (!hasTilt) return { tiltX:null, tiltY:null, azimuthAngle:null, altitudeAngle:null, hasTilt:false };
+        const azimuthAngle = Number.isFinite(azimuthValue)
+            ? azimuthValue
+            : Math.atan2(Number.isFinite(tiltY) ? tiltY : 0, Number.isFinite(tiltX) ? tiltX : 1);
+        const altitudeAngle = Number.isFinite(altitudeValue)
+            ? Math.max(0, Math.min(Math.PI / 2, altitudeValue))
+            : Math.max(0.05, Math.min(Math.PI / 2, Math.PI / 2 - Math.hypot(tiltX || 0, tiltY || 0) * Math.PI / 180));
+        return {
+            tiltX:Number.isFinite(tiltX) ? tiltX : null,
+            tiltY:Number.isFinite(tiltY) ? tiltY : null,
+            azimuthAngle,
+            altitudeAngle,
+            hasTilt:true
+        };
+    },
+    _pointerSampleFromEvent(event, pointer = null, { predicted = false } = {}) {
+        const tilt = this._pointerTiltFromEvent(event);
+        const pressure = this._abrPressureFromEvent(event);
+        if (predicted) this._inputCapabilityObservations.predictedSamples += 1;
+        else if (this._pointerEventsFor(event).length > 1) this._inputCapabilityObservations.coalescedSamples += 1;
+        if (tilt.hasTilt) {
+            this._inputCapabilityObservations.tiltSamples += 1;
+            this._updateTiltStatus();
+        }
+        return {
+            x:Number(pointer?.x),
+            y:Number(pointer?.y),
+            pressure,
+            ...tilt,
+            predicted
+        };
+    },
+    _abrPointFromPointer(pointer, event, { predicted = false } = {}) {
+        return this._pointerSampleFromEvent(event, pointer, { predicted });
+    },
+    _applyBrushDynamics(brush, event) {
+        const pointerType = String(event?.pointerType || '').toLowerCase();
+        const pressure = this._abrPressureFromEvent(event);
+        const base = this.state.tool === 'pencil' ? 1 : Math.max(1, Number(this.state.brushSize) || 1);
+        const tilt = this._pointerTiltFromEvent(event);
+        const altitudeScale = this._tiltEnabled && tilt.hasTilt ? 0.45 + 0.55 * Math.sin(tilt.altitudeAngle) : 1;
+        if (brush && pointerType === 'pen') brush.width = Math.max(1, base * (0.25 + pressure * 0.75) * altitudeScale);
+        if (brush) brush._openShopTilt = tilt;
+        return { pressure, ...tilt };
+    },
+    _reconcilePredictedBrushSamples(brush) {
+        const count = Math.max(0, Number(brush?._openShopPredictedCount) || 0);
+        if (!count) return;
+        if (Array.isArray(brush?._points)) brush._points.splice(Math.max(0, brush._points.length - count), count);
+        if (Array.isArray(brush?._points) && brush._points.length) brush._lastPoint = brush._points.at(-1);
+        brush._openShopPredictedCount = 0;
+        brush._openShopPredictedSamples = [];
+    },
+    _bindPointerStreamBrush(brush) {
+        if (!brush || brush._openShopPointerStreamBound || brush._openShopPointerStreamCustom) return brush;
+        const owner = this;
+        const originalDown = typeof brush.onMouseDown === 'function' ? brush.onMouseDown : null;
+        const originalMove = typeof brush.onMouseMove === 'function' ? brush.onMouseMove : null;
+        const originalUp = typeof brush.onMouseUp === 'function' ? brush.onMouseUp : null;
+        if (!originalMove) return brush;
+        brush._openShopPointerStreamBound = true;
+        brush.onMouseDown = function(pointer, event) {
+            owner._reconcilePredictedBrushSamples(this);
+            owner._applyBrushDynamics(this, event);
+            return originalDown?.call(this, pointer, event);
+        };
+        brush.onMouseMove = function(pointer, event) {
+            owner._reconcilePredictedBrushSamples(this);
+            owner._pointerEventsFor(event).forEach(sampleEvent => {
+                const samplePointer = sampleEvent === event ? pointer : owner.canvas.getPointer(sampleEvent);
+                owner._applyBrushDynamics(this, sampleEvent);
+                originalMove.call(this, samplePointer, sampleEvent);
+            });
+            const predicted = owner._pointerEventsFor(event, { predicted:true });
+            predicted.forEach(sampleEvent => {
+                const samplePointer = owner.canvas.getPointer(sampleEvent);
+                owner._applyBrushDynamics(this, sampleEvent);
+                originalMove.call(this, samplePointer, sampleEvent);
+            });
+            this._openShopPredictedCount = predicted.length;
+            this._openShopPredictedSamples = predicted;
+        };
+        brush.onMouseUp = function(pointer, event) {
+            owner._reconcilePredictedBrushSamples(this);
+            owner._applyBrushDynamics(this, event);
+            return originalUp?.call(this, pointer, event);
+        };
+        return brush;
+    },
     _hexToRgba(hex, opacity) {
         let h = (hex || '#000000').replace('#', '');
         if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
@@ -11983,7 +12119,14 @@ self.onmessage = function(event) {
     },
     _abrStrokeSamples(points, asset) {
         const source = (Array.isArray(points) ? points : []).map(point => ({
-            x:Number(point?.x), y:Number(point?.y), pressure:Math.max(0, Math.min(1, Number.isFinite(Number(point?.pressure)) ? Number(point.pressure) : 1))
+            x:Number(point?.x),
+            y:Number(point?.y),
+            pressure:Math.max(0, Math.min(1, Number.isFinite(Number(point?.pressure)) ? Number(point.pressure) : 1)),
+            tiltX:Number.isFinite(Number(point?.tiltX)) ? Number(point.tiltX) : null,
+            tiltY:Number.isFinite(Number(point?.tiltY)) ? Number(point.tiltY) : null,
+            azimuthAngle:Number.isFinite(Number(point?.azimuthAngle)) ? Number(point.azimuthAngle) : null,
+            altitudeAngle:Number.isFinite(Number(point?.altitudeAngle)) ? Number(point.altitudeAngle) : null,
+            hasTilt:Boolean(point?.hasTilt)
         })).filter(point => Number.isFinite(point.x) && Number.isFinite(point.y)).slice(0, 2048);
         if (!source.length) return [];
         const baseSize = Math.max(1, Math.min(2048, Number(this.state.brushSize) || Number(asset?.size) || 32));
@@ -11999,7 +12142,12 @@ self.onmessage = function(event) {
                 samples.push({
                     x:from.x + (to.x - from.x) * ratio,
                     y:from.y + (to.y - from.y) * ratio,
-                    pressure:from.pressure + (to.pressure - from.pressure) * ratio
+                    pressure:from.pressure + (to.pressure - from.pressure) * ratio,
+                    tiltX:Number.isFinite(from.tiltX) && Number.isFinite(to.tiltX) ? from.tiltX + (to.tiltX - from.tiltX) * ratio : from.tiltX ?? to.tiltX,
+                    tiltY:Number.isFinite(from.tiltY) && Number.isFinite(to.tiltY) ? from.tiltY + (to.tiltY - from.tiltY) * ratio : from.tiltY ?? to.tiltY,
+                    azimuthAngle:Number.isFinite(from.azimuthAngle) && Number.isFinite(to.azimuthAngle) ? from.azimuthAngle + (to.azimuthAngle - from.azimuthAngle) * ratio : from.azimuthAngle ?? to.azimuthAngle,
+                    altitudeAngle:Number.isFinite(from.altitudeAngle) && Number.isFinite(to.altitudeAngle) ? from.altitudeAngle + (to.altitudeAngle - from.altitudeAngle) * ratio : from.altitudeAngle ?? to.altitudeAngle,
+                    hasTilt:from.hasTilt || to.hasTilt
                 });
             }
         }
@@ -12059,12 +12207,19 @@ self.onmessage = function(event) {
             const centerX = point.x + scatterX - minX;
             const centerY = point.y + scatterY - minY;
             const opacity = spacingOpacity * (pressureOpacity ? 0.25 + point.pressure * 0.75 : 1);
+            const tiltActive = this._tiltEnabled && point.hasTilt;
+            const altitudeScale = tiltActive ? Math.max(0.35, Math.sin(point.altitudeAngle ?? Math.PI / 2)) : 1;
+            const flatten = tiltActive ? 1 + (1 - altitudeScale) * 1.5 : 1;
+            const rotation = tiltActive ? (Number.isFinite(point.azimuthAngle) ? point.azimuthAngle : 0) : 0;
+            const cos = Math.cos(rotation), sin = Math.sin(rotation);
             for (let tipY = 0; tipY < tipHeight; tipY += 1) {
                 for (let tipX = 0; tipX < tipWidth; tipX += 1) {
                     const alpha = tip ? tipAlpha[tipY * tipWidth + tipX] : 255;
                     if (!alpha) continue;
-                    const dx = ((tipX + 0.5) / tipWidth - 0.5) * size;
-                    const dy = ((tipY + 0.5) / tipHeight - 0.5) * size;
+                    const localX = ((tipX + 0.5) / tipWidth - 0.5) * size * flatten;
+                    const localY = ((tipY + 0.5) / tipHeight - 0.5) * size;
+                    const dx = localX * cos - localY * sin;
+                    const dy = localX * sin + localY * cos;
                     blend(Math.round(centerX + dx), Math.round(centerY + dy), Math.round(alpha * opacity));
                 }
             }
@@ -12082,15 +12237,36 @@ self.onmessage = function(event) {
         const brush = new fabric.PencilBrush(canvas);
         brush._openShopBrushAsset = asset;
         brush._openShopABRStamp = true;
+        brush._openShopPointerStreamCustom = true;
         brush._openShopPoints = [];
+        brush._openShopPredictedCount = 0;
         brush.onMouseDown = function(pointer, event) {
-            this._openShopPoints = [{ x:Number(pointer?.x) || 0, y:Number(pointer?.y) || 0, pressure:owner._abrPressureFromEvent(event) }];
+            this._openShopPoints = [];
+            this._openShopPredictedCount = 0;
+            owner._pointerEventsFor(event).forEach(sampleEvent => {
+                const samplePointer = sampleEvent === event ? pointer : owner.canvas.getPointer(sampleEvent);
+                this._openShopPoints.push(owner._abrPointFromPointer(samplePointer, sampleEvent));
+            });
         };
         brush.onMouseMove = function(pointer, event) {
             if (!this._openShopPoints.length) return;
-            this._openShopPoints.push({ x:Number(pointer?.x) || 0, y:Number(pointer?.y) || 0, pressure:owner._abrPressureFromEvent(event) });
+            if (this._openShopPredictedCount) {
+                this._openShopPoints.splice(Math.max(0, this._openShopPoints.length - this._openShopPredictedCount), this._openShopPredictedCount);
+                this._openShopPredictedCount = 0;
+            }
+            owner._pointerEventsFor(event).forEach(sampleEvent => {
+                const samplePointer = sampleEvent === event ? pointer : owner.canvas.getPointer(sampleEvent);
+                this._openShopPoints.push(owner._abrPointFromPointer(samplePointer, sampleEvent));
+            });
+            const predicted = owner._pointerEventsFor(event, { predicted:true });
+            predicted.forEach(sampleEvent => this._openShopPoints.push(owner._abrPointFromPointer(owner.canvas.getPointer(sampleEvent), sampleEvent, { predicted:true })));
+            this._openShopPredictedCount = predicted.length;
         };
         brush.onMouseUp = function() {
+            if (this._openShopPredictedCount) {
+                this._openShopPoints.splice(Math.max(0, this._openShopPoints.length - this._openShopPredictedCount), this._openShopPredictedCount);
+                this._openShopPredictedCount = 0;
+            }
             const points = this._openShopPoints.slice();
             this._openShopPoints = [];
             void owner._commitABRStroke(points, asset);
@@ -12140,6 +12316,7 @@ self.onmessage = function(event) {
                 c.freeDrawingBrush.strokeLineCap = 'square';
                 break;
         }
+        this._bindPointerStreamBrush(c.freeDrawingBrush);
         c.freeDrawingBrush.color=this.state.tool==='eraser'?'rgba(0,0,0,1)':(this.state.brushOpacity<100?this._hexToRgba(this.state.fgColor,this.state.brushOpacity):this.state.fgColor);
         c.freeDrawingBrush.width = this.state.brushSize;
     },
@@ -12215,6 +12392,12 @@ self.onmessage = function(event) {
         } catch (error) { /* safe-area inspection is optional */ }
         let coarsePointer = false;
         try { coarsePointer = Boolean(window.matchMedia?.('(pointer: coarse)').matches); } catch (error) { /* optional API */ }
+        const coalescedApi = Boolean(pointerPrototype && typeof pointerPrototype.getCoalescedEvents === 'function');
+        const predictedApi = Boolean(pointerPrototype && typeof pointerPrototype.getPredictedEvents === 'function');
+        const tiltApi = Boolean(pointerPrototype && (
+            'tiltX' in pointerPrototype || 'tiltY' in pointerPrototype
+            || 'azimuthAngle' in pointerPrototype || 'altitudeAngle' in pointerPrototype
+        ));
         return {
             pointerEvents:typeof window.PointerEvent === 'function',
             touchEvents:'ontouchstart' in window,
@@ -12224,6 +12407,14 @@ self.onmessage = function(event) {
                 api:Boolean(pointerPrototype && 'pressure' in pointerPrototype),
                 observedVariance:Boolean(this._pressureSupported),
                 mode:this._pressureStroke ? 'tracking' : (this._pressureSupported ? 'pressure' : 'fixed')
+            },
+            pointerStream:{
+                coalescedEvents:{ api:coalescedApi, observedSamples:this._inputCapabilityObservations.coalescedSamples },
+                predictedEvents:{ api:predictedApi, observedSamples:this._inputCapabilityObservations.predictedSamples },
+                tilt:{ api:tiltApi, observedSamples:this._inputCapabilityObservations.tiltSamples },
+                usesCoalescedSamples:coalescedApi || this._inputCapabilityObservations.coalescedSamples > 0,
+                usesPredictedSamples:predictedApi || this._inputCapabilityObservations.predictedSamples > 0,
+                usesTilt:tiltApi || this._inputCapabilityObservations.tiltSamples > 0
             },
             visualViewport:{
                 available:Boolean(window.visualViewport),

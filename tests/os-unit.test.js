@@ -181,6 +181,96 @@ describe('OpenShop core object', () => {
     expect(OS.canvas.freeDrawingBrush.width).toBe(8);
   });
 
+  it('normalizes coalesced and predicted pen samples and exposes tilt dynamics', () => {
+    const OS = loadOpenShop();
+    const tiltStatus = document.createElement('span');
+    tiltStatus.id = 'brush-tilt-status';
+    document.body.appendChild(tiltStatus);
+    const coalesced = {
+      pointerType:'pen', clientX:10, clientY:20, timeStamp:1, pressure:0.4,
+      tiltX:12, tiltY:8
+    };
+    const predicted = {
+      pointerType:'pen', clientX:14, clientY:24, timeStamp:3, pressure:0.7,
+      tiltX:18, tiltY:11
+    };
+    const event = {
+      pointerType:'pen', clientX:12, clientY:22, timeStamp:2, pressure:0.6,
+      tiltX:16, tiltY:10,
+      getCoalescedEvents:() => [coalesced],
+      getPredictedEvents:() => [predicted]
+    };
+
+    expect(OS._pointerEventsFor(event)).toEqual([coalesced, event]);
+    expect(OS._pointerEventsFor(event, { predicted:true })).toEqual([predicted]);
+    expect(OS._pointerSampleFromEvent(event, { x:12, y:22 })).toMatchObject({
+      x:12, y:22, pressure:0.6, tiltX:16, tiltY:10, hasTilt:true, predicted:false
+    });
+    expect(OS._pointerSampleFromEvent(predicted, { x:14, y:24 }, { predicted:true })).toMatchObject({
+      x:14, y:24, pressure:0.7, hasTilt:true, predicted:true
+    });
+
+    expect(OS._inputCapabilityObservations).toMatchObject({ coalescedSamples:1, predictedSamples:1, tiltSamples:2 });
+    expect(OS.setTiltDynamics(true)).toBe(true);
+    expect(tiltStatus.textContent).toBe('Tilt: active');
+    const brush = { width:20 };
+    OS.state.tool = 'brush';
+    OS.state.brushSize = 20;
+    OS._applyBrushDynamics(brush, { pointerType:'pen', pressure:1, altitudeAngle:0, azimuthAngle:Math.PI / 2 });
+    expect(brush.width).toBeCloseTo(9, 5);
+
+    const report = OS._buildInputCapabilityReport();
+    expect(report.pointerStream).toMatchObject({
+      coalescedEvents:{ observedSamples:1 },
+      predictedEvents:{ observedSamples:1 },
+      tilt:{ observedSamples:2 },
+      usesCoalescedSamples:true,
+      usesPredictedSamples:true,
+      usesTilt:true
+    });
+  });
+
+  it('reconciles provisional predicted brush points before the next committed sample', () => {
+    const OS = loadOpenShop();
+    OS.canvas = createCanvasMock();
+    OS.canvas.getPointer = vi.fn(event => ({ x:event.clientX, y:event.clientY }));
+    OS.state.tool = 'brush';
+    OS.state.brushSize = 10;
+    const points = [];
+    const calls = [];
+    const brush = {
+      _points:[],
+      onMouseDown() {},
+      onMouseMove(pointer, event) {
+        calls.push({ pointer, event });
+        this._points.push({ x:pointer.x, y:pointer.y });
+      },
+      onMouseUp() {}
+    };
+    OS._bindPointerStreamBrush(brush);
+    const makeEvent = (x, timeStamp, nextX = null) => ({
+      pointerType:'pen', clientX:x, clientY:20, timeStamp, pressure:0.8,
+      getCoalescedEvents() { return [this]; },
+      getPredictedEvents() { return nextX === null ? [] : [{ pointerType:'pen', clientX:nextX, clientY:20, timeStamp:timeStamp + 0.5, pressure:0.8 }]; }
+    });
+    const down = makeEvent(0, 0);
+    brush.onMouseDown({ x:0, y:20 }, down);
+    const first = makeEvent(10, 1, 15);
+    brush.onMouseMove({ x:10, y:20 }, first);
+    expect(brush._openShopPredictedCount).toBe(1);
+    expect(brush._points).toHaveLength(2);
+    const second = makeEvent(20, 2, 25);
+    brush.onMouseMove({ x:20, y:20 }, second);
+    expect(brush._points).toHaveLength(3);
+    brush.onMouseUp({ x:20, y:20 }, second);
+    expect(brush._points).toHaveLength(2);
+    expect(brush._openShopPredictedCount).toBe(0);
+    expect(brush._openShopPredictedSamples).toEqual([]);
+    expect(calls).toHaveLength(4);
+    points.push(...brush._points);
+    expect(points.map(point => point.x)).toEqual([10, 20]);
+  });
+
   it('adds and deletes layers while keeping canvas objects in sync', () => {
     const OS = loadOpenShop();
     const canvasObject = { name: 'Pixel Layer', type: 'image' };
@@ -1351,6 +1441,12 @@ describe('OpenShop core object', () => {
       pressureSize:true, pressureOpacity:true,
       tip:{ width:2, height:2, alpha:[0,255,255,0] }
     })).toMatchObject({ stampCount: expect.any(Number), width:expect.any(Number), height:expect.any(Number) });
+    const tiltAsset = { id:'abr-tilt', size:12, spacing:100, tip:{ width:3, height:1, alpha:[255,255,255] } };
+    OS.setTiltDynamics(false);
+    const upright = OS._renderABRStroke([{ x:20, y:20, hasTilt:true, altitudeAngle:Math.PI / 2, azimuthAngle:0 }], tiltAsset);
+    OS.setTiltDynamics(true);
+    const tilted = OS._renderABRStroke([{ x:20, y:20, hasTilt:true, altitudeAngle:0.25, azimuthAngle:Math.PI / 2 }], tiltAsset);
+    expect(Array.from(tilted.rgba)).not.toEqual(Array.from(upright.rgba));
     expect(OS._renderABRStroke([
       { x:0, y:0 }, { x:5000, y:5000 }
     ], { size:100, spacing:1, tip:{ width:1, height:1, alpha:[255] } })).toMatchObject({

@@ -5,6 +5,7 @@ All notable changes to Openshop will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Added full-rate pen stroke sampling through coalesced and predicted pointer events, with provisional samples reconciled against the next real event, optional tilt-driven ABR stamp rotation/flattening, and mobile capability reporting.
 - Enforced the `openshop-loader` Trusted Types policy for every verified JavaScript blob used by scripts, modules, and workers, with release checks for duplicate policies and bare executable Blob URLs.
 - Added a cached browser canvas-ceiling probe that applies measured per-side
   and total-pixel limits to new documents and every raster import path, with

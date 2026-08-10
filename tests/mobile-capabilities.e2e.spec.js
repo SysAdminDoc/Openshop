@@ -38,6 +38,14 @@ test('reports the mobile and stylus capability matrix without overstating hardwa
   expect(result.input.maxTouchPoints).toBeGreaterThanOrEqual(0);
   expect(typeof result.input.pressure.api).toBe('boolean');
   expect(result.input.pressure.observedVariance).toBe(true);
+  expect(result.input.pointerStream).toMatchObject({
+    coalescedEvents:{ api:expect.any(Boolean), observedSamples:expect.any(Number) },
+    predictedEvents:{ api:expect.any(Boolean), observedSamples:expect.any(Number) },
+    tilt:{ api:expect.any(Boolean), observedSamples:expect.any(Number) },
+    usesCoalescedSamples:expect.any(Boolean),
+    usesPredictedSamples:expect.any(Boolean),
+    usesTilt:expect.any(Boolean)
+  });
   expect(result.input.visualViewport.available).toBe(true);
   expect(result.visualViewportResizeObserved).toBe(true);
   expect(result.orientationChangeObserved).toBe(true);
