@@ -1,6 +1,6 @@
 # OpenShop
 
-![Version](https://img.shields.io/badge/version-0.29.0-blue)
+![Version](https://img.shields.io/badge/version-0.30.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Browser-orange)
 ![Zero Install](https://img.shields.io/badge/install-none_required-brightgreen)

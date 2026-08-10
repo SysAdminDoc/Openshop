@@ -4,6 +4,8 @@ All notable changes to Openshop will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.30.0] - 2026-08-10
+
 ### Added
 - Added native-first HEIC/HEIF and JPEG XL import with separately SHA-384-verified, lazy WASM decoder fallbacks and installed-app file-handler coverage.
 - Added read-only C2PA Content Credentials import validation with marker-gated, SHA-384-verified lazy runtimes, bounded manifest-chain and validation reporting in Image Information, project metadata persistence, and explicit no-signing export notices.

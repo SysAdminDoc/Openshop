@@ -1,7 +1,7 @@
 {
   "kind": "openshop-document",
   "schemaVersion": 2,
-  "appVersion": "0.29.0",
+  "appVersion": "0.30.0",
   "document": { "id": "corpus-v2-document", "name": "Mask Animation Corpus" },
   "canvas": {
     "width": 96,
