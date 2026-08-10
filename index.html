@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-wCJw2vaJNGRoULgh2J9Fvsq77oiPYRYRD3e8tSmfLmY=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-Iphj+dlfPNtLO2ZMmxzeA03pLZhYAslrXhEvlGmKXqk=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -924,7 +924,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 .cmd-item{padding:9px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;border-radius:6px;transition:background .1s var(--ease-out)}
 .cmd-item:hover,.cmd-item.active{background:var(--accent-dim)}
 .toast{display:flex;align-items:center;gap:12px}
-.toast-undo{padding:3px 10px;font-size:11.5px;flex:none}
+.toast-undo{min-height:24px;padding:3px 10px;font-size:11.5px;flex:none}
 .cmd-item.cmd-empty{cursor:default;color:var(--text-muted);font-size:12px}
 .cmd-item.cmd-empty:hover{background:transparent}
 .cmd-item .cmd-label{flex:1;font-size:13px;color:var(--text-primary)}
@@ -4507,7 +4507,7 @@ const OS = {
         if (actual !== match[2]) throw new Error('Runtime asset integrity check failed');
         return true;
     },
-    async _fetchVerifiedRuntimeAsset(name) {
+    async _fetchVerifiedRuntimeAsset(name, { report = true } = {}) {
         if (!Object.prototype.hasOwnProperty.call(this._runtimeAssets, name)) {
             throw new Error(`Unknown runtime asset: ${name}`);
         }
@@ -4531,15 +4531,22 @@ const OS = {
                 }
             })().catch(error => {
                 this._runtimeAssetPromises.delete(name);
+                if (report) {
+                    this._reportFailure(`Runtime asset ${name}`, error, {
+                        key:`runtime-asset:${name}`,
+                        retry:() => this._fetchVerifiedRuntimeAsset(name),
+                        detail:{ asset:name }
+                    });
+                }
                 throw error;
             });
             this._runtimeAssetPromises.set(name, pending);
         }
         return this._runtimeAssetPromises.get(name);
     },
-    async _verifiedRuntimeBlobUrl(name) {
+    async _verifiedRuntimeBlobUrl(name, { report = true } = {}) {
         if (!this._runtimeBlobPromises.has(name)) {
-            const pending = this._fetchVerifiedRuntimeAsset(name)
+            const pending = this._fetchVerifiedRuntimeAsset(name, { report })
                 .then(({asset, bytes}) => createOpenShopScriptBlobUrl(new Blob([bytes], {type:asset.type})))
                 .catch(error => {
                     this._runtimeBlobPromises.delete(name);
@@ -4558,7 +4565,7 @@ const OS = {
         if (globalThis[globalName]) return globalThis[globalName];
         if (!this._verifiedScriptPromises.has(name)) {
             const pending = (async () => {
-                const url = await this._verifiedRuntimeBlobUrl(name);
+                const url = await this._verifiedRuntimeBlobUrl(name, { report:false });
                 await new Promise((resolve, reject) => {
                     const element = document.createElement('script');
                     element.src = OPENSHOP_TRUSTED_SCRIPT_URL(url);
@@ -4570,6 +4577,11 @@ const OS = {
                 return globalThis[globalName];
             })().catch(error => {
                 this._verifiedScriptPromises.delete(name);
+                this._reportFailure(`Runtime script ${name}`, error, {
+                    key:`runtime-script:${name}`,
+                    retry:() => this._executeVerifiedRuntimeScript(name, globalName),
+                    detail:{ asset:name }
+                });
                 throw error;
             });
             this._verifiedScriptPromises.set(name, pending);
@@ -12455,7 +12467,9 @@ self.onmessage = function(event) {
             const vpt = this.canvas.viewportTransform, canvasCtx = this.canvas.getContext('2d');
             const screenX = ptr.x * vpt[0] + vpt[4], screenY = ptr.y * vpt[3] + vpt[5];
             try { canvasCtx.putImageData(dstData, screenX - r, screenY - r); } catch(e2) { console.debug('Clone preview clipped:', e2.message); }
-        } catch(e) { console.warn('Clone stroke error:', e.message); }
+        } catch(e) {
+            this._reportFailure('Clone stroke', e, { key:'clone-stroke' });
+        }
     },
 
     // ====================== MAGIC WAND ======================
@@ -16352,7 +16366,13 @@ self.onmessage = function(event) {
         // but the protocol version.
         try {
             window.parent.postMessage({ type:'openshop:ready', version:this._embedProtocolVersion }, '*');
-        } catch (error) { console.warn('Embed announce failed:', error.message); }
+        } catch (error) {
+            this._reportFailure('Embed announce', error, {
+                key:'embed-announce',
+                retry:() => window.parent.postMessage({ type:'openshop:ready', version:this._embedProtocolVersion }, '*'),
+                detail:{ channel:'parent' }
+            });
+        }
         return true;
     },
     _postEmbed(message) {
@@ -16362,7 +16382,11 @@ self.onmessage = function(event) {
             host.source.postMessage({ version:this._embedProtocolVersion, ...message }, host.target);
             return true;
         } catch (error) {
-            console.warn('Embed reply failed:', error.message);
+            this._reportFailure('Embed reply', error, {
+                key:'embed-reply',
+                retry:() => host.source.postMessage({ version:this._embedProtocolVersion, ...message }, host.target),
+                detail:{ channel:'parent' }
+            });
             return false;
         }
     },
@@ -16735,11 +16759,16 @@ self.onmessage = function(event) {
             this._watchPWARegistration(ready);
             await this._refreshOfflineStatus();
             requestAnimationFrame(() => requestAnimationFrame(() => void this._confirmOfflineBoot()));
+            this._clearFailureNotice('offline-setup');
         } catch(error) {
-            console.warn('Hosted offline setup failed:', error);
             this._setOfflineState({
                 shellReady:false,
                 error:`Offline setup failed: ${error.message}`
+            });
+            this._reportFailure('Hosted offline setup', error, {
+                key:'offline-setup',
+                retry:() => this._registerHostedPWA(),
+                detail:{ lane:'hosted' }
             });
         }
     },
@@ -16768,21 +16797,29 @@ self.onmessage = function(event) {
             }
             const target = navigator.serviceWorker.controller || registration?.active;
             if (!target) {
-                return this._setOfflineState({
+                const next = this._setOfflineState({
                     shellReady:false,
                     updateReady:Boolean(registration?.waiting),
                     error:null
                 });
+                this._clearFailureNotice('offline-status');
+                return next;
             }
             const status = await this._requestOfflineWorker('OPENSHOP_GET_STATUS', {}, target);
-            return this._setOfflineState({
+            const next = this._setOfflineState({
                 ...status,
                 online:navigator.onLine !== false,
                 updateReady:Boolean(registration?.waiting),
                 error:status.shellReady ? null : 'The hosted shell cache is incomplete.'
             });
+            this._clearFailureNotice('offline-status');
+            return next;
         } catch(error) {
-            console.debug('Offline status unavailable:', error.message);
+            this._reportFailure('Offline status', error, {
+                key:'offline-status',
+                retry:() => this._refreshOfflineStatus(),
+                detail:{ lane:'hosted' }
+            });
             return this._setOfflineState({ shellReady:false, error:error.message });
         }
     },
@@ -16802,10 +16839,15 @@ self.onmessage = function(event) {
                 revision:status.activeRevision
             });
             this._setOfflineState({ ...confirmed, error:null });
+            this._clearFailureNotice('offline-boot-confirmation');
             return true;
         } catch(error) {
-            console.warn('Offline shell health confirmation failed:', error);
             this._setOfflineState({ error:error.message });
+            this._reportFailure('Offline shell health confirmation', error, {
+                key:'offline-boot-confirmation',
+                retry:() => this._confirmOfflineBoot(),
+                detail:{ lane:'hosted' }
+            });
             return false;
         }
     },
@@ -16903,7 +16945,11 @@ self.onmessage = function(event) {
                 }
             }
         } catch(error) {
-            console.debug('AI cache inventory unavailable:', error.message);
+            this._reportFailure('AI model cache inventory', error, {
+                key:'ai-model-cache-inventory',
+                retry:() => this._inspectAIAssetCache(),
+                detail:{ cache:'browser' }
+            });
         }
         return models;
     },
@@ -17215,9 +17261,7 @@ self.onmessage = function(event) {
         }
         return operation();
     },
-    async _initAutoSave() {
-        if (!navigator.storage?.getDirectory) return;
-        this._initRecoveryCoordination();
+    async _checkAutoSaveRecovery() {
         try {
             await this._migrateLegacyRecovery();
             const info = await this._getRecoveryInfo();
@@ -17226,8 +17270,22 @@ self.onmessage = function(event) {
             } else if (info.generations.some(generation => generation.corrupt)) {
                 this.toast('Only corrupt recovery generations were found. Open Recovery Storage to export or discard them.', 'error');
             }
-        } catch(e) { console.warn('Auto-save check failed:', e); }
-        this._autoSaveTimer = setInterval(() => this._autoSave(), 30000);
+            this._clearFailureNotice('auto-save-recovery-check');
+            return true;
+        } catch(e) {
+            this._reportFailure('Auto-save recovery check', e, {
+                key:'auto-save-recovery-check',
+                retry:() => this._checkAutoSaveRecovery(),
+                detail:{ storage:'opfs' }
+            });
+            return false;
+        }
+    },
+    async _initAutoSave() {
+        if (!navigator.storage?.getDirectory) return;
+        this._initRecoveryCoordination();
+        await this._checkAutoSaveRecovery();
+        if (!this._autoSaveTimer) this._autoSaveTimer = setInterval(() => this._autoSave(), 30000);
     },
     _formatBytes(bytes) {
         const n = Number(bytes || 0);
@@ -18126,7 +18184,11 @@ self.onmessage = async function(event) {
             if (this._documentGeneration !== generation) return false;
             this._autoSaveDirty = true;
             this._setPersistenceState('error', e);
-            console.warn('Auto-save failed:', e);
+            this._reportFailure('Auto-save', e, {
+                key:'auto-save-write',
+                retry:() => this._autoSave(),
+                detail:{ storage:'opfs' }
+            });
             return false;
         }
     },
@@ -18370,7 +18432,9 @@ self.onmessage = async function(event) {
                 const sX = ptr.x*vpt[0]+vpt[4], sY = ptr.y*vpt[3]+vpt[5];
                 try { dCtx.putImageData(imgData, sX-(lx-x0)*vpt[0], sY-(ly-y0)*vpt[3]); } catch(e2) { console.debug('Heal preview clipped:', e2.message); }
             }
-        } catch(e) { console.warn('Heal stroke error:', e.message); }
+        } catch(e) {
+            this._reportFailure('Heal stroke', e, { key:'heal-stroke' });
+        }
     },
 
     // ====================== MEASURE TOOL ======================
@@ -19636,7 +19700,10 @@ self.onmessage = async function(event) {
             const ch = this._histChannel;
             const arr = ch === 'red' ? bins.r : ch === 'green' ? bins.g : ch === 'blue' ? bins.b : bins.l;
             const max = Math.max(...arr);
-            if (max === 0) return;
+            if (max === 0) {
+                this._clearFailureNotice('histogram');
+                return;
+            }
             const colors = { luminance: 'rgba(200,200,200,0.8)', red: 'rgba(255,80,80,0.8)', green: 'rgba(80,255,80,0.8)', blue: 'rgba(80,120,255,0.8)' };
             ctx.fillStyle = colors[ch] || colors.luminance;
             const w = cv.width / 256;
@@ -19650,7 +19717,10 @@ self.onmessage = async function(event) {
             const mean = total > 0 ? Math.round(sum / total) : 0;
             const minEl = document.getElementById('hist-min'), meanEl = document.getElementById('hist-mean'), maxEl = document.getElementById('hist-max');
             if (minEl) { minEl.textContent = `Min: ${min}`; meanEl.textContent = `Mean: ${mean}`; maxEl.textContent = `Max: ${mx}`; }
-        } catch(e) { console.debug('Histogram update skipped:', e.message); }
+            this._clearFailureNotice('histogram');
+        } catch(e) {
+            this._reportFailure('Histogram update', e, { key:'histogram' });
+        }
     },
 
     // ====================== COLOR WHEEL ======================
@@ -22722,9 +22792,14 @@ self.onmessage = async function(e) {
             img.onload = () => {
                 const dx = (w - this.canvasW * scale) / 2, dy = (h - this.canvasH * scale) / 2;
                 ctx.drawImage(img, dx, dy, this.canvasW * scale, this.canvasH * scale);
+                this._clearFailureNotice('minimap');
                 this._updateMinimapViewport();
-            }; img.src = dataUrl;
-        } catch(e) { console.debug('Minimap update skipped:', e.message); }
+            };
+            img.onerror = () => this._reportFailure('Minimap update', new Error('Thumbnail image could not be decoded'), { key:'minimap' });
+            img.src = dataUrl;
+        } catch(e) {
+            this._reportFailure('Minimap update', e, { key:'minimap' });
+        }
     },
     _minimapClick(e) {
         const wrap = document.getElementById('minimap-wrap');
@@ -24086,7 +24161,9 @@ self.onmessage = async function(e) {
             const dCtx = this.canvas.getContext('2d');
             const sx = ptr.x * vpt[0] + vpt[4], sy = ptr.y * vpt[3] + vpt[5];
             try { dCtx.putImageData(imgData, sx-(lx-x0)*vpt[0], sy-(ly-y0)*vpt[3]); } catch(e2) { console.debug('Retouch preview clipped:', e2.message); }
-        } catch(e) { console.warn('Retouch stroke error:', e.message); }
+        } catch(e) {
+            this._reportFailure('Retouch stroke', e, { key:'retouch-stroke' });
+        }
     },
     // ====================== VIBRANCE ======================
     adjVibrance() {
@@ -24993,10 +25070,15 @@ self.onmessage = async function(e) {
             }
             lib.env.useBrowserCache = true;
             lib.env.useWasmCache = true;
+            this._clearFailureNotice('ai-runtime-cache-write');
             return true;
         } catch (error) {
-            console.warn('Verified AI runtime cache unavailable:', error.message);
             lib.env.useWasmCache = false;
+            this._reportFailure('AI runtime cache', error, {
+                key:'ai-runtime-cache-write',
+                retry:() => this._cacheVerifiedAIBackendAssets(lib, resources),
+                detail:{ cache:this._aiRuntimeCacheKey }
+            });
             return false;
         }
     },
@@ -25016,20 +25098,25 @@ self.onmessage = async function(e) {
                     ? declared
                     : (await response.clone().blob()).size;
             }
+            this._clearFailureNotice('ai-runtime-cache-inventory');
         } catch (error) {
-            console.debug('AI runtime cache inventory unavailable:', error.message);
+            this._reportFailure('AI runtime cache inventory', error, {
+                key:'ai-runtime-cache-inventory',
+                retry:() => this._inspectAIBackendCache(),
+                detail:{ cache:this._aiRuntimeCacheKey }
+            });
         }
         return result;
     },
-    async _loadTransformers(job = null) {
+    async _loadTransformers(job = null, { report = true } = {}) {
         if (this._aiLib) return this._aiLib;
         this._showAIProgress('Loading Transformers.js', 'Verifying AI runtime and inference engine...', job);
         try {
             const backendNames = this._aiBackendAssetNames();
             const loading = Promise.all([
-                this._verifiedRuntimeBlobUrl('transformers'),
-                this._fetchVerifiedRuntimeAsset(backendNames.wasm),
-                this._fetchVerifiedRuntimeAsset(backendNames.factory)
+                this._verifiedRuntimeBlobUrl('transformers', { report:false }),
+                this._fetchVerifiedRuntimeAsset(backendNames.wasm, { report:false }),
+                this._fetchVerifiedRuntimeAsset(backendNames.factory, { report:false })
             ]);
             const [moduleUrl, wasm, factory] = job ? await this._raceComputeJob(loading, job) : await loading;
             const importing = import(OPENSHOP_TRUSTED_SCRIPT_URL(moduleUrl));
@@ -25053,10 +25140,17 @@ self.onmessage = async function(e) {
             wasmConfig.numThreads = 1;
             wasmConfig.proxy = false;
             this._aiLib = lib;
+            this._clearFailureNotice('ai-runtime-load');
             return lib;
         } catch(e) {
             this._hideAIProgress(job);
-            if (!this._isComputeAbort(e)) this.toast('Failed to load AI library: ' + e.message, 'error');
+            if (!this._isComputeAbort(e) && report) {
+                this._reportFailure('Failed to load AI library', e, {
+                    key:'ai-runtime-load',
+                    retry:() => this._loadTransformers(),
+                    detail:{ runtime:'Transformers.js' }
+                });
+            }
             throw e;
         }
     },
@@ -25128,7 +25222,7 @@ self.onmessage = async function(e) {
     // plumbing, dispose-on-cancel and failure toast were written twice, so any
     // change to the download experience had to land in both places. Resolves to
     // an array of loaded artefacts, or null if the load did not happen.
-    async _loadModelArtifacts({ job = null, jobKind, busyMessage, title, failure, modelSpec = null }, start) {
+    async _loadModelArtifacts({ job = null, jobKind, busyMessage, title, failure, modelSpec = null, retry = null }, start) {
         const operation = job || this._startComputeJob(jobKind, { group:'image-processing' });
         const ownsJob = !job;
         if (this._aiModelLoadBusy()) {
@@ -25138,7 +25232,7 @@ self.onmessage = async function(e) {
         }
         this._aiLoadingJobId = operation.id;
         try {
-            const lib = await this._loadTransformers(operation);
+            const lib = await this._loadTransformers(operation, { report:false });
             const device = await this._raceComputeJob(this._selectAIDevice(), operation);
             const footprint = modelSpec
                 ? await this._raceComputeJob(this._modelDownloadFootprint(lib, { ...modelSpec, device }), operation)
@@ -25160,8 +25254,11 @@ self.onmessage = async function(e) {
         } catch(e) {
             this._hideAIProgress(operation);
             if (this._isComputeAbort(e)) throw e;
-            this.toast(failure + ': ' + e.message, 'error');
-            console.error(failure + ':', e);
+            this._reportFailure(failure, e, {
+                key:`ai-model:${jobKind || failure}`,
+                retry,
+                detail:{ model:modelSpec?.model || 'unknown' }
+            });
             return null;
         } finally {
             if (this._aiLoadingJobId === operation.id) this._aiLoadingJobId = null;
@@ -25182,7 +25279,8 @@ self.onmessage = async function(e) {
             busyMessage: 'Another AI model is loading, please wait',
             title: 'Downloading ' + label + ' Model',
             failure: 'Failed to load ' + label,
-            modelSpec:{ task, model, revision, dtype }
+            modelSpec:{ task, model, revision, dtype },
+            retry:() => this._loadPipeline(task, model, label, null, loadOptions)
         }, (lib, device, onProgress) => lib.pipeline(task, model, {
             dtype,
             device,
@@ -25209,7 +25307,8 @@ self.onmessage = async function(e) {
             busyMessage: 'Another AI model is loading, please wait',
             title: 'Downloading Segment Select Model',
             failure: 'Failed to load Segment Select',
-            modelSpec:{ model, revision, dtype }
+            modelSpec:{ model, revision, dtype },
+            retry:() => this._loadSegmentArtifacts(null)
         }, (lib, device, onProgress) => [
             lib.SamModel.from_pretrained(model, {
                 device,
@@ -26920,6 +27019,64 @@ self.onmessage = async function(e) {
         this._announceAccessibility(msg);
         return t;
     },
+    _toastWithAction(msg, actionLabel = null, onAction = null, {
+        type = 'info', duration = 9000, diagnosticRecorded = false
+    } = {}) {
+        const container = document.getElementById('toast-container');
+        if (!container) return null;
+        while (container.children.length >= this._maxToasts) container.firstElementChild.remove();
+        const t = document.createElement('div');
+        t.className = `toast ${type}`;
+        const text = document.createElement('span');
+        text.textContent = this._t(msg);
+        t.appendChild(text);
+        let button = null;
+        if (actionLabel && typeof onAction === 'function') {
+            button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'btn toast-undo';
+            button.textContent = this._t(actionLabel);
+            button.setAttribute('aria-label', `${this._t(actionLabel)}: ${this._t(msg)}`);
+            t.appendChild(button);
+        }
+        let dismissed = false;
+        const dismiss = () => {
+            if (dismissed) return;
+            dismissed = true;
+            t.classList.remove('show');
+            setTimeout(() => t.remove(), 300);
+        };
+        let timer = setTimeout(dismiss, duration);
+        if (button) {
+            button.addEventListener('click', event => {
+                event.stopPropagation();
+                if (button.disabled) return;
+                button.disabled = true;
+                clearTimeout(timer);
+                dismiss();
+                try {
+                    void Promise.resolve(onAction()).catch(() => {});
+                } catch (error) {
+                    // The reporter's retry wrapper handles the failure. Keep
+                    // this boundary safe if a future action is synchronous.
+                }
+            });
+        }
+        t.addEventListener('click', event => {
+            if (event.target === button) return;
+            clearTimeout(timer);
+            dismiss();
+        });
+        t.addEventListener('mouseenter', () => clearTimeout(timer));
+        t.addEventListener('mouseleave', () => { if (!dismissed) timer = setTimeout(dismiss, 1200); });
+        container.appendChild(t);
+        requestAnimationFrame(() => t.classList.add('show'));
+        this._announceAccessibility(msg);
+        if ((type === 'error' || type === 'warning') && !diagnosticRecorded) {
+            this.recordDiagnostic(type === 'error' ? 'error' : 'warning', msg);
+        }
+        return t;
+    },
     // ====================== DIAGNOSTICS ======================
     // Failures reached the user as a toast and the developer as nothing. Every
     // issue filed against this project so far is prose and a screenshot,
@@ -26928,6 +27085,42 @@ self.onmessage = async function(e) {
     _diagnostics: [],
     _diagnosticsLimit: 200,
     _diagnosticsErrors: 0,
+    _failureNoticeKeys: new Set(),
+    _reportedFailureErrors: new WeakSet(),
+    _clearFailureNotice(key) {
+        if (key) this._failureNoticeKeys.delete(String(key));
+    },
+    _reportFailure(stage, error, { retry = null, detail = null, key = stage } = {}) {
+        const errorObject = error && (typeof error === 'object' || typeof error === 'function') ? error : null;
+        if (errorObject && this._reportedFailureErrors.has(errorObject)) return null;
+        const failureKey = key ? String(key) : null;
+        if (failureKey && this._failureNoticeKeys.has(failureKey)) return null;
+        if (errorObject) this._reportedFailureErrors.add(errorObject);
+        if (failureKey) this._failureNoticeKeys.add(failureKey);
+        const cause = error?.message || String(error || 'Unknown error');
+        const message = `${stage}: ${this._safeText(cause, 220)}`;
+        const diagnosticDetail = {
+            operation:String(stage),
+            ...(detail && typeof detail === 'object' ? detail : {})
+        };
+        this.recordDiagnostic('error', message, diagnosticDetail);
+        const action = typeof retry === 'function'
+            ? () => {
+                this._clearFailureNotice(failureKey);
+                try {
+                    return Promise.resolve(retry()).catch(retryError => {
+                        this._reportFailure(stage, retryError, { retry, detail, key });
+                    });
+                } catch (retryError) {
+                    this._reportFailure(stage, retryError, { retry, detail, key });
+                    return false;
+                }
+            }
+            : null;
+        return this._toastWithAction(message, action ? 'Retry' : null, action, {
+            type:'error', diagnosticRecorded:true
+        });
+    },
     recordDiagnostic(kind, message, detail = null) {
         const entry = {
             at:new Date().toISOString(),
@@ -27013,6 +27206,8 @@ self.onmessage = async function(e) {
     clearDiagnostics() {
         this._diagnostics = [];
         this._diagnosticsErrors = 0;
+        this._failureNoticeKeys.clear();
+        this._reportedFailureErrors = new WeakSet();
         this._updateDiagnosticsBadge();
         this.toast('Diagnostics cleared', 'info');
         return true;

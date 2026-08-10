@@ -51,6 +51,10 @@ All notable changes to Openshop will be documented in this file.
   fullscreen now expose their current state visually and through `aria-checked`.
 
 ### Fixed
+- Silent recovery, editor-stroke, inspector, embed, offline, and AI runtime
+  failures now enter the diagnostics ring and show an accessible error toast;
+  recovery discovery, AI model loading, and verified runtime assets expose a
+  Retry action that reruns the failed operation without reloading the app.
 - Plugin sandbox iframes now use the manifest name for their accessible title, and
   the command palette now uses `magic-wand` plus the implemented Dodge, Burn,
   Sponge, and Smudge tool IDs.

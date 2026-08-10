@@ -1430,6 +1430,41 @@ describe('OpenShop core object', () => {
     expect(corruptModal.querySelector('.btn-primary').disabled).toBe(true);
   });
 
+  it('turns auto-save recovery discovery failures into retryable visible diagnostics', async () => {
+    const OS = loadOpenShop();
+    Object.defineProperty(navigator, 'storage', {
+      configurable: true,
+      value: { getDirectory: vi.fn() }
+    });
+    OS._initRecoveryCoordination = vi.fn();
+    OS._announceAccessibility = vi.fn();
+    OS._migrateLegacyRecovery = vi.fn()
+      .mockRejectedValueOnce(new Error('Recovery index unavailable'))
+      .mockResolvedValue(undefined);
+    OS._getRecoveryInfo = vi.fn().mockResolvedValue({ recoverable:null, generations:[] });
+
+    await OS._initAutoSave();
+
+    const toast = document.querySelector('#toast-container .toast.error');
+    expect(toast).not.toBeNull();
+    expect(toast.textContent).toContain('Auto-save recovery check: Recovery index unavailable');
+    expect(toast.querySelector('button').textContent).toBe('Retry');
+    expect(OS._diagnostics).toHaveLength(1);
+    expect(OS._diagnostics[0]).toMatchObject({
+      kind:'error',
+      message:'Auto-save recovery check: Recovery index unavailable',
+      detail:{ operation:'Auto-save recovery check', storage:'opfs' }
+    });
+
+    toast.querySelector('button').click();
+    await vi.waitFor(() => expect(OS._migrateLegacyRecovery).toHaveBeenCalledTimes(2));
+    expect(OS._getRecoveryInfo).toHaveBeenCalledTimes(1);
+    expect(OS._diagnostics).toHaveLength(1);
+
+    clearInterval(OS._autoSaveTimer);
+    OS._autoSaveTimer = null;
+  });
+
   it('retains bounded immutable recovery generations per document and globally', () => {
     const OS = loadOpenShop();
     OS._recoveryRetentionPerDocument = 3;
