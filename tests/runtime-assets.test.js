@@ -25,11 +25,11 @@ describe('canonical runtime asset manifest', () => {
   });
 
   test('matches the shipped page and service-worker manifests', () => {
-    expect(check(html)).toMatchObject({ bootAssets: 3, lazyAssets: 23 });
+    expect(check(html)).toMatchObject({ bootAssets: 3, lazyAssets: 27 });
     expect(checkServiceWorker(serviceWorker)).toMatchObject({
       requiredAssets: 12,
       optionalAssets: 4,
-      cacheableAssets: 26
+      cacheableAssets: 30
     });
   });
 
@@ -48,7 +48,7 @@ describe('canonical runtime asset manifest', () => {
 
   test('can produce a traceable package/license inventory', () => {
     const report = licenseReport();
-    expect(report).toHaveLength(26);
+    expect(report).toHaveLength(30);
     expect(report.every(asset => asset.packageName && asset.version && asset.url && asset.license)).toBe(true);
     expect(report.every(asset => !/not declared|unknown/i.test(asset.license))).toBe(true);
     expect(report.filter(asset => asset.packageName === 'modern-gif').every(asset => asset.license === 'MIT')).toBe(true);

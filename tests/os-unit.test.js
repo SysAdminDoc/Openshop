@@ -3525,6 +3525,61 @@ describe('raster metadata policy', () => {
   });
 });
 
+describe('Content Credentials metadata', () => {
+  it('keeps the C2PA runtime unloaded when the source has no marker', async () => {
+    const OS = loadOpenShop();
+    const loadC2PA = vi.spyOn(OS, '_loadC2PA');
+    const source = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]);
+
+    await expect(OS._readC2PAMetadata(source, 'image/png')).resolves.toBeNull();
+    expect(loadC2PA).not.toHaveBeenCalled();
+  });
+
+  it('normalizes the manifest chain and surfaces validation failures', async () => {
+    const OS = loadOpenShop();
+    const reader = {
+      activeLabel: vi.fn().mockResolvedValue('manifest-1'),
+      manifestStore: vi.fn().mockResolvedValue({
+        active_manifest:'manifest-1',
+        validation_status:[{ code:'claim.signature.valid', success:true }],
+        manifests:{
+          'manifest-1':{
+            title:'Edited source',
+            claim_generator:'OpenShop fixture',
+            instance_id:'urn:openshop:1',
+            ingredients:[{ title:'Camera original', relationship:'parentOf' }],
+            assertions:[{ label:'c2pa.actions', data:{ actions:[{ action:'c2pa.edits' }] } }]
+          },
+          'manifest-0':{
+            title:'Camera original',
+            validation_status:[{ code:'signingCredential.untrusted', success:false }]
+          }
+        }
+      }),
+      free:vi.fn().mockResolvedValue(undefined)
+    };
+    const fromBlob = vi.fn().mockResolvedValue(reader);
+    vi.spyOn(OS, '_loadC2PA').mockResolvedValue({ reader:{ fromBlob } });
+    const source = new TextEncoder().encode('synthetic c2pa marker');
+
+    const metadata = await OS._readC2PAMetadata(source, 'image/jpeg');
+
+    expect(fromBlob).toHaveBeenCalledWith('image/jpeg', expect.any(Blob));
+    expect(reader.free).toHaveBeenCalledTimes(1);
+    expect(metadata).toMatchObject({ detected:true, status:'invalid', activeLabel:'manifest-1' });
+    expect(metadata.manifests).toHaveLength(2);
+    expect(metadata.manifests[0]).toMatchObject({ title:'Edited source', ingredients:[{ title:'Camera original' }], actions:[{ action:'c2pa.edits' }] });
+    expect(metadata.validation).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code:'claim.signature.valid', status:'valid' }),
+      expect.objectContaining({ code:'signingCredential.untrusted', status:'invalid' })
+    ]));
+
+    OS._imageMetadata = OS._normalizeImageMetadata({ c2pa:metadata });
+    expect(OS._imageMetadataSummary()).toContain('Content Credentials: validation failed');
+    expect(OS._metadataExportPlan('png').warnings).toContain('Imported Content Credentials are read-only provenance; OpenShop does not sign or re-sign exports.');
+  });
+});
+
 describe('component treatment', () => {
   const source = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
   const fullCss = source.slice(source.indexOf('<style>'), source.lastIndexOf('</style>'));

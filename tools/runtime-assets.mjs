@@ -257,6 +257,72 @@ export const OPENSHOP_RUNTIME_ASSETS = Object.freeze([
     'Apache-2.0'
   ),
   asset(
+    'c2paModule',
+    'C2PA web reader module',
+    '@contentauth/c2pa-web',
+    '0.13.4',
+    'https://cdn.jsdelivr.net/npm/@contentauth/c2pa-web@0.13.4/+esm',
+    'sha384-XiKGtMoho/UT5RF3N91nZZzHNJTGYZEr8mw6iVe5zmLjvO++niUx7f0vWYtX4+/u',
+    'text/javascript',
+    'MIT',
+    makeProvenance({
+      verifiedFor:'0.13.4',
+      verifiedUrl:'https://cdn.jsdelivr.net/npm/@contentauth/c2pa-web@0.13.4/+esm',
+      embeddedDependencies:[
+        { packageName:'@contentauth/c2pa-types', version:'0.7.3' },
+        { packageName:'@contentauth/c2pa-wasm', version:'0.11.2' }
+      ],
+      dependencyFindings:[
+        {
+          packageName:'highgain',
+          declaredRange:'^0.1.0',
+          observedVersion:'0.1.0',
+          embedded:false,
+          reachable:true,
+          evidence:'The generated ESM imports highgain; OpenShop rewrites that import to the separately verified c2paHighgain asset.'
+        },
+        {
+          packageName:'ts-deepmerge',
+          declaredRange:'^8.0.0',
+          observedVersion:'8.0.0',
+          embedded:false,
+          reachable:true,
+          evidence:'The generated ESM imports ts-deepmerge; OpenShop rewrites that import to the separately verified c2paDeepmerge asset.'
+        }
+      ]
+    })
+  ),
+  asset(
+    'c2paHighgain',
+    'C2PA worker transport',
+    'highgain',
+    '0.1.0',
+    'https://cdn.jsdelivr.net/npm/highgain@0.1.0/+esm',
+    'sha384-nUjcIEz+lWetduemQYT80yPP4vZnzGpi5ByuqQAd4X8C2330hZOn3w91PMkMhpqR',
+    'text/javascript',
+    'ISC'
+  ),
+  asset(
+    'c2paDeepmerge',
+    'C2PA settings merge',
+    'ts-deepmerge',
+    '8.0.0',
+    'https://cdn.jsdelivr.net/npm/ts-deepmerge@8.0.0/+esm',
+    'sha384-97l76Yys/gRH/pN9a6OU8JjpnV+wUY+7yv6PiD11HuXjaQ4khO+W1iBNlVhzbJwr',
+    'text/javascript',
+    'ISC'
+  ),
+  asset(
+    'c2paWasm',
+    'C2PA WebAssembly reader',
+    '@contentauth/c2pa-wasm',
+    '0.11.2',
+    'https://cdn.jsdelivr.net/npm/@contentauth/c2pa-wasm@0.11.2/pkg/c2pa_bg.wasm',
+    'sha384-Ulh60/CRTblPxnFr7UHZiHmqQk0Sd9E1gwgUwKmB7nFSjLIxABXVRsh5AQ58G06C',
+    'application/wasm',
+    'MIT'
+  ),
+  asset(
     'onnxWasm',
     'ONNX Runtime WebAssembly',
     'onnxruntime-web',

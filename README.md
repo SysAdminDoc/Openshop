@@ -69,7 +69,7 @@ Batch processing accepts raster images plus an `openshop-command-sequence` JSON 
 
 Image **Open**, **Place**, clipboard **Paste**, and **Drop** share one format-and-intent router. Open replaces or creates the document; Place and Paste insert into the active document, and Drop opens on the blank workspace but places onto an existing document. Animated GIF, APNG, and WebP files retain their decoded frame timing when opened or dropped onto a blank workspace. When inserted into an existing document, the first frame is shown as a normal image while all frames and delays are retained on that object with the documented `first-frame-static` policy, so saving and reopening the project does not silently discard the animation source.
 
-Raster imports retain parsed EXIF/XMP in the document metadata. Export Settings offers `Preserve imported EXIF/XMP`, `Strip all metadata`, or `Strip location only` (the default); JPEG exports can carry the selected EXIF/XMP fields, while unsupported raster writers report that those fields were stripped. Image Information shows the detected source metadata and the default privacy policy.
+Raster imports retain parsed EXIF/XMP in the document metadata. Export Settings offers `Preserve imported EXIF/XMP`, `Strip all metadata`, or `Strip location only` (the default); JPEG exports can carry the selected EXIF/XMP fields, while unsupported raster writers report that those fields were stripped. Image Information shows the detected source metadata and the default privacy policy. Images carrying a C2PA marker are checked with the lazy, SHA-384-verified read-only Content Credentials reader; Image Information shows the active manifest, manifest chain, and validation status, including failures. OpenShop never signs or re-signs exports, and the export compatibility report says so explicitly.
 
 Use **Color → Swatches → Import** for ASE/GPL/JSON palettes, Photoshop ABR brush sets, or Photoshop GRD gradients. Imported brushes and gradients are bounded, sanitized, and retained in browser storage. Supported ABR tip pixels are stamped into raster layers with spacing, size, opacity, scatter, and pen-pressure dynamics; the import report names unsupported native descriptor, compression, or dynamics features rather than implying a faithful conversion.
 
@@ -233,6 +233,10 @@ Preferences.
 | [Photon](https://github.com/silvia-odwyer/photon) — `@silvia-odwyer/photon` 0.3.3 (Apache-2.0) | Optional WASM acceleration for supported pixel filters (loaded on demand) |
 | [jSquash AVIF](https://github.com/jamsinclair/jSquash) — `@jsquash/avif` 2.1.1 (Apache-2.0) | Deterministic AVIF encode/decode via libavif WASM (loaded on demand) |
 | [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) — `onnxruntime-web` 1.26.0-dev.20260416-b7804b056c (MIT) | WebAssembly inference runtime for AI features (loaded on demand) |
+| [C2PA web](https://github.com/contentauth/c2pa-js) — `@contentauth/c2pa-web` 0.13.4 (MIT) | Read-only Content Credentials manifest and validation reader (loaded only when a C2PA marker is detected) |
+| [C2PA WebAssembly](https://github.com/contentauth/c2pa-js) — `@contentauth/c2pa-wasm` 0.11.2 (MIT) | Content Credentials verification engine (loaded on demand with the reader) |
+| [highgain](https://github.com/contentauth/c2pa-js) — `highgain` 0.1.0 (ISC) | C2PA reader worker transport (loaded on demand with the reader) |
+| [ts-deepmerge](https://github.com/voodoocreation/ts-deepmerge) — `ts-deepmerge` 8.0.0 (ISC) | C2PA reader settings merge (loaded on demand with the reader) |
 | System font stacks | UI and monospace text without a third-party font request |
 
 Package names, exact versions, and SPDX identifiers in this table are checked
@@ -340,7 +344,7 @@ What OpenShop *does* fetch is program code — and, the first time you use an AI
 
 | Host | What comes from it | When |
 |---|---|---|
-| `cdn.jsdelivr.net` | Pinned, SHA-384-verified libraries and codecs (Fabric, ag-psd, jsPDF, Photon, GIF, AVIF, Transformers.js, ONNX Runtime) | Three at startup; the rest only when a feature that needs them is used |
+| `cdn.jsdelivr.net` | Pinned, SHA-384-verified libraries and codecs (Fabric, ag-psd, jsPDF, Photon, GIF, AVIF, Transformers.js, ONNX Runtime, C2PA reader) | Three at startup; the rest only when a feature that needs them is used |
 | `huggingface.co` / `*.hf.co` | Pinned AI model weights | First use of a given AI feature |
 | *(none)* | UI fonts use the device's system and monospace stacks | Page load |
 
@@ -353,7 +357,7 @@ One honest limitation: on the standalone `file://` lane a cold start needs the t
 ## Security
 
 - Core startup CDN scripts are version-pinned and loaded with [Subresource Integrity (SRI)](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity) hashes
-- PSD, Photon, GIF, AVIF, Transformers.js, and ONNX lazy runtime bytes are version-pinned, SHA-384 verified before execution, and discarded on any digest mismatch
+- PSD, Photon, GIF, AVIF, Transformers.js, ONNX, and C2PA lazy runtime bytes are version-pinned, SHA-384 verified before execution, and discarded on any digest mismatch
 - Verified lazy runtime byte buffers are released after initialization, temporary executable blob URLs are revoked at their last safe owner, and the lifecycle disposer clears shared codec, PDF, RAW, AI, and worker resources without retaining duplicate payloads
 - Static controls carry opaque action IDs resolved by a frozen listener registry; executable HTML event attributes are forbidden by the release security check
 - Recent files, saved palettes, templates, and photo presets render through DOM APIs so persisted values remain inert text

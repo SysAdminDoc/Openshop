@@ -369,18 +369,49 @@ test('shows imported image metadata and makes the export privacy policy explicit
     OS._imageMetadata = OS._normalizeImageMetadata({
       sourceFormat:'jpeg',
       exif:{ orientation:1, make:'OpenShop', model:'Camera', hasGps:true },
-      xmp:{ title:'Travel photo', hasLocation:true }
+      xmp:{ title:'Travel photo', hasLocation:true },
+      c2pa:{
+        detected:true,
+        status:'invalid',
+        activeLabel:'manifest-1',
+        manifests:[{ label:'manifest-1', title:'Travel source', ingredients:[{ title:'Camera original' }] }],
+        validation:[{ code:'signingCredential.untrusted', explanation:'Certificate could not be trusted.', status:'invalid' }]
+      }
     });
     OS.showImageInfo();
     OS.showExportSettings('jpeg');
   });
   await expect(page.locator('.modal-overlay').filter({ hasText:'Image Information' })).toContainText('OpenShop Camera');
+  await expect(page.locator('.c2pa-details')).toContainText('Travel source');
+  await expect(page.locator('.c2pa-details')).toContainText('Invalid — validation failed');
   const exportDialog = page.locator('.modal-overlay').filter({ hasText:'Export Settings' });
   await expect(exportDialog.locator('#es-metadata')).toHaveValue('strip-location');
   await expect(exportDialog.locator('#es-metadata option')).toHaveText([
     'Strip location only (recommended)', 'Preserve imported EXIF/XMP', 'Strip all metadata'
   ]);
   await expect.poll(() => page.evaluate(() => OS._getExportImpact('jpeg', { metadataPolicy:'preserve' }).warnings.some(warning => warning.includes('including location fields')))).toBe(true);
+});
+
+test('keeps the C2PA reader lazy and reports an unreadable detected marker', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(async () => {
+    const before = OS._runtimeResourceReport();
+    const absent = await OS._readC2PAMetadata(new Uint8Array([1, 2, 3, 4]), 'image/png');
+    const afterAbsent = OS._runtimeResourceReport();
+    const detected = await OS._readC2PAMetadata(new TextEncoder().encode('synthetic c2pa marker'), 'image/jpeg');
+    return {
+      absent,
+      before,
+      afterAbsent,
+      detected,
+      loaded:[...OS._runtimeLoadedAssets].filter(name => name.startsWith('c2pa'))
+    };
+  });
+  expect(result.absent).toBeNull();
+  expect(result.afterAbsent).toMatchObject({ retainedAssetBytes:result.before.retainedAssetBytes, loadedAssets:result.before.loadedAssets });
+  expect(result.detected).toMatchObject({ detected:true });
+  expect(['invalid', 'error']).toContain(result.detected.status);
+  expect(result.loaded).toEqual(expect.arrayContaining(['c2paModule', 'c2paWasm', 'c2paHighgain', 'c2paDeepmerge']));
 });
 
 test('opens a tagged Display P3 raster with an explicit working-space conversion and embeds it on export', async ({ page }) => {

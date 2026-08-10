@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10" id="theme-color-meta">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-5Xys7KB9Jtdsiqs5vqpI3JpkPXQktYoeMgjrfUG5FUA=' 'sha256-juIgeeN2bA52p9TA9ESOtP3QwWZTMC5BJnPwcvZi6HQ=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-AI1RkMtQdXpsyI97xMvbcaXhxaPFGso1GTonDhNDAs8=' 'sha256-7yFrtV+9yEIlONCikC6UNvaJ2ti4Ir0uwN+eUf7UQ4s=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // OpenShop-specific Fabric configuration. The editor uses Fabric 7's native
@@ -189,6 +189,7 @@ const bootDigest = async bytes => {
 // the sole place that can turn one of those strings into a script URL.
 const OPENSHOP_SCRIPT_URLS = new Set();
 const OPENSHOP_STATIC_SCRIPT_URLS = new Set();
+let OPENSHOP_VERIFIED_INLINE_WORKER_DEPTH = 0;
 let OPENSHOP_SCRIPT_POLICY = null;
 try {
     if (globalThis.trustedTypes?.createPolicy) {
@@ -244,7 +245,14 @@ if (typeof globalThis.Worker === 'function') {
     const OpenShopNativeWorker = globalThis.Worker;
     globalThis.Worker = class OpenShopTrustedWorker extends OpenShopNativeWorker {
         constructor(scriptURL, options) {
-            super(OPENSHOP_TRUSTED_SCRIPT_URL(scriptURL), options);
+            const raw = String(scriptURL);
+            const verifiedInline = OPENSHOP_VERIFIED_INLINE_WORKER_DEPTH > 0 && /^(?:blob:|data:)/i.test(raw);
+            if (verifiedInline) OPENSHOP_SCRIPT_URLS.add(raw);
+            try {
+                super(OPENSHOP_TRUSTED_SCRIPT_URL(raw), options);
+            } finally {
+                if (verifiedInline) OPENSHOP_SCRIPT_URLS.delete(raw);
+            }
         }
     };
 }
@@ -824,6 +832,13 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 .info-grid{display:grid;grid-template-columns:auto 1fr;gap:2px 8px}
 .info-grid dt{font-size:10px;color:var(--text-muted);text-align:right}
 .info-grid dd{font-size:10px;color:var(--text-secondary);font-family:'JetBrains Mono',monospace}
+.c2pa-details{margin-top:14px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--text-secondary)}
+.c2pa-details p{margin:0 0 6px}
+.c2pa-details ol,.c2pa-details ul{margin:6px 0 0;padding-left:20px}
+.c2pa-details li{margin:3px 0}
+.c2pa-details small{color:var(--text-muted);font-family:'JetBrains Mono',monospace}
+.c2pa-details .c2pa-muted{color:var(--text-muted)}
+.c2pa-details .c2pa-error,.c2pa-details .c2pa-validation li strong{color:var(--danger)}
 
 /* === LAYER STYLES PANEL === */
 .layer-style-row{display:flex;align-items:center;gap:6px;margin-bottom:5px;padding:4px 0}
@@ -4569,6 +4584,26 @@ const OS = {
             integrity:"sha384-3TA7bWonh/FGdhkvnr9EMFCoFqikJ5aJQEV8RlUgOmBFIF9z3W+h67aRdQPRxN9d",
             type:"application/javascript"
         }),
+        c2paModule: Object.freeze({
+            url:"https://cdn.jsdelivr.net/npm/@contentauth/c2pa-web@0.13.4/+esm",
+            integrity:"sha384-XiKGtMoho/UT5RF3N91nZZzHNJTGYZEr8mw6iVe5zmLjvO++niUx7f0vWYtX4+/u",
+            type:"text/javascript"
+        }),
+        c2paHighgain: Object.freeze({
+            url:"https://cdn.jsdelivr.net/npm/highgain@0.1.0/+esm",
+            integrity:"sha384-nUjcIEz+lWetduemQYT80yPP4vZnzGpi5ByuqQAd4X8C2330hZOn3w91PMkMhpqR",
+            type:"text/javascript"
+        }),
+        c2paDeepmerge: Object.freeze({
+            url:"https://cdn.jsdelivr.net/npm/ts-deepmerge@8.0.0/+esm",
+            integrity:"sha384-97l76Yys/gRH/pN9a6OU8JjpnV+wUY+7yv6PiD11HuXjaQ4khO+W1iBNlVhzbJwr",
+            type:"text/javascript"
+        }),
+        c2paWasm: Object.freeze({
+            url:"https://cdn.jsdelivr.net/npm/@contentauth/c2pa-wasm@0.11.2/pkg/c2pa_bg.wasm",
+            integrity:"sha384-Ulh60/CRTblPxnFr7UHZiHmqQk0Sd9E1gwgUwKmB7nFSjLIxABXVRsh5AQ58G06C",
+            type:"application/wasm"
+        }),
         onnxWasm: Object.freeze({
             url:"https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0-dev.20260416-b7804b056c/dist/ort-wasm-simd-threaded.asyncify.wasm",
             integrity:"sha384-ppxy8GpR5oK0pciZqI/PSDs0fl2gPFvA509fIkdyEwIAvXabDahpzW9fPyZq/fLs",
@@ -4621,6 +4656,10 @@ const OS = {
     _libRawBlobUrls: null,
     _avifEncoderPromise: null,
     _avifDecoderPromise: null,
+    _c2paPromise: null,
+    _c2paRuntime: null,
+    _c2paModuleUrl: null,
+    _c2paDependencyBlobNames: [],
     // Interactive image-filter previews use a separate low-resolution pipe.
     // Apply still runs against the original pixels; this cap keeps a 12 MP
     // slider drag from repeatedly filtering all 12 million pixels.
@@ -4675,6 +4714,11 @@ const OS = {
         };
     },
     _disposeRuntimeResources() {
+        void Promise.resolve(this._c2paRuntime?.dispose?.()).catch(() => {});
+        this._c2paRuntime = null;
+        this._c2paPromise = null;
+        this._c2paModuleUrl = null;
+        this._c2paDependencyBlobNames = [];
         const runtimeUrls = new Set([...this._runtimeScriptUrls(), ...this._runtimeBlobUrls.values()]);
         for (const url of runtimeUrls) this._revokeRuntimeScriptUrl(url);
         for (const url of Object.values(this._libRawBlobUrls || {})) {
@@ -4832,6 +4876,57 @@ const OS = {
     },
     _loadSvgToPdf() {
         return this._executeVerifiedRuntimeScript('svg2pdf', 'svg2pdf');
+    },
+    async _loadC2PA() {
+        if (this._c2paRuntime) return this._c2paRuntime;
+        if (!this._c2paPromise) {
+            const dependencyNames = ['c2paHighgain', 'c2paDeepmerge'];
+            this._c2paPromise = (async () => {
+                let moduleUrl = null;
+                let runtime = null;
+                try {
+                    const [moduleAsset, wasmAsset, highgainUrl, deepmergeUrl] = await Promise.all([
+                        this._fetchVerifiedRuntimeAsset('c2paModule', { report:false }),
+                        this._fetchVerifiedRuntimeAsset('c2paWasm', { report:false }),
+                        this._verifiedRuntimeBlobUrl('c2paHighgain', { report:false }),
+                        this._verifiedRuntimeBlobUrl('c2paDeepmerge', { report:false })
+                    ]);
+                    const source = new TextDecoder().decode(moduleAsset.bytes)
+                        .replaceAll('/npm/highgain@0.1.0/+esm', highgainUrl)
+                        .replaceAll('/npm/ts-deepmerge@8.0.0/+esm', deepmergeUrl);
+                    if (source.includes('/npm/highgain@0.1.0/+esm') || source.includes('/npm/ts-deepmerge@8.0.0/+esm')) {
+                        throw new Error('C2PA dependency imports could not be pinned to verified modules');
+                    }
+                    moduleUrl = this._createRuntimeScriptBlobUrl(new Blob([source], { type:moduleAsset.asset.type }));
+                    const module = await import(OPENSHOP_TRUSTED_SCRIPT_URL(moduleUrl));
+                    if (typeof module?.createC2pa !== 'function') throw new Error('Verified C2PA module did not expose createC2pa');
+                    const wasm = await WebAssembly.compile(wasmAsset.bytes);
+                    OPENSHOP_VERIFIED_INLINE_WORKER_DEPTH += 1;
+                    try {
+                        runtime = await module.createC2pa({ wasmSrc:wasm });
+                    } finally {
+                        OPENSHOP_VERIFIED_INLINE_WORKER_DEPTH = Math.max(0, OPENSHOP_VERIFIED_INLINE_WORKER_DEPTH - 1);
+                    }
+                    if (typeof runtime?.reader?.fromBlob !== 'function') throw new Error('Verified C2PA module did not expose its reader');
+                    this._c2paModuleUrl = moduleUrl;
+                    this._c2paDependencyBlobNames = dependencyNames.slice();
+                    moduleUrl = null;
+                    return this._c2paRuntime = runtime;
+                } catch (error) {
+                    try { await runtime?.dispose?.(); } catch (_) {}
+                    dependencyNames.forEach(name => this._releaseVerifiedRuntimeBlob(name));
+                    throw error;
+                } finally {
+                    this._releaseVerifiedRuntimeAsset('c2paModule');
+                    this._releaseVerifiedRuntimeAsset('c2paWasm');
+                    if (moduleUrl) this._revokeRuntimeScriptUrl(moduleUrl);
+                }
+            })().catch(error => {
+                this._c2paPromise = null;
+                throw error;
+            });
+        }
+        return this._c2paPromise;
     },
     async _loadLibRaw() {
         if (!this._libRawPromise) {
@@ -5659,7 +5754,7 @@ const OS = {
     _lastORAExportReport: null,
     _lastImportRaw: null,
     _lastImportExif: null,
-    _imageMetadata: { version:1, sourceFormat:null, exif:null, xmp:null, exifSegment:null, xmpSegment:null },
+    _imageMetadata: { version:1, sourceFormat:null, exif:null, xmp:null, exifSegment:null, xmpSegment:null, c2pa:null },
     _lastImportColorProfile: null,
     _lastRasterExportReport: null,
     _workingColorSpace: 'srgb',
@@ -7573,8 +7668,177 @@ const OS = {
             valid:Boolean(parsed || !iccData)
         };
     },
+    _c2paList(value) {
+        if (Array.isArray(value)) return value;
+        if (!value || typeof value !== 'object') return [];
+        return Object.entries(value).map(([label, entry]) => entry && typeof entry === 'object' && !Array.isArray(entry)
+            ? { label, ...entry }
+            : { label, value:entry });
+    },
+    _normalizeC2PAValidation(entries) {
+        return this._c2paList(entries).slice(0, 64).map((entry, index) => {
+            const value = entry && typeof entry === 'object' ? entry : { status:entry };
+            const status = this._safeText(value.status || '', 80).toLowerCase();
+            const code = this._safeText(value.code || value.name || value.label || status || `validation-${index + 1}`, 120);
+            const explanation = this._safeText(value.explanation || value.message || value.description || value.value || '', 320);
+            const failed = value.success === false
+                || value.valid === false
+                || /(?:invalid|error|fail|mismatch|untrusted|revoked|expired|missing|unsupported|rejected)/i.test(`${status} ${code}`);
+            return {
+                code,
+                explanation:explanation || (failed ? 'Validation failed.' : 'Validation passed.'),
+                status:failed ? 'invalid' : 'valid'
+            };
+        });
+    },
+    _normalizeC2PAMetadata(metadata) {
+        const value = metadata && typeof metadata === 'object' ? metadata : null;
+        if (!value || (value.detected !== true && !['valid','invalid','error'].includes(String(value.status || '').toLowerCase()))) return null;
+        const bounded = (input, max = 240) => this._safeText(input || '', max) || null;
+        const sourceManifests = value.manifests && typeof value.manifests === 'object' ? value.manifests : {};
+        const manifests = this._c2paList(sourceManifests).slice(0, 32).map((entry, index) => {
+            const raw = entry && typeof entry === 'object' ? entry : {};
+            const assertions = this._c2paList(raw.assertions);
+            const actionAssertion = assertions.find(assertion => /(?:^|\.)actions$/i.test(String(assertion?.label || '')));
+            const actions = this._c2paList(raw.actions || actionAssertion?.data?.actions || actionAssertion?.actions).slice(0, 64).map(action => {
+                const item = action && typeof action === 'object' ? action : { action };
+                return {
+                    action:bounded(item.action || item.name || item.label, 120),
+                    when:bounded(item.when || item.timestamp, 80),
+                    softwareAgent:bounded(item.softwareAgent || item.software_agent, 160),
+                    description:bounded(item.description, 240)
+                };
+            }).filter(action => action.action || action.description);
+            const ingredients = this._c2paList(raw.ingredients).slice(0, 32).map(ingredient => {
+                const item = ingredient && typeof ingredient === 'object' ? ingredient : { title:ingredient };
+                return {
+                    title:bounded(item.title || item.name || item.label, 180),
+                    relationship:bounded(item.relationship, 80),
+                    instanceId:bounded(item.instance_id || item.instanceId, 180)
+                };
+            }).filter(ingredient => ingredient.title || ingredient.relationship || ingredient.instanceId);
+            const signatureValue = raw.signature_info || raw.signatureInfo || raw.signature;
+            const signature = signatureValue && typeof signatureValue === 'object' ? {
+                issuer:bounded(signatureValue.issuer || signatureValue.certificate_issuer, 180),
+                time:bounded(signatureValue.time || signatureValue.signing_time, 80),
+                algorithm:bounded(signatureValue.alg || signatureValue.algorithm, 80),
+                valid:signatureValue.valid === false ? false : signatureValue.valid === true ? true : null
+            } : null;
+            return {
+                label:bounded(raw.label || entry?.label || `manifest-${index + 1}`, 180),
+                title:bounded(raw.title || raw.claim?.title, 180),
+                claimGenerator:bounded(raw.claim_generator || raw.claimGenerator, 180),
+                instanceId:bounded(raw.instance_id || raw.instanceId, 180),
+                format:bounded(raw.format, 120),
+                signature,
+                ingredients,
+                actions,
+                validation:this._normalizeC2PAValidation(raw.validation_status || raw.validationStatus)
+            };
+        });
+        const validation = this._normalizeC2PAValidation(value.validation_status || value.validationStatus || value.validation);
+        const nestedValidation = manifests.flatMap(manifest => manifest.validation);
+        const allValidation = [...validation, ...nestedValidation].slice(0, 64);
+        const requestedStatus = String(value.status || '').toLowerCase();
+        const invalid = requestedStatus === 'invalid' || requestedStatus === 'error' || allValidation.some(item => item.status === 'invalid');
+        return {
+            version:1,
+            detected:true,
+            status:invalid ? (requestedStatus === 'error' ? 'error' : 'invalid') : 'valid',
+            activeLabel:bounded(value.activeLabel || value.active_manifest || value.activeManifest, 180),
+            manifests,
+            validation:allValidation,
+            error:bounded(value.error, 320)
+        };
+    },
+    _normalizeC2PAReport(store, activeLabel = null) {
+        const value = store && typeof store === 'object' ? store : {};
+        const manifests = value.manifests || value.manifestStore?.manifests || {};
+        return this._normalizeC2PAMetadata({
+            detected:true,
+            status:value.status,
+            activeLabel:activeLabel || value.active_manifest || value.activeManifest,
+            manifests,
+            validation_status:value.validation_status || value.validationStatus || value.validation_statuses
+        });
+    },
+    _hasPotentialC2PAMetadata(buffer, mime = '') {
+        const source = this._iccBytes(buffer);
+        if (!source?.byteLength) return false;
+        const type = String(mime || '').toLowerCase();
+        const hasAscii = needles => needles.some(needle => {
+            const target = String(needle).toLowerCase();
+            if (!target) return false;
+            for (let offset = 0; offset + target.length <= source.length; offset += 1) {
+                let match = true;
+                for (let index = 0; index < target.length; index += 1) {
+                    if (String.fromCharCode(source[offset + index]).toLowerCase() !== target[index]) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) return true;
+            }
+            return false;
+        });
+        if (/jpe?g|\.jpe?g$/.test(type) && source[0] === 0xFF && source[1] === 0xD8) {
+            for (let offset = 2; offset + 4 <= source.length;) {
+                if (source[offset] !== 0xFF) { offset += 1; continue; }
+                const marker = source[offset + 1];
+                if (marker === 0xDA) break;
+                if (marker === 0xEB) return true;
+                if (marker === 0xD8 || marker === 0xD9 || marker === 0x01 || marker >= 0xD0 && marker <= 0xD7) {
+                    offset += 2;
+                    continue;
+                }
+                const length = (source[offset + 2] << 8) | source[offset + 3];
+                if (length < 2 || offset + 2 + length > source.length) break;
+                offset += 2 + length;
+            }
+        }
+        return hasAscii(['c2pa', 'jumbf', 'cabx']);
+    },
+    async _readC2PAMetadata(buffer, mime = '') {
+        if (!this._hasPotentialC2PAMetadata(buffer, mime)) return null;
+        const rawType = String(mime || '').toLowerCase();
+        const type = ({
+            'image/apng':'image/png',
+            'image/jpg':'image/jpeg',
+            'image/heif-sequence':'image/heif',
+            jpg:'image/jpeg', jpeg:'image/jpeg', jpe:'image/jpeg', png:'image/png', apng:'image/png',
+            webp:'image/webp', avif:'image/avif', heic:'image/heic', heif:'image/heif', gif:'image/gif', svg:'image/svg+xml'
+        }[rawType] || {
+            jpg:'image/jpeg', jpeg:'image/jpeg', jpe:'image/jpeg', png:'image/png', apng:'image/png',
+            webp:'image/webp', avif:'image/avif', heic:'image/heic', heif:'image/heif', gif:'image/gif', svg:'image/svg+xml'
+        }[rawType.replace(/^.*\./, '')] || (rawType.startsWith('image/') ? rawType : 'application/octet-stream'));
+        let reader = null;
+        try {
+            const runtime = await this._loadC2PA();
+            const source = this._iccBytes(buffer);
+            reader = await runtime.reader.fromBlob(type, new Blob([source], { type }));
+            if (!reader) {
+                return this._normalizeC2PAMetadata({
+                    detected:true,
+                    status:'invalid',
+                    validation_status:[{ code:'c2pa.manifest-unreadable', explanation:'A Content Credentials marker was detected, but no readable manifest was found.', success:false }]
+                });
+            }
+            const [store, activeLabel] = await Promise.all([reader.manifestStore(), reader.activeLabel()]);
+            return this._normalizeC2PAReport(store, activeLabel);
+        } catch (error) {
+            this._reportFailure?.('C2PA validation', error, { key:'c2pa-validation', detail:{ mime:type } });
+            return this._normalizeC2PAMetadata({
+                detected:true,
+                status:'error',
+                error:error?.message || String(error),
+                validation_status:[{ code:'c2pa.validation-error', explanation:error?.message || String(error), success:false }]
+            });
+        } finally {
+            try { await reader?.free?.(); } catch (_) {}
+        }
+    },
     _emptyImageMetadata() {
-        return { version:1, sourceFormat:null, exif:null, xmp:null, exifSegment:null, xmpSegment:null };
+        return { version:1, sourceFormat:null, exif:null, xmp:null, exifSegment:null, xmpSegment:null, c2pa:null };
     },
     _normalizeImageMetadata(metadata) {
         const value = metadata && typeof metadata === 'object' ? metadata : {};
@@ -7609,12 +7873,13 @@ const OS = {
             exif,
             xmp,
             exifSegment:decode(value.exifSegment, 'data:application/vnd.openshop.exif;base64,'),
-            xmpSegment:decode(value.xmpSegment, 'data:application/vnd.openshop.xmp;base64,')
+            xmpSegment:decode(value.xmpSegment, 'data:application/vnd.openshop.xmp;base64,'),
+            c2pa:this._normalizeC2PAMetadata(value.c2pa)
         };
     },
     _imageMetadataSummary(metadata = this._imageMetadata) {
         const value = this._normalizeImageMetadata(metadata);
-        if (!value.exif && !value.xmp) return 'None detected';
+        if (!value.exif && !value.xmp && !value.c2pa) return 'None detected';
         const labels = [];
         if (value.exif) {
             const camera = [value.exif.make, value.exif.model].filter(Boolean).join(' ');
@@ -7627,7 +7892,41 @@ const OS = {
             else labels.push('XMP');
             if (value.xmp.hasLocation && !labels.includes('GPS location present')) labels.push('XMP location present');
         }
+        if (value.c2pa) {
+            const status = value.c2pa.status === 'valid' ? 'valid' : value.c2pa.status === 'invalid' ? 'validation failed' : 'validation unavailable';
+            labels.push(`Content Credentials: ${status}`);
+        }
         return labels.join(' · ') || 'Metadata present';
+    },
+    _c2paStatusLabel(metadata = this._imageMetadata?.c2pa) {
+        const value = this._normalizeC2PAMetadata(metadata);
+        if (!value) return 'None detected';
+        if (value.status === 'valid') return 'Valid';
+        if (value.status === 'invalid') return 'Invalid — validation failed';
+        return 'Unavailable — validation could not be completed';
+    },
+    _c2paInfoMarkup(metadata = this._imageMetadata?.c2pa) {
+        const value = this._normalizeC2PAMetadata(metadata);
+        if (!value) return '';
+        const validation = value.validation.length
+            ? `<ul class="c2pa-validation">${value.validation.map(item => `<li><strong>${this._esc(item.status === 'valid' ? 'Pass' : 'Fail')}</strong> ${this._esc(item.code)}: ${this._esc(item.explanation)}</li>`).join('')}</ul>`
+            : '<p class="c2pa-muted">No validation details were returned by the reader.</p>';
+        const manifests = value.manifests.length
+            ? `<ol class="c2pa-manifest-chain">${value.manifests.map(manifest => {
+                const heading = manifest.title || manifest.label || 'Unnamed manifest';
+                const details = [manifest.claimGenerator, manifest.instanceId, manifest.format].filter(Boolean).map(item => this._esc(item)).join(' · ');
+                const ingredients = manifest.ingredients.length
+                    ? `<div><small>Ingredients: ${manifest.ingredients.map(item => this._esc(item.title || item.instanceId || item.relationship || 'unnamed')).join(', ')}</small></div>`
+                    : '';
+                const actions = manifest.actions.length
+                    ? `<div><small>Actions: ${manifest.actions.map(item => this._esc(item.action || item.description || 'action')).join(', ')}</small></div>`
+                    : '';
+                return `<li><strong>${this._esc(heading)}</strong>${details ? `<div><small>${details}</small></div>` : ''}${ingredients}${actions}</li>`;
+            }).join('')}</ol>`
+            : '<p class="c2pa-muted">No readable manifest chain was returned.</p>';
+        const active = value.activeLabel ? `<p><small>Active manifest: ${this._esc(value.activeLabel)}</small></p>` : '';
+        const error = value.error ? `<p class="c2pa-error">${this._esc(value.error)}</p>` : '';
+        return `<div class="c2pa-details"><p><strong>${this._esc(this._c2paStatusLabel(value))}</strong></p>${active}${error}<div><strong>Manifest chain</strong>${manifests}</div><div><strong>Validation</strong>${validation}</div></div>`;
     },
     _normalizeAIMask(entry, { validate = false } = {}) {
         if (!entry || typeof entry !== 'object' || !entry.mask) return null;
@@ -9417,6 +9716,8 @@ const OS = {
             if (file.size > this._importLimits.maxJsonBytes) {
                 throw new Error(`SVG is larger than the ${Math.round(this._importLimits.maxJsonBytes / 1024 / 1024)} MB import limit`);
             }
+            const svgBytes = typeof file.arrayBuffer === 'function' ? await file.arrayBuffer() : null;
+            const c2pa = svgBytes ? await this._readC2PAMetadata(svgBytes, file.type || file.name || 'image/svg+xml') : null;
             const markup = this._sanitizeSVG(await file.text());
             const parsedDocument = new DOMParser().parseFromString(this._trustedHTML(markup), 'text/xml');
             const parsed = await fabric.parseSVGDocument(parsedDocument);
@@ -9432,6 +9733,10 @@ const OS = {
                 if (!await this._confirmDiscardUnsaved('Opening an SVG')) return false;
                 this.dismissWelcome();
                 this.createNewDocument(width, height, { resetProject:true });
+                if (c2pa) {
+                    this._imageMetadata = this._normalizeImageMetadata({ c2pa });
+                    this._lastImportExif = null;
+                }
             }
             const group = new fabric.Group(shapes);
             group.set({ name:'SVG', selectable:true });
@@ -9460,6 +9765,8 @@ const OS = {
             const buffer = typeof file.arrayBuffer === 'function' ? await file.arrayBuffer() : null;
             const exif = buffer ? this._readExif(buffer) : null;
             const imageMetadata = buffer ? this._readImageMetadata(buffer, file.type || file.name || '') : this._emptyImageMetadata();
+            const c2pa = buffer ? await this._readC2PAMetadata(buffer, file.type || file.name || '') : null;
+            if (c2pa) imageMetadata.c2pa = c2pa;
             const orientation = exif?.orientation;
             const embeddedProfile = buffer ? await this._readEmbeddedColorProfile(buffer, file.type || file.name || '') : null;
             const colorContext = embeddedProfile
@@ -9734,6 +10041,9 @@ const OS = {
         mode = this._resolveImportIntent(file, mode);
         try {
             const buffer = await file.arrayBuffer();
+            const imageMetadata = this._emptyImageMetadata();
+            const c2pa = await this._readC2PAMetadata(buffer, file.type || file.name || 'image/avif');
+            if (c2pa) imageMetadata.c2pa = c2pa;
             const embeddedProfile = await this._readEmbeddedColorProfile(buffer, file.type || file.name || 'image/avif');
             const colorContext = embeddedProfile
                 ? this._colorProfileImportContext(embeddedProfile, mode)
@@ -9758,6 +10068,7 @@ const OS = {
                 name:file.name || 'Imported AVIF',
                 mode,
                 colorProfile:embeddedProfile,
+                imageMetadata,
                 workingColorSpace:colorContext.targetSpace,
                 colorConversion:converted.conversion,
                 historyMode:actionModeSource
@@ -9771,7 +10082,7 @@ const OS = {
             return false;
         }
     },
-    async _installAnimationFrames(frames, delays, file, formatLabel, { intent = 'open', historyIntent = null, colorProfile = null, workingColorSpace = 'srgb', colorConversion = 'identity' } = {}) {
+    async _installAnimationFrames(frames, delays, file, formatLabel, { intent = 'open', historyIntent = null, colorProfile = null, imageMetadata = null, workingColorSpace = 'srgb', colorConversion = 'identity' } = {}) {
         if (!Array.isArray(frames) || !frames.length) throw new Error('Animated decoder returned no frames');
         const sourceIntent = historyIntent || intent;
         intent = this._resolveImportIntent(file, intent);
@@ -9781,6 +10092,7 @@ const OS = {
             mode:intent,
             openAction:`Opening animated ${formatLabel}`,
             colorProfile,
+            imageMetadata,
             workingColorSpace,
             colorConversion,
             animationAttachment:intent === 'open' ? null : { format:formatLabel, frames, delays },
@@ -9818,6 +10130,7 @@ const OS = {
         try {
             const generation = this._documentGeneration;
             const buffer = await file.arrayBuffer();
+            const c2pa = await this._readC2PAMetadata(buffer, file.type || file.name || (this._isAPNGFile(file) ? 'image/apng' : 'image/webp'));
             const embeddedProfile = await this._readEmbeddedColorProfile(buffer, file.type || file.name || '');
             const colorContext = embeddedProfile
                 ? this._colorProfileImportContext(embeddedProfile, mode)
@@ -9886,6 +10199,7 @@ const OS = {
                 intent:mode,
                 historyIntent:historyMode,
                 colorProfile:embeddedProfile,
+                imageMetadata:c2pa ? { ...this._emptyImageMetadata(), c2pa } : null,
                 workingColorSpace:colorContext.targetSpace,
                 colorConversion
             });
@@ -9914,6 +10228,7 @@ const OS = {
         try {
             const generation = this._documentGeneration;
             const buffer = await file.arrayBuffer();
+            const c2pa = await this._readC2PAMetadata(buffer, file.type || file.name || 'image/gif');
             const [codec, workerUrl] = await Promise.all([
                 this._loadGifCodec(),
                 this._verifiedRuntimeBlobUrl('gifWorker')
@@ -9951,7 +10266,11 @@ const OS = {
                 return;
             }
             const delays = gif.frames.map(frame => Number(frame.delay) || Math.round(1000 / 12));
-            return await this._installAnimationFrames(decodedFrames, delays, file, 'GIF', { intent:mode, historyIntent:historyMode });
+            return await this._installAnimationFrames(decodedFrames, delays, file, 'GIF', {
+                intent:mode,
+                historyIntent:historyMode,
+                imageMetadata:c2pa ? { ...this._emptyImageMetadata(), c2pa } : null
+            });
         } catch (e) {
             console.warn('GIF frame import failed, loading as static:', e.message);
             this.toast(`Animated import unavailable — ${e.message}. Loading the first frame instead.`, 'info');
@@ -10283,6 +10602,7 @@ const OS = {
         const normalizedPolicy = ['preserve','strip','strip-location'].includes(String(policy).toLowerCase()) ? String(policy).toLowerCase() : 'strip-location';
         const metadata = this._normalizeImageMetadata(this._imageMetadata);
         const warnings = [];
+        if (metadata.c2pa) warnings.push('Imported Content Credentials are read-only provenance; OpenShop does not sign or re-sign exports.');
         if (normalizedPolicy === 'strip') return { policy:normalizedPolicy, action:'stripped-all', fields:[], segments:[], warnings };
         if (!metadata.exifSegment && !metadata.xmpSegment) return { policy:normalizedPolicy, action:'no-source-metadata', fields:[], segments:[], warnings };
         if (normalizedFormat !== 'jpeg') {
@@ -10771,6 +11091,7 @@ const OS = {
         metadataPolicy = ['preserve','strip','strip-location'].includes(String(metadataPolicy || '').toLowerCase())
             ? String(metadataPolicy).toLowerCase()
             : 'strip-location';
+        if (metadata.c2pa) warnings.push('Imported Content Credentials are read-only provenance; OpenShop does not sign or re-sign exports.');
         if (metadata.exif || metadata.xmp) {
             if (metadataPolicy === 'preserve' && normalizedFormat !== 'jpeg') warnings.push(`${normalizedFormat.toUpperCase()} cannot carry imported EXIF/XMP APP1 metadata; it will be stripped.`);
             else if (metadataPolicy === 'preserve') warnings.push('Imported EXIF/XMP metadata will be preserved in the JPEG export, including location fields.');
@@ -20814,7 +21135,8 @@ self.onmessage = function(event) {
         Object.freeze({ label:'PSD import and export', assets:Object.freeze(['psdDecoder']) }),
         Object.freeze({ label:'Trace to Vector', assets:Object.freeze(['imageTracer']) }),
         Object.freeze({ label:'On-canvas gradient handles', assets:Object.freeze(['fabricExtensions']) }),
-        Object.freeze({ label:'AI features (model weights are fetched separately)', assets:Object.freeze(['transformers', 'onnxWasm', 'onnxWasmFactory']) })
+        Object.freeze({ label:'AI features (model weights are fetched separately)', assets:Object.freeze(['transformers', 'onnxWasm', 'onnxWasmFactory']) }),
+        Object.freeze({ label:'Content Credentials validation', assets:Object.freeze(['c2paModule', 'c2paWasm', 'c2paHighgain', 'c2paDeepmerge']) })
     ]),
     _network() {
         return window.__openshopNetwork || null;
@@ -24802,7 +25124,10 @@ self.onmessage = async function(event) {
         const objs = this.canvas.getObjects().filter(o => o.name !== '__boundary__');
         const imgObjs = objs.filter(o => o.type === 'image');
         const textObjs = objs.filter(o => o.type === 'i-text' || o.type === 'text' || o.type === 'textbox');
-        const metadataSummary = this._safeText(this._imageMetadataSummary(), 500);
+        const metadataSummary = this._esc(this._imageMetadataSummary(), 500);
+        const c2pa = this._normalizeC2PAMetadata(this._imageMetadata?.c2pa);
+        const c2paStatus = this._esc(this._c2paStatusLabel(c2pa));
+        const c2paDetails = this._c2paInfoMarkup(c2pa);
         const o = document.createElement('div'); o.className = 'modal-overlay';
         o.innerHTML = this._trustedHTML`<div class="modal"><h3>Image Information</h3>
             <dl class="info-grid" style="font-size:12px">
@@ -24817,9 +25142,11 @@ self.onmessage = async function(event) {
                 <dt>Zoom</dt><dd>${Math.round(this.zoom * 100)}%</dd>
                 <dt>Color Mode</dt><dd>RGB 8-bit</dd>
                 <dt>Source Metadata</dt><dd>${metadataSummary}</dd>
+                <dt>Content Credentials</dt><dd>${c2paStatus}</dd>
                 <dt>Export Metadata</dt><dd>Strip location by default</dd>
                 <dt>Est. Memory</dt><dd>~${Math.round(this.canvasW * this.canvasH * 4 / 1024 / 1024)} MB (uncompressed)</dd>
             </dl>
+            ${c2paDetails}
             <div class="modal-btns"><button class="btn" data-modal-close>Close</button></div></div>`;
         document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('show'));
     },
