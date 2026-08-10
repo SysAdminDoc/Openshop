@@ -44,6 +44,9 @@
         "image/gif": [
           ".gif"
         ],
+        "image/openraster": [
+          ".ora"
+        ],
         "image/vnd.adobe.photoshop": [
           ".psd"
         ],

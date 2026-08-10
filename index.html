@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-xSR5EFiM+aNAkl9CUXutIIC4TS1XlSD3jQ6IeavH6PQ=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-VJPt++DK30ZaDmskDd0J0F/UwEEz8WvCDRFj4Ckj+zo=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -3037,6 +3037,7 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
                     <div class="dd-item" data-os-click="click-007">SVG</div>
                     <div class="dd-item" data-os-click="click-008">PDF</div>
                     <div class="dd-item" data-os-click="click-009">PSD (Photoshop)</div>
+                    <div class="dd-item" data-os-click="click-233">OpenRaster (.ora)</div>
                 </div>
             </div>
             <div class="dd-item" data-os-click="click-010">Batch Export...</div>
@@ -3988,7 +3989,7 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
         <div class="ba-label after">After</div>
     </div>
 </div>
-<input type="file" id="file-input" accept="image/*,.pdf,application/pdf,.cr2,.cr3,.nef,.arw,.dng,.raf,.rw2,.orf,.srw,.pef,.raw" style="display:none" data-os-change="change-034">
+<input type="file" id="file-input" accept="image/*,.ora,image/openraster,.pdf,application/pdf,.cr2,.cr3,.nef,.arw,.dng,.raf,.rw2,.orf,.srw,.pef,.raw" style="display:none" data-os-change="change-034">
 <input type="file" id="psd-input" accept=".psd" style="display:none" data-os-change="change-035">
 <input type="file" id="project-input" accept=".openshop,.json,application/vnd.openshop+json,application/json" style="display:none" data-os-change="change-036">
 
@@ -4009,6 +4010,7 @@ const OS_EVENT_HANDLERS = Object.freeze({
         "click-007": function(event) { OS.saveFile('svg') },
         "click-008": function(event) { OS.exportPDF() },
         "click-009": function(event) { OS.exportPSD() },
+        "click-233": function(event) { OS.saveFile('ora') },
         "click-010": function(event) { OS.batchExport() },
         "click-011": function(event) { OS.showExportSettings() },
         "click-012": function(event) { OS.showTemplates() },
@@ -5357,6 +5359,8 @@ const OS = {
     _psdInterchange: null,
     _lastPSDImportReport: null,
     _lastPSDImportMetrics: null,
+    _lastORAImportReport: null,
+    _lastORAExportReport: null,
     _lastImportRaw: null,
     _lastImportColorProfile: null,
     _lastRasterExportReport: null,
@@ -5448,6 +5452,10 @@ const OS = {
         maxImageDimension: 30000,
         maxProjectObjects: 5000,
         maxProjectLayers: 512,
+        maxORAEntries: 640,
+        maxORALayerBytes: 64 * 1024 * 1024,
+        maxORATotalBytes: 100 * 1024 * 1024,
+        maxORADecodedBytes: 512 * 1024 * 1024,
         maxPaletteColors: 256,
         maxPresets: 200,
         maxAssetBytes: 64 * 1024 * 1024,
@@ -5952,6 +5960,8 @@ const OS = {
         this._lastDocumentExportReport = null;
         this._lastPSDImportReport = null;
         this._lastPSDImportMetrics = null;
+        this._lastORAImportReport = null;
+        this._lastORAExportReport = null;
         this._lastImportRaw = null;
         this._lastImportColorProfile = null;
         this._lastRasterExportReport = null;
@@ -6485,6 +6495,8 @@ const OS = {
         this._lastDocumentExportReport = null;
         this._lastPSDImportReport = null;
         this._lastPSDImportMetrics = null;
+        this._lastORAImportReport = null;
+        this._lastORAExportReport = null;
         this._lastPSDExportReport = null;
         this._lastImportColorProfile = null;
         this._lastRasterExportReport = null;
@@ -7983,7 +7995,7 @@ const OS = {
         if (window.showOpenFilePicker) {
             try {
                 const [handle] = await window.showOpenFilePicker({
-                    types: [{ description: 'Images, PDF, and RAW', accept: { 'image/*': ['.png','.jpg','.jpeg','.webp','.gif','.bmp','.svg'], 'application/pdf': ['.pdf'], 'application/octet-stream': ['.cr2','.cr3','.nef','.arw','.dng','.raf','.rw2','.orf','.srw','.pef','.raw'] } }]
+                    types: [{ description: 'Images, OpenRaster, PDF, and RAW', accept: { 'image/*': ['.png','.jpg','.jpeg','.webp','.gif','.bmp','.svg'], 'image/openraster': ['.ora'], 'application/pdf': ['.pdf'], 'application/octet-stream': ['.cr2','.cr3','.nef','.arw','.dng','.raf','.rw2','.orf','.srw','.pef','.raw'] } }]
                 });
                 const file = await handle.getFile();
                 this._handleFileLoad(file);
@@ -8472,6 +8484,10 @@ const OS = {
         }
     },
     _handleFileLoad(file) {
+        if (this._isORAFile(file)) {
+            void this._loadORAFile(file);
+            return;
+        }
         if (this._isRAWFile(file)) {
             void this._loadRAWFile(file);
             return;
@@ -8496,6 +8512,11 @@ const OS = {
             return;
         }
         void this._loadRasterFile(file);
+    },
+    _isORAFile(file) {
+        const type = String(file?.type || '').toLowerCase();
+        return ['image/openraster', 'application/openraster', 'application/x-openraster', 'application/ora'].includes(type)
+            || String(file?.name || '').toLowerCase().endsWith('.ora');
     },
     _isAvifFile(file) {
         return String(file?.type || '').toLowerCase() === 'image/avif'
@@ -8614,6 +8635,207 @@ const OS = {
             return added;
         } catch (err) {
             this.toast(err.message, 'error');
+            return false;
+        }
+    },
+    async _loadORAFile(file, { skipConfirm = false } = {}) {
+        const report = {
+            format:'ora',
+            direction:'import',
+            accepted:false,
+            warnings:[],
+            losses:[],
+            width:0,
+            height:0,
+            layerCount:0
+        };
+        try {
+            if (!this._isORAFile(file)) throw new Error('Unsupported OpenRaster file');
+            if (file.size > this._importLimits.maxImageBytes) throw new Error('OpenRaster file exceeds the 100 MB import limit');
+            if (!skipConfirm && !await this._confirmDiscardUnsaved('Opening an OpenRaster file')) return false;
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            const entries = await this._readORAZipEntries(bytes);
+            const byName = new Map(entries.map(entry => [entry.name, entry]));
+            const stackEntry = byName.get('stack.xml');
+            if (!stackEntry) throw new Error('OpenRaster is missing stack.xml');
+            const xml = new TextDecoder('utf-8', { fatal:true }).decode(stackEntry.bytes);
+            if (/[<][!](?:DOCTYPE|ENTITY)\b/i.test(xml)) throw new Error('OpenRaster XML declarations are not allowed');
+            const parsed = new DOMParser().parseFromString(this._trustedHTML(xml), 'application/xml');
+            if (!parsed?.documentElement || parsed.querySelector('parsererror')) throw new Error('OpenRaster stack.xml is not valid XML');
+            const root = parsed.documentElement;
+            if (root.localName !== 'image') throw new Error('OpenRaster stack.xml has no image root');
+            const integerAttribute = (node, name, fallback = 0) => {
+                const raw = node.getAttribute(name);
+                if (raw === null || raw.trim() === '') return fallback;
+                const value = Number(raw);
+                if (!Number.isFinite(value) || !Number.isInteger(value)) throw new Error(`OpenRaster ${name} must be an integer`);
+                return value;
+            };
+            const width = integerAttribute(root, 'w');
+            const height = integerAttribute(root, 'h');
+            if (width < 1 || height < 1) throw new Error('OpenRaster dimensions are invalid');
+            this._validateDecodedImage({ width, height });
+            report.width = width;
+            report.height = height;
+            const rootStack = [...root.children].find(child => child.localName === 'stack');
+            if (!rootStack) throw new Error('OpenRaster stack.xml has no root stack');
+            const allowedRootAttributes = new Set(['version','w','h','xres','yres','name']);
+            [...root.attributes].forEach(attribute => {
+                if (!allowedRootAttributes.has(attribute.name)) this._oraRecordLoss(report, { code:'ora.unsupported-root-attribute', path:`image/@${attribute.name}`, feature:`Root attribute ${attribute.name}`, fallback:'The attribute was ignored.', message:`OpenRaster root attribute ${attribute.name} was ignored.` });
+            });
+            const safeSourcePath = value => {
+                const source = String(value || '').trim();
+                const parts = source.split('/');
+                return source.startsWith('data/') && !source.includes('\\') && parts.every((part, index) => part !== '.' && part !== '..' && (part || (index === parts.length - 1 && source.endsWith('/'))));
+            };
+            const parseOpacity = (node, label, inherited = 1) => {
+                const raw = node.getAttribute('opacity');
+                if (raw === null || raw.trim() === '') return inherited;
+                const value = Number(raw);
+                if (!Number.isFinite(value)) {
+                    this._oraRecordLoss(report, { code:'ora.invalid-opacity', path:label, feature:'Layer opacity', fallback:'Opacity 1.0 was used.', message:`${label}: invalid opacity was replaced with 1.0.` });
+                    return inherited;
+                }
+                return inherited * Math.max(0, Math.min(1, value));
+            };
+            const parseVisibility = (node, label, inherited = true) => {
+                const raw = node.getAttribute('visibility');
+                if (raw === null || raw.trim() === '' || raw === 'visible') return inherited;
+                if (raw === 'hidden') return false;
+                this._oraRecordLoss(report, { code:'ora.invalid-visibility', path:label, feature:'Layer visibility', fallback:'The layer was treated as visible.', message:`${label}: visibility value ${raw} is unsupported; the layer was treated as visible.` });
+                return inherited;
+            };
+            const descriptors = [];
+            const visit = (node, path = [], inheritedOpacity = 1, inheritedVisible = true, isRoot = false) => {
+                const name = this._safeText(node.getAttribute('name') || '', 120);
+                const currentPath = name ? [...path, name] : path;
+                if (node.localName === 'stack') {
+                    const label = `Group${name ? ` "${name}"` : ''}`;
+                    if (!isRoot) {
+                        this._oraRecordLoss(report, { code:'ora.group-flattened', path:currentPath.join(' / ') || 'document', feature:'OpenRaster layer group', fallback:'Group pixels were imported as individual layers in stack order.', message:`${label} was flattened into individual OpenShop layers.` });
+                        const groupBlend = this._oraCompositeToBlend(node.getAttribute('composite-op'));
+                        if (!groupBlend.supported && node.hasAttribute('composite-op')) this._oraRecordLoss(report, { code:'ora.group-blend-fallback', path:currentPath.join(' / ') || 'document', feature:`${label} blend mode`, fallback:'The group blend mode was ignored while flattening the group.', message:`${label} uses unsupported blend mode ${node.getAttribute('composite-op')}; it was ignored while flattening.` });
+                        if (node.getAttribute('isolation') && node.getAttribute('isolation') !== 'isolate') this._oraRecordLoss(report, { code:'ora.group-isolation-fallback', path:currentPath.join(' / ') || 'document', feature:`${label} isolation`, fallback:'The group was flattened without preserving its isolation mode.', message:`${label} isolation=${node.getAttribute('isolation')} was not retained.` });
+                    }
+                    const nextOpacity = isRoot ? inheritedOpacity : parseOpacity(node, currentPath.join(' / ') || 'document', inheritedOpacity);
+                    const nextVisible = isRoot ? inheritedVisible : parseVisibility(node, currentPath.join(' / ') || 'document', inheritedVisible);
+                    const allowed = new Set(isRoot ? ['name'] : ['name','opacity','visibility','composite-op','isolation']);
+                    [...node.attributes].forEach(attribute => {
+                        if (!allowed.has(attribute.name)) this._oraRecordLoss(report, { code:'ora.unsupported-group-attribute', path:`${currentPath.join(' / ') || 'document'}/@${attribute.name}`, feature:`Group attribute ${attribute.name}`, fallback:'The attribute was ignored.', message:`${label}: group attribute ${attribute.name} was ignored.` });
+                    });
+                    [...node.children].forEach(child => visit(child, currentPath, nextOpacity, nextVisible, false));
+                    return;
+                }
+                if (node.localName === 'layer') {
+                    const layerName = name || `Layer ${descriptors.length + 1}`;
+                    const label = `Layer "${layerName}"`;
+                    const source = node.getAttribute('src');
+                    if (!safeSourcePath(source) || !byName.has(source)) throw new Error(`${label} references a missing or unsafe PNG source`);
+                    if (!String(source).toLowerCase().endsWith('.png')) {
+                        this._oraRecordLoss(report, { code:'ora.vector-unsupported', path:currentPath.join(' / ') || layerName, feature:`Layer source ${source}`, fallback:'The non-PNG layer source was omitted; OpenShop imports raster PNG layers.', message:`${label}: non-PNG source ${source} was omitted because vector OpenRaster layers are unsupported.` });
+                        return;
+                    }
+                    const x = integerAttribute(node, 'x', 0);
+                    const y = integerAttribute(node, 'y', 0);
+                    if (Math.abs(x) > this._importLimits.maxImageDimension * 2 || Math.abs(y) > this._importLimits.maxImageDimension * 2) throw new Error(`${label} offset exceeds import limits`);
+                    const opacity = parseOpacity(node, label, inheritedOpacity);
+                    const visible = parseVisibility(node, label, inheritedVisible);
+                    const composite = this._oraCompositeToBlend(node.getAttribute('composite-op'));
+                    if (!composite.supported && node.hasAttribute('composite-op')) this._oraRecordLoss(report, { code:'ora.blend-fallback', path:currentPath.join(' / ') || layerName, feature:`Blend mode ${node.getAttribute('composite-op')}`, fallback:'The layer was imported with source-over compositing.', message:`${label}: blend mode ${node.getAttribute('composite-op')} is unsupported and was imported as source-over.` });
+                    const allowed = new Set(['name','src','x','y','opacity','visibility','composite-op']);
+                    [...node.attributes].forEach(attribute => {
+                        if (!allowed.has(attribute.name)) this._oraRecordLoss(report, { code:'ora.unsupported-layer-attribute', path:`${currentPath.join(' / ') || layerName}/@${attribute.name}`, feature:`Layer attribute ${attribute.name}`, fallback:'The attribute was ignored.', message:`${label}: layer attribute ${attribute.name} was ignored.` });
+                    });
+                    descriptors.push({ name:layerName, src:source, x, y, opacity, visible, blend:composite.blend, entry:byName.get(source), path:currentPath.join(' / ') || layerName });
+                    return;
+                }
+                if (node.localName === 'text') {
+                    const textName = this._safeText(node.getAttribute('name') || 'unnamed text', 120);
+                    this._oraRecordLoss(report, { code:'ora.text-unsupported', path:currentPath.join(' / ') || 'document', feature:'OpenRaster text element', fallback:'The text element was omitted; OpenShop imports PNG layers only.', message:`OpenRaster text element "${textName}" was omitted because editable text is not supported by this importer.` });
+                    return;
+                }
+                this._oraRecordLoss(report, { code:'ora.unsupported-element', path:currentPath.join(' / ') || 'document', feature:`OpenRaster ${node.localName} element`, fallback:'The element was ignored.', message:`OpenRaster ${node.localName} element was ignored because it is not supported by this importer.` });
+            };
+            [...root.children].filter(child => child !== rootStack).forEach(child => this._oraRecordLoss(report, { code:'ora.unsupported-root-element', path:`image/${child.localName}`, feature:`Root ${child.localName} element`, fallback:'The element was ignored.', message:`OpenRaster root ${child.localName} element was ignored.` }));
+            visit(rootStack, [], 1, true, true);
+            if (descriptors.length > this._importLimits.maxProjectLayers - 1) throw new Error(`OpenRaster has too many layers; limit is ${this._importLimits.maxProjectLayers - 1}`);
+            const ordered = descriptors.slice().reverse();
+            const imported = [];
+            let decodedBytes = 0;
+            for (const descriptor of ordered) {
+                const dataUrl = `data:image/png;base64,${this._bytesToBase64(descriptor.entry.bytes)}`;
+                const image = await fabric.Image.fromURL(dataUrl);
+                const dimensions = this._validateDecodedImage(image);
+                decodedBytes += dimensions.width * dimensions.height * 4;
+                if (decodedBytes > this._importLimits.maxORADecodedBytes) throw new Error('OpenRaster decoded pixels exceed the import budget');
+                image.set({
+                    left:descriptor.x,
+                    top:descriptor.y,
+                    originX:'left',
+                    originY:'top',
+                    name:descriptor.name,
+                    visible:descriptor.visible,
+                    opacity:descriptor.opacity,
+                    globalCompositeOperation:descriptor.blend,
+                    selectable:descriptor.visible,
+                    evented:descriptor.visible,
+                    _openShopObjectId:this._newDocumentId('object')
+                });
+                imported.push({
+                    id:this._newDocumentId('layer'),
+                    name:descriptor.name,
+                    visible:descriptor.visible,
+                    locked:false,
+                    opacity:Math.round(descriptor.opacity * 100),
+                    blend:descriptor.blend,
+                    kind:'pixel',
+                    objects:[image]
+                });
+            }
+            if (!imported.length && byName.has('mergedimage.png')) {
+                const dataUrl = `data:image/png;base64,${this._bytesToBase64(byName.get('mergedimage.png').bytes)}`;
+                const image = await fabric.Image.fromURL(dataUrl);
+                this._validateDecodedImage(image);
+                image.set({ left:0, top:0, originX:'left', originY:'top', name:'Merged Image', selectable:true, evented:true, _openShopObjectId:this._newDocumentId('object') });
+                imported.push({ id:this._newDocumentId('layer'), name:'Merged Image', visible:true, locked:false, opacity:100, blend:'source-over', kind:'pixel', objects:[image] });
+                this._oraRecordLoss(report, { code:'ora.merged-fallback', path:'mergedimage.png', feature:'Layer stack', fallback:'The merged viewer image was imported as one raster layer.', message:'OpenRaster contained no supported layer elements, so mergedimage.png was imported as one raster layer.' });
+            }
+            if (this.createNewDocument(width, height, { resetProject:true }) === false) return false;
+            const boundary = this.canvas.getObjects().find(object => object.name === '__boundary__');
+            const background = { id:this._newDocumentId('layer'), name:'Background', visible:true, locked:true, opacity:100, blend:'source-over', kind:'pixel', objects:boundary ? [boundary] : [] };
+            this.canvas.clear();
+            if (boundary) this.canvas.add(boundary);
+            imported.forEach(layer => { layer.objects.forEach(object => this.canvas.add(object)); });
+            this.layers = [background, ...(imported.length ? imported : [{ id:this._newDocumentId('layer'), name:'Layer 1', visible:true, locked:false, opacity:100, blend:'source-over', kind:'pixel', objects:[] }])];
+            this.activeLayerIdx = Math.max(0, this.layers.length - 1);
+            this._docName = this._safeText(String(file.name || 'Untitled').replace(/\.[^.]+$/, ''), 100) || 'Untitled';
+            this._projectFileHandle = null;
+            this._psdInterchange = null;
+            this._lastORAImportReport = report;
+            report.accepted = true;
+            report.layerCount = imported.length;
+            this._enforceLayerInvariants({ render:false });
+            if (imported.length) this.canvas.setActiveObject(imported.at(-1).objects[0]);
+            this.zoomFit();
+            this._initializeHistory('Open OpenRaster');
+            this._markDocumentDirty();
+            this.updateLayersPanel();
+            this.trackRecentFile(this._docName, this.canvasW, this.canvasH);
+            this.toast(`Opened OpenRaster: ${imported.length} layer${imported.length === 1 ? '' : 's'}`, 'success');
+            report.warnings = [...new Set(report.warnings)].slice(0, 100);
+            report.losses = [...new Map(report.losses.map(loss => [`${loss.path}:${loss.code}:${loss.message}`, loss])).values()].slice(0, 100);
+            this._showORACompatibilityReport(report);
+            return true;
+        } catch (error) {
+            report.accepted = false;
+            if (!report.warnings.includes(error.message)) report.warnings.unshift(error.message);
+            report.losses.unshift({ code:'ora.import-failed', path:'document', feature:'OpenRaster import', fallback:'The current document was left unchanged.', message:error.message });
+            report.warnings = [...new Set(report.warnings)].slice(0, 100);
+            report.losses = [...new Map(report.losses.map(loss => [`${loss.path}:${loss.code}:${loss.message}`, loss])).values()].slice(0, 100);
+            this._lastORAImportReport = report;
+            this._showORACompatibilityReport(report);
+            console.error('OpenRaster import error:', error);
+            this.toast(`OpenRaster import failed: ${error.message}`, 'error');
             return false;
         }
     },
@@ -8847,6 +9069,10 @@ const OS = {
             void this._confirmDiscardUnsaved('Opening a project').then(ok => ok && this._loadProjectFile(file));
             return;
         }
+        if (this._isORAFile(file)) {
+            void this._confirmDiscardUnsaved('Opening an OpenRaster file').then(ok => ok && this._loadORAFile(file, { skipConfirm:true }));
+            return;
+        }
         if (this._isRAWFile(file)) {
             void this._loadRAWFile(file);
             return;
@@ -8874,6 +9100,105 @@ const OS = {
         const base = (this._docName || 'openshop-export').replace(/[^a-zA-Z0-9_-]/g, '_');
         const extension = format === 'jpeg' ? 'jpg' : format;
         return `${base}.${extension}`;
+    },
+    async _readORAZipEntries(bytes) {
+        const source = this._iccBytes(bytes);
+        if (!source || source.byteLength < 22) throw new Error('OpenRaster ZIP is truncated');
+        const view = new DataView(source.buffer, source.byteOffset, source.byteLength);
+        const eocdSignature = 0x06054b50;
+        const minimumOffset = Math.max(0, source.byteLength - 22 - 0xFFFF);
+        let eocdOffset = -1;
+        for (let offset = source.byteLength - 22; offset >= minimumOffset; offset -= 1) {
+            if (view.getUint32(offset, true) !== eocdSignature) continue;
+            const commentLength = view.getUint16(offset + 20, true);
+            if (offset + 22 + commentLength <= source.byteLength) {
+                eocdOffset = offset;
+                break;
+            }
+        }
+        if (eocdOffset < 0) throw new Error('OpenRaster ZIP has no end record');
+        const disk = view.getUint16(eocdOffset + 4, true);
+        const centralDisk = view.getUint16(eocdOffset + 6, true);
+        const diskEntries = view.getUint16(eocdOffset + 8, true);
+        const entryCount = view.getUint16(eocdOffset + 10, true);
+        const centralSize = view.getUint32(eocdOffset + 12, true);
+        const centralOffset = view.getUint32(eocdOffset + 16, true);
+        if (disk !== 0 || centralDisk !== 0 || diskEntries !== entryCount) throw new Error('OpenRaster ZIP uses unsupported multi-disk storage');
+        if (entryCount === 0xFFFF || centralSize === 0xFFFFFFFF || centralOffset === 0xFFFFFFFF) throw new Error('OpenRaster ZIP64 archives are not supported');
+        if (entryCount > this._importLimits.maxORAEntries) throw new Error(`OpenRaster contains more than ${this._importLimits.maxORAEntries} archive entries`);
+        if (centralOffset + centralSize > eocdOffset || centralOffset + centralSize > source.byteLength) throw new Error('OpenRaster central directory is truncated');
+
+        const decoder = new TextDecoder('utf-8', { fatal:false });
+        const decodeName = (nameBytes, flags) => {
+            if (!(flags & 0x0800) && nameBytes.some(value => value > 0x7F)) throw new Error('OpenRaster archive names must be UTF-8 encoded');
+            return decoder.decode(nameBytes);
+        };
+        const validatePath = name => {
+            if (!name || name.startsWith('/') || name.includes('\\') || name.split('/').some(part => !part || part === '.' || part === '..')) {
+                throw new Error(`OpenRaster contains an unsafe archive path: ${name || '(empty)'}`);
+            }
+            return name;
+        };
+        const records = [];
+        const names = new Set();
+        let cursor = centralOffset;
+        for (let index = 0; index < entryCount; index += 1) {
+            if (cursor + 46 > centralOffset + centralSize || view.getUint32(cursor, true) !== 0x02014b50) throw new Error('OpenRaster central directory entry is invalid');
+            const flags = view.getUint16(cursor + 8, true);
+            const method = view.getUint16(cursor + 10, true);
+            const checksum = view.getUint32(cursor + 16, true);
+            const compressedSize = view.getUint32(cursor + 20, true);
+            const uncompressedSize = view.getUint32(cursor + 24, true);
+            const nameLength = view.getUint16(cursor + 28, true);
+            const extraLength = view.getUint16(cursor + 30, true);
+            const commentLength = view.getUint16(cursor + 32, true);
+            const localOffset = view.getUint32(cursor + 42, true);
+            const recordEnd = cursor + 46 + nameLength + extraLength + commentLength;
+            if (recordEnd > centralOffset + centralSize || recordEnd > source.byteLength) throw new Error('OpenRaster central directory entry is truncated');
+            if (flags & 0x0001) throw new Error('Encrypted OpenRaster entries are not supported');
+            if (![0, 8].includes(method)) throw new Error(`OpenRaster compression method ${method} is unsupported`);
+            if (compressedSize === 0xFFFFFFFF || uncompressedSize === 0xFFFFFFFF) throw new Error('OpenRaster ZIP64 entry sizes are not supported');
+            const name = validatePath(decodeName(source.slice(cursor + 46, cursor + 46 + nameLength), flags));
+            if (names.has(name)) throw new Error(`OpenRaster contains a duplicate archive path: ${name}`);
+            names.add(name);
+            if (localOffset + 30 > source.byteLength || view.getUint32(localOffset, true) !== 0x04034b50) throw new Error(`OpenRaster local entry is invalid: ${name}`);
+            const localFlags = view.getUint16(localOffset + 6, true);
+            const localMethod = view.getUint16(localOffset + 8, true);
+            const localNameLength = view.getUint16(localOffset + 26, true);
+            const localExtraLength = view.getUint16(localOffset + 28, true);
+            const dataOffset = localOffset + 30 + localNameLength + localExtraLength;
+            const dataEnd = dataOffset + compressedSize;
+            if ((localFlags & 0x0001) || localMethod !== method || dataOffset > source.byteLength || dataEnd > source.byteLength) throw new Error(`OpenRaster local entry does not match its central directory: ${name}`);
+            const isDirectory = name.endsWith('/');
+            if (!isDirectory && uncompressedSize > this._importLimits.maxORALayerBytes) throw new Error(`OpenRaster entry ${name} exceeds the ${Math.round(this._importLimits.maxORALayerBytes / 1024 / 1024)} MB entry limit`);
+            records.push({ name, flags, method, checksum, compressedSize, uncompressedSize, dataOffset, isDirectory });
+            cursor = recordEnd;
+        }
+        if (!records.length || records[0].name !== 'mimetype' || records[0].isDirectory || records[0].method !== 0) throw new Error('OpenRaster mimetype must be the first stored archive entry');
+
+        const entries = [];
+        let totalBytes = 0;
+        for (const record of records) {
+            if (record.isDirectory) continue;
+            totalBytes += record.uncompressedSize;
+            if (totalBytes > this._importLimits.maxORATotalBytes) throw new Error('OpenRaster entries exceed the aggregate import budget');
+            const compressed = source.slice(record.dataOffset, record.dataOffset + record.compressedSize);
+            let decoded;
+            if (record.method === 0) {
+                decoded = compressed;
+            } else {
+                if (typeof DecompressionStream !== 'function' || typeof Response !== 'function') throw new Error('This browser cannot decompress OpenRaster entries');
+                const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+                decoded = new Uint8Array(await new Response(stream).arrayBuffer());
+            }
+            if (decoded.byteLength !== record.uncompressedSize || decoded.byteLength > this._importLimits.maxORALayerBytes) throw new Error(`OpenRaster entry ${record.name} has invalid decoded size`);
+            if (this._crc32(decoded) !== record.checksum) throw new Error(`OpenRaster entry ${record.name} failed its CRC check`);
+            entries.push({ name:record.name, bytes:decoded, method:record.method });
+        }
+        const mimetype = entries[0];
+        const expectedMimetype = new TextEncoder().encode('image/openraster');
+        if (!mimetype || mimetype.name !== 'mimetype' || mimetype.bytes.byteLength !== expectedMimetype.byteLength || !expectedMimetype.every((value, index) => mimetype.bytes[index] === value)) throw new Error('OpenRaster mimetype is invalid');
+        return entries;
     },
     _normalizeExportOptions(options = {}) {
         const format = String(options.format || 'png').toLowerCase();
@@ -9418,6 +9743,14 @@ const OS = {
             if (vectorCount) warnings.push(`${vectorCount} vector object${vectorCount === 1 ? '' : 's'} will be rasterized by the current PSD exporter.`);
             if (maskCount) warnings.push(`${maskCount} OpenShop mask${maskCount === 1 ? '' : 's'} will be baked into layer pixels.`);
             if (this._psdInterchange?.groups?.length) warnings.push(`${this._psdInterchange.groups.length} imported PSD group${this._psdInterchange.groups.length === 1 ? '' : 's'} will be reconstructed.`);
+        } else if (normalizedFormat === 'ora') {
+            if (textCount) warnings.push(`${textCount} text object${textCount === 1 ? '' : 's'} will be rasterized into OpenRaster PNG layers.`);
+            if (vectorCount) warnings.push(`${vectorCount} vector object${vectorCount === 1 ? '' : 's'} will be rasterized into OpenRaster PNG layers.`);
+            if (maskCount) warnings.push(`${maskCount} OpenShop mask${maskCount === 1 ? '' : 's'} will be baked into OpenRaster layer pixels.`);
+            if (filteredCount) warnings.push(`${filteredCount} filtered image object${filteredCount === 1 ? '' : 's'} will be baked into OpenRaster layer pixels.`);
+            const adjustmentCount = this.layers.filter(layer => layer.kind === 'adjustment').length;
+            if (adjustmentCount) warnings.push(`${adjustmentCount} adjustment layer${adjustmentCount === 1 ? '' : 's'} will be flattened into PNG layer pixels.`);
+            if (this._psdInterchange?.groups?.length) warnings.push(`${this._psdInterchange.groups.length} imported PSD group${this._psdInterchange.groups.length === 1 ? '' : 's'} will be flattened because OpenRaster groups are not retained by this exporter.`);
         }
         if (this._animFrames.length > 1) warnings.push(`Only the current canvas is exported; ${this._animFrames.length} animation frames remain in the project.`);
         if (normalizedFormat === 'jpeg') warnings.push('JPEG has no alpha channel; transparent pixels will use the selected matte color.');
@@ -9437,6 +9770,7 @@ const OS = {
         format = String(format || '').toLowerCase();
         if (format === 'svg') return this._exportSVG(options);
         if (format === 'avif') return this._exportAVIF(options);
+        if (format === 'ora') return this._exportORA(options);
         try {
             const captured = this._captureExportRaster({
                 format,
@@ -11297,20 +11631,21 @@ self.onmessage = function(event) {
         }
         return this._normalizeColorProfile({ name:'sRGB', sourceKind:'assumed' });
     },
-    _showPSDCompatibilityReport(report, title = 'PSD compatibility report') {
+    _showFormatCompatibilityReport(report, title, { className = 'psd-compat-report', formatLabel = 'PSD' } = {}) {
         const warnings = Array.isArray(report?.warnings) ? report.warnings.filter(Boolean) : [];
         const losses = Array.isArray(report?.losses) ? report.losses.filter(loss => loss && (loss.feature || loss.message)) : [];
         if (!warnings.length && !losses.length) return null;
-        document.querySelector('.psd-compat-report')?.remove();
+        document.querySelector(`.${className}`)?.remove();
         const overlay = document.createElement('div');
-        overlay.className = 'modal-overlay show psd-compat-report';
+        overlay.className = `modal-overlay show ${className}`;
         const modal = document.createElement('div');
         modal.className = 'modal';
         modal.setAttribute('role', 'dialog');
         modal.setAttribute('aria-modal', 'true');
-        modal.setAttribute('aria-labelledby', 'psd-compat-title');
+        const idPrefix = className.replace(/[^a-z0-9-]/gi, '-') || 'compat';
+        modal.setAttribute('aria-labelledby', `${idPrefix}-title`);
         const heading = document.createElement('h3');
-        heading.id = 'psd-compat-title';
+        heading.id = `${idPrefix}-title`;
         heading.textContent = title;
         const intro = document.createElement('p');
         intro.style.cssText = 'font-size:12px;color:var(--text-secondary);margin-bottom:10px';
@@ -11318,7 +11653,9 @@ self.onmessage = function(event) {
             ? 'The file was not opened; the current document was left unchanged.'
             : report.flattenWholeDocument
                 ? 'Appearance was prioritized through a flattened fallback.'
-                : 'Supported layers remain editable; the exceptions below use explicit pixel fallbacks.';
+                : formatLabel === 'OpenRaster'
+                    ? 'OpenRaster layers remain editable; the exceptions below were flattened or mapped to a supported baseline.'
+                    : 'Supported layers remain editable; the exceptions below use explicit pixel fallbacks.';
         const summary = document.createElement('p');
         summary.style.cssText = 'font-size:11px;color:var(--text-muted);margin:0 0 8px';
         summary.textContent = `${losses.length} structured compatibility loss${losses.length === 1 ? '' : 'es'} recorded.`;
@@ -11342,6 +11679,12 @@ self.onmessage = function(event) {
         document.body.appendChild(overlay);
         close.focus();
         return overlay;
+    },
+    _showPSDCompatibilityReport(report, title = 'PSD compatibility report') {
+        return this._showFormatCompatibilityReport(report, title, { className:'psd-compat-report', formatLabel:'PSD' });
+    },
+    _showORACompatibilityReport(report, title = 'OpenRaster compatibility') {
+        return this._showFormatCompatibilityReport(report, title, { className:'ora-compat-report', formatLabel:'OpenRaster' });
     },
     _getPSDGroupState(layer) {
         const metadata = layer?.psd;
@@ -17409,6 +17752,208 @@ self.onmessage = function(event) {
         }
         return { structure, report };
     },
+    _xmlEscape(value) {
+        return String(value ?? '').replace(/[&<>"']/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&apos;' })[character]);
+    },
+    _oraBlendToComposite(mode) {
+        const key = String(mode || 'source-over').trim().toLowerCase();
+        const map = {
+            'source-over':'svg:src-over',
+            multiply:'svg:multiply',
+            screen:'svg:screen',
+            overlay:'svg:overlay',
+            darken:'svg:darken',
+            lighten:'svg:lighten',
+            'color-dodge':'svg:color-dodge',
+            'color-burn':'svg:color-burn',
+            'hard-light':'svg:hard-light',
+            'soft-light':'svg:soft-light',
+            difference:'svg:difference',
+            hue:'svg:hue',
+            saturation:'svg:saturation',
+            color:'svg:color',
+            luminosity:'svg:luminosity',
+            exclusion:'svg:src-over',
+            lighter:'svg:plus',
+            'destination-in':'svg:dst-in',
+            'destination-out':'svg:dst-out',
+            'source-atop':'svg:src-atop',
+            'destination-atop':'svg:dst-atop'
+        };
+        return map[key] || 'svg:src-over';
+    },
+    _oraCompositeToBlend(value) {
+        const key = String(value || 'svg:src-over').trim().toLowerCase();
+        const map = {
+            'svg:src-over':'source-over',
+            'svg:multiply':'multiply',
+            'svg:screen':'screen',
+            'svg:overlay':'overlay',
+            'svg:darken':'darken',
+            'svg:lighten':'lighten',
+            'svg:color-dodge':'color-dodge',
+            'svg:color-burn':'color-burn',
+            'svg:hard-light':'hard-light',
+            'svg:soft-light':'soft-light',
+            'svg:difference':'difference',
+            'svg:hue':'hue',
+            'svg:saturation':'saturation',
+            'svg:color':'color',
+            'svg:luminosity':'luminosity',
+            'svg:plus':'lighter',
+            'svg:dst-in':'destination-in',
+            'svg:dst-out':'destination-out',
+            'svg:src-atop':'source-atop',
+            'svg:dst-atop':'destination-atop'
+        };
+        return { blend:map[key] || 'source-over', supported:Boolean(map[key]) };
+    },
+    _oraLayerBounds(layer, canvas = null) {
+        const objects = (layer?.objects || []).filter(object => object?.name !== '__boundary__' && !object?.excludeFromExport);
+        const documentWidth = Math.max(1, Math.round(Number(canvas?.width || this.canvasW) || 1));
+        const documentHeight = Math.max(1, Math.round(Number(canvas?.height || this.canvasH) || 1));
+        if (!objects.length) return { x:0, y:0, width:1, height:1 };
+        let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+        objects.forEach(object => {
+            let bounds = null;
+            try { bounds = object.getBoundingRect?.(); } catch (_) {}
+            const objectLeft = Number.isFinite(Number(bounds?.left)) ? Number(bounds.left) : Number(object.left || 0);
+            const objectTop = Number.isFinite(Number(bounds?.top)) ? Number(bounds.top) : Number(object.top || 0);
+            const objectWidth = Number.isFinite(Number(bounds?.width)) && Number(bounds.width) > 0
+                ? Number(bounds.width)
+                : Number(object.getScaledWidth?.() || object.width || 1);
+            const objectHeight = Number.isFinite(Number(bounds?.height)) && Number(bounds.height) > 0
+                ? Number(bounds.height)
+                : Number(object.getScaledHeight?.() || object.height || 1);
+            if (![objectLeft, objectTop, objectWidth, objectHeight].every(Number.isFinite)) return;
+            left = Math.min(left, objectLeft);
+            top = Math.min(top, objectTop);
+            right = Math.max(right, objectLeft + Math.max(1, objectWidth));
+            bottom = Math.max(bottom, objectTop + Math.max(1, objectHeight));
+        });
+        if (!Number.isFinite(left) || !Number.isFinite(top) || right <= 0 || bottom <= 0 || left >= documentWidth || top >= documentHeight) return { x:0, y:0, width:1, height:1 };
+        const x = Math.max(0, Math.floor(left));
+        const y = Math.max(0, Math.floor(top));
+        const endX = Math.min(documentWidth, Math.ceil(right));
+        const endY = Math.min(documentHeight, Math.ceil(bottom));
+        return { x, y, width:Math.max(1, endX - x), height:Math.max(1, endY - y) };
+    },
+    _oraPNGBytesFromCanvas(canvas) {
+        if (!canvas?.toDataURL) throw new Error('OpenRaster could not encode a PNG layer');
+        let dataUrl = canvas.toDataURL('image/png');
+        if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/png')) throw new Error('OpenRaster PNG encoding is not supported by this browser');
+        const profileBytes = this._getWorkingICCProfileBytes();
+        if (profileBytes?.byteLength) {
+            try { dataUrl = this._embedRasterICCDataUrl(dataUrl, 'png', profileBytes); }
+            catch (error) { console.warn('OpenRaster ICC embedding unavailable:', error.message); }
+        }
+        return this._dataUrlToBytes(dataUrl);
+    },
+    _oraRecordLoss(report, { code = 'ora.compatibility', path = 'document', feature = 'OpenRaster compatibility', fallback = 'The feature was rasterized or omitted.', message }) {
+        const detail = String(message || feature);
+        report.warnings.push(detail);
+        report.losses.push({ code, path, feature, fallback, message:detail });
+    },
+    _oraStackXML({ width, height, layers }) {
+        const resolution = Math.max(1, Math.round(Number(this._documentResolution) || 72));
+        const rootAttributes = [
+            `version="0.0.6"`,
+            `w="${Math.max(1, Math.round(width))}"`,
+            `h="${Math.max(1, Math.round(height))}"`,
+            `xres="${resolution}"`,
+            `yres="${resolution}"`
+        ].join(' ');
+        const xmlLayers = layers.slice().reverse().map(entry => {
+            const layer = entry.layer;
+            const opacity = Math.max(0, Math.min(1, Number(entry.opacity ?? Number(layer.opacity ?? 100) / 100)));
+            const visibility = layer.visible === false ? 'hidden' : 'visible';
+            const composite = this._oraBlendToComposite(layer.blend);
+            return `    <layer name="${this._xmlEscape(layer.name || 'Layer')}" src="${this._xmlEscape(entry.src)}" x="${entry.x}" y="${entry.y}" opacity="${opacity.toFixed(6)}" visibility="${visibility}" composite-op="${composite}" />`;
+        }).join('\n');
+        return `<?xml version="1.0" encoding="UTF-8"?>\n<image ${rootAttributes}>\n  <stack>${xmlLayers ? `\n${xmlLayers}\n  ` : ''}</stack>\n</image>\n`;
+    },
+    async _exportORA(options = {}) {
+        const report = {
+            format:'ora',
+            direction:'export',
+            accepted:true,
+            warnings:[],
+            losses:[],
+            width:this.canvasW,
+            height:this.canvasH,
+            layerCount:0
+        };
+        try {
+            this.toast('Generating OpenRaster…', 'info');
+            const entries = this._withExportCanvasState({ transparent:true }, () => {
+                const layerEntries = [];
+                this.layers.forEach((layer, layerIndex) => {
+                    const objects = (layer.objects || []).filter(object => object?.name !== '__boundary__' && !object?.excludeFromExport);
+                    if (!objects.length && layerIndex === 0 && /^background$/i.test(String(layer.name || ''))) return;
+                    const layerName = this._safeText(layer.name || `Layer ${layerIndex + 1}`, 120) || `Layer ${layerIndex + 1}`;
+                    const path = `layer[${layerName}]`;
+                    const textCount = objects.filter(object => ['text','i-text','textbox'].includes(String(object.type || '').toLowerCase())).length;
+                    const vectorCount = objects.filter(object => String(object.type || '').toLowerCase() !== 'image' && !['text','i-text','textbox'].includes(String(object.type || '').toLowerCase())).length;
+                    if (textCount) this._oraRecordLoss(report, { code:'ora.text-rasterized', path, feature:'Editable text', fallback:'Text was rendered into the layer PNG.', message:`"${layerName}": ${textCount} text object${textCount === 1 ? '' : 's'} were rasterized into the OpenRaster layer PNG.` });
+                    if (vectorCount) this._oraRecordLoss(report, { code:'ora.vector-rasterized', path, feature:'Vector content', fallback:'Vector content was rendered into the layer PNG.', message:`"${layerName}": ${vectorCount} vector object${vectorCount === 1 ? '' : 's'} were rasterized into the OpenRaster layer PNG.` });
+                    if (objects.some(object => object.clipPath || object._hasMask)) this._oraRecordLoss(report, { code:'ora.mask-baked', path, feature:'Layer masks', fallback:'Masks were baked into the layer PNG.', message:`"${layerName}": OpenShop masks were baked into the OpenRaster layer PNG.` });
+                    if (objects.some(object => Array.isArray(object.filters) && object.filters.length)) this._oraRecordLoss(report, { code:'ora.filter-baked', path, feature:'Pixel filters', fallback:'Filters were baked into the layer PNG.', message:`"${layerName}": pixel filters were baked into the OpenRaster layer PNG.` });
+                    if (layer.kind === 'adjustment') this._oraRecordLoss(report, { code:'ora.adjustment-rasterized', path, feature:'Adjustment layer', fallback:'The current rendered appearance was written as a PNG layer.', message:`"${layerName}": the adjustment layer was rasterized because OpenRaster has no OpenShop adjustment model.` });
+                    if (layer.psd?.sourceKind === 'smart-object' || layer.psd?.sourceKind === 'vector') this._oraRecordLoss(report, { code:'ora.psd-fallback', path, feature:'PSD interchange metadata', fallback:'The available raster fallback was written as a PNG layer.', message:`"${layerName}": PSD source metadata was not retained; the available raster fallback was exported.` });
+                    const beforeWarnings = report.warnings.length;
+                    const rendered = this._renderLayerCanvasForPSD(layer, report);
+                    const bounds = this._oraLayerBounds(layer, rendered.canvas);
+                    const crop = document.createElement('canvas');
+                    crop.width = bounds.width;
+                    crop.height = bounds.height;
+                    const context = crop.getContext('2d');
+                    if (!context) throw new Error(`Could not create the PNG canvas for ${layerName}`);
+                    if (rendered.canvas) context.drawImage(rendered.canvas, -bounds.x, -bounds.y);
+                    const renderWarnings = report.warnings.slice(beforeWarnings);
+                    renderWarnings.forEach(message => this._oraRecordLoss(report, { code:'ora.render-fallback', path, feature:'Layer rendering', fallback:'The affected object was omitted or its opacity was baked into pixels.', message }));
+                    const composite = this._oraCompositeToBlend(layer.blend);
+                    if (!composite.supported && String(layer.blend || 'source-over') !== 'source-over') this._oraRecordLoss(report, { code:'ora.blend-fallback', path, feature:`Blend mode ${layer.blend}`, fallback:'The layer was exported with normal source-over compositing.', message:`"${layerName}": blend mode ${layer.blend} is not supported by the OpenRaster baseline and was written as source-over.` });
+                    layerEntries.push({
+                        layer,
+                        src:`data/layer${layerEntries.length}.png`,
+                        x:bounds.x,
+                        y:bounds.y,
+                        opacity:rendered.opacity,
+                        bytes:this._oraPNGBytesFromCanvas(crop)
+                    });
+                });
+                if (!layerEntries.length) {
+                    const crop = document.createElement('canvas');
+                    crop.width = 1; crop.height = 1;
+                    const layer = { name:'Layer 1', visible:true, opacity:100, blend:'source-over', objects:[] };
+                    layerEntries.push({ layer, src:'data/layer0.png', x:0, y:0, opacity:1, bytes:this._oraPNGBytesFromCanvas(crop) });
+                }
+                const composite = this._captureExportRaster({ format:'png', transparent:true });
+                const scale = Math.min(1, 256 / Math.max(1, this.canvasW), 256 / Math.max(1, this.canvasH));
+                const thumbnail = this._captureExportRaster({ format:'png', transparent:true, scale });
+                report.layerCount = layerEntries.length;
+                return [
+                    { name:'mimetype', bytes:new TextEncoder().encode('image/openraster') },
+                    { name:'stack.xml', bytes:new TextEncoder().encode(this._oraStackXML({ width:this.canvasW, height:this.canvasH, layers:layerEntries }) ) },
+                    ...layerEntries.map(entry => ({ name:entry.src, bytes:entry.bytes })),
+                    { name:'mergedimage.png', bytes:this._dataUrlToBytes(composite.dataUrl) },
+                    { name:'Thumbnails/thumbnail.png', bytes:this._dataUrlToBytes(thumbnail.dataUrl) }
+                ];
+            });
+            report.warnings = [...new Set(report.warnings)].slice(0, 100);
+            report.losses = [...new Map(report.losses.map(loss => [`${loss.path}:${loss.code}:${loss.message}`, loss])).values()].slice(0, 100);
+            const blob = await this._zipBatchEntries(entries);
+            this._downloadBlob(blob, this._exportFileName('ora'), options.deliver);
+            this._lastORAExportReport = report;
+            this.toast(report.warnings.length ? `Exported as OpenRaster with ${report.warnings.length} compatibility note${report.warnings.length === 1 ? '' : 's'}` : 'Exported as OpenRaster', 'success');
+            this._showORACompatibilityReport(report);
+            return true;
+        } catch (error) {
+            console.error('OpenRaster export error:', error);
+            this.toast(`OpenRaster export failed: ${error.message}`, 'error');
+            return false;
+        }
+    },
     exportPSD() {
         const lib = window.agPsd || (typeof agPsd !== 'undefined' ? agPsd : null);
         if (!lib || !lib.writePsd) { this.toast('PSD library not loaded or does not support writing', 'error'); return false; }
@@ -17954,7 +18499,7 @@ self.onmessage = function(event) {
     // editor over postMessage and never touches its internals. Everything is
     // data — there is no message that carries code.
     _embedProtocolVersion: 1,
-    _embedFormats: Object.freeze(['png', 'jpeg', 'webp', 'avif', 'svg', 'pdf']),
+    _embedFormats: Object.freeze(['png', 'jpeg', 'webp', 'avif', 'svg', 'pdf', 'ora']),
     _embed: null,
     _embedBound: false,
     _initEmbedBridge() {
@@ -18746,6 +19291,8 @@ self.onmessage = function(event) {
             let loaded = false;
             if (name.endsWith('.psd') || file.type === 'image/vnd.adobe.photoshop') {
                 loaded = await this._loadPSDFile(file);
+            } else if (this._isORAFile(file)) {
+                loaded = await this._loadORAFile(file, { skipConfirm:true });
             } else if (name.endsWith('.openshop') || name.endsWith('.json') || file.type === 'application/vnd.openshop+json' || file.type === 'application/json') {
                 loaded = await this._loadProjectFile(file, { handle });
             } else if (file.type.startsWith('image/')) {
@@ -23528,6 +24075,7 @@ self.onmessage = async function(e) {
             {label:'Export SVG',cat:'File',fn:()=>this.saveFile('svg')},
             {label:'Export PDF',cat:'File',fn:()=>this.exportPDF()},
             {label:'Export PSD',cat:'File',fn:()=>this.exportPSD()},
+            {label:'Export OpenRaster',cat:'File',fn:()=>this.saveFile('ora')},
             {label:'Export Settings',cat:'File',fn:()=>this.showExportSettings()},
             {label:'Save Project',cat:'File',fn:()=>this.saveProject()},
             {label:'Open Project',cat:'File',fn:()=>this.openProject()},

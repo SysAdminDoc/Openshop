@@ -59,6 +59,7 @@ Or download `index.html` and open it locally. Everything runs client-side. Your 
 | **PDF** | Yes (page per layer) | Yes |
 | **RAW** | Yes (LibRaw/WASM demosaic preview) | — |
 | **PSD** | Yes (pixel layers, nested groups, supported blends, opacity, visibility, basic text, and embedded ICC profile metadata) | Yes (same supported semantics; explicit raster fallbacks and `0x040F` ICC profile resource when a profile is present) |
+| **OpenRaster (`.ora`)** | Yes (PNG layers, offsets, opacity, visibility, supported blend modes, and named compatibility warnings for groups or unsupported constructs) | Yes (layered PNGs with `stack.xml`, merged image, thumbnail, and required stored `mimetype`) |
 | **GIF** | Yes (animated, frame-based) | Yes (animated, frame-based) |
 | **OpenShop Project (`.openshop` / legacy `.json`)** | Yes | Yes (full project with layers) |
 | **Palette and asset sets (`.ase`, `.gpl`, `.abr`, `.grd`, `.json`)** | Yes | `.json` palettes |
@@ -351,7 +352,7 @@ OpenShop has two explicit distribution contracts:
 
 Hosted updates install into a separate cache and remain waiting until applied. The new shell must complete an editor health check; if it does not, the next launch returns to the last verified shell. The Offline & Install dialog exposes update, rollback, connection, install, optional-helper, and pinned AI-model cache state.
 
-Installed-app file launch is progressively enhanced through `launchQueue`. Supporting desktop Chromium releases can launch PNG, JPEG, WebP, GIF, PSD, and `.openshop` project files; other browsers retain Open, drag/drop, and file-picker workflows. AI models are intentionally outside the core shell and require one successful online use before their own cache can help offline.
+Installed-app file launch is progressively enhanced through `launchQueue`. Supporting desktop Chromium releases can launch PNG, JPEG, WebP, GIF, PSD, OpenRaster, and `.openshop` project files; other browsers retain Open, drag/drop, and file-picker workflows. AI models are intentionally outside the core shell and require one successful online use before their own cache can help offline.
 
 ## Self-Hosting
 

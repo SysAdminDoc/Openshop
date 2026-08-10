@@ -461,6 +461,46 @@ describe('OpenShop core object', () => {
     expect(bytes[3]).toBe(0x04);
   });
 
+  it('reads the required OpenRaster archive layout and rejects unsafe paths', async () => {
+    const OS = loadOpenShop();
+    class ZipBlob {
+      constructor(parts, options = {}) {
+        this.parts = parts;
+        this.type = options.type || '';
+      }
+
+      async arrayBuffer() {
+        const length = this.parts.reduce((total, part) => total + part.length, 0);
+        const bytes = new Uint8Array(length);
+        let offset = 0;
+        this.parts.forEach(part => { bytes.set(part, offset); offset += part.length; });
+        return bytes.buffer;
+      }
+    }
+    vi.stubGlobal('Blob', ZipBlob);
+    const zip = await OS._zipBatchEntries([
+      { name:'mimetype', bytes:new TextEncoder().encode('image/openraster') },
+      { name:'stack.xml', bytes:new TextEncoder().encode('<image version="0.0.6" w="8" h="6"><stack><layer src="data/layer0.png" /></stack></image>') },
+      { name:'data/layer0.png', bytes:new Uint8Array([1, 2, 3, 4]) },
+      { name:'mergedimage.png', bytes:new Uint8Array([5, 6]) },
+      { name:'Thumbnails/thumbnail.png', bytes:new Uint8Array([7, 8]) }
+    ]);
+    const entries = await OS._readORAZipEntries(new Uint8Array(await zip.arrayBuffer()));
+    expect(entries.map(entry => entry.name)).toEqual([
+      'mimetype', 'stack.xml', 'data/layer0.png', 'mergedimage.png', 'Thumbnails/thumbnail.png'
+    ]);
+    expect(new TextDecoder().decode(entries[0].bytes)).toBe('image/openraster');
+
+    const unsafe = await OS._zipBatchEntries([
+      { name:'mimetype', bytes:new TextEncoder().encode('image/openraster') },
+      { name:'stack.xml', bytes:new TextEncoder().encode('<image />') },
+      { name:'data/../escape.png', bytes:new Uint8Array([1]) }
+    ]);
+    const unsafeBytes = new Uint8Array(await unsafe.arrayBuffer());
+    vi.unstubAllGlobals();
+    await expect(OS._readORAZipEntries(unsafeBytes)).rejects.toThrow(/unsafe archive path/);
+  });
+
   it('cancels batch work between files and keeps partial failures format-honest', async () => {
     const OS = loadOpenShop();
     const command = OS._makeCommand('canvas.resize', { width:320, height:240 });
@@ -2064,6 +2104,7 @@ describe('OpenShop core object', () => {
     quietUiMethods(OS);
     OS.dismissWelcome = vi.fn();
     OS._loadPSDFile = vi.fn().mockResolvedValue(true);
+    OS._loadORAFile = vi.fn().mockResolvedValue(true);
     OS._loadProjectFile = vi.fn().mockResolvedValue(true);
     OS._handleFileLoad = vi.fn();
 
@@ -2082,6 +2123,10 @@ describe('OpenShop core object', () => {
     await consumer({ files: [{ getFile: vi.fn().mockResolvedValue(psd) }] });
     expect(OS._loadPSDFile).toHaveBeenCalledWith(psd);
 
+    const ora = { name: 'layers.ora', type: 'image/openraster' };
+    await OS._handleLaunchedFile({ getFile: vi.fn().mockResolvedValue(ora) });
+    expect(OS._loadORAFile).toHaveBeenCalledWith(ora, { skipConfirm:true });
+
     const project = { name: 'layout.openshop', type: 'application/vnd.openshop+json' };
     const projectHandle = { getFile: vi.fn().mockResolvedValue(project) };
     await OS._handleLaunchedFile(projectHandle);
@@ -2090,7 +2135,7 @@ describe('OpenShop core object', () => {
     const image = { name: 'photo.png', type: 'image/png' };
     await OS._handleLaunchedFile({ getFile: vi.fn().mockResolvedValue(image) });
     expect(OS._handleFileLoad).toHaveBeenCalledWith(image);
-    expect(OS.dismissWelcome).toHaveBeenCalledTimes(3);
+    expect(OS.dismissWelcome).toHaveBeenCalledTimes(4);
 
     const unsupported = await OS._handleLaunchedFile({
       getFile: vi.fn().mockResolvedValue({ name: 'notes.txt', type: 'text/plain' })

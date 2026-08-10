@@ -2372,7 +2372,7 @@ test('drives the editor from an embedding host over a versioned contract @cross-
   }, { appUrl, protocolVersion: 1 });
 
   expect(result.readyVersion).toBe(1);
-  expect(result.capabilities.exportFormats).toEqual(['png', 'jpeg', 'webp', 'avif', 'svg', 'pdf']);
+  expect(result.capabilities.exportFormats).toEqual(['png', 'jpeg', 'webp', 'avif', 'svg', 'pdf', 'ora']);
   expect(result.capabilities.overrides).toEqual(['open', 'save']);
   expect(result.capabilities.tools.length).toBeGreaterThan(10);
   expect(result.configured.tools).toEqual(['select', 'brush', 'text']);
@@ -3360,6 +3360,129 @@ test('encodes deterministic verified AVIF and reopens it @cross-browser', async 
   expect(result.ui.preview).toContain('AVIF · alpha preview');
   expect(result.ui.impact).toContain('will be flattened');
   expect(pageErrors).toEqual([]);
+});
+
+test('round-trips OpenRaster layer order, geometry, opacity, visibility, and required files @cross-browser', async ({ page }) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).click();
+
+  const result = await page.evaluate(async () => {
+    const png = (width, height, color) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d');
+      context.fillStyle = color;
+      context.fillRect(0, 0, width, height);
+      return OS._dataUrlToBytes(canvas.toDataURL('image/png'));
+    };
+    const bottomPng = png(42, 31, '#ff4050');
+    const topPng = png(24, 18, '#4050ff');
+    const stackXml = `<?xml version="1.0" encoding="UTF-8"?>
+<image version="0.0.6" w="320" h="240">
+  <stack>
+    <layer name="Top" src="data/top.png" x="8" y="12" opacity="0.5" visibility="hidden" composite-op="svg:src-over" />
+    <stack name="Imported Group" opacity="0.8">
+      <layer name="Bottom" src="data/bottom.png" x="17" y="23" opacity="0.75" composite-op="svg:multiply" />
+    </stack>
+  </stack>
+</image>`;
+    const makeDeflatedZip = async specs => {
+      const localParts = [];
+      const centralParts = [];
+      let offset = 0;
+      const write16 = (view, position, value) => view.setUint16(position, value, true);
+      const write32 = (view, position, value) => view.setUint32(position, value >>> 0, true);
+      for (const spec of specs) {
+        const source = spec.bytes;
+        const method = spec.method || 0;
+        const packed = method === 8
+          ? new Uint8Array(await new Response(new ReadableStream({ start(controller) { controller.enqueue(source); controller.close(); } }).pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer())
+          : source;
+        const name = new TextEncoder().encode(spec.name);
+        const checksum = OS._crc32(source);
+        const local = new Uint8Array(30 + name.length + packed.length);
+        const localView = new DataView(local.buffer);
+        write32(localView, 0, 0x04034b50); write16(localView, 4, 20); write16(localView, 6, 0x0800);
+        write16(localView, 8, method); write32(localView, 14, checksum); write32(localView, 18, packed.length); write32(localView, 22, source.length);
+        write16(localView, 26, name.length); local.set(name, 30); local.set(packed, 30 + name.length);
+        localParts.push(local);
+        const central = new Uint8Array(46 + name.length);
+        const centralView = new DataView(central.buffer);
+        write32(centralView, 0, 0x02014b50); write16(centralView, 4, 20); write16(centralView, 6, 20); write16(centralView, 8, 0x0800);
+        write16(centralView, 10, method); write32(centralView, 16, checksum); write32(centralView, 20, packed.length); write32(centralView, 24, source.length);
+        write16(centralView, 28, name.length); write32(centralView, 42, offset); central.set(name, 46); centralParts.push(central);
+        offset += local.length;
+      }
+      const centralSize = centralParts.reduce((total, part) => total + part.length, 0);
+      const end = new Uint8Array(22);
+      const endView = new DataView(end.buffer);
+      write32(endView, 0, 0x06054b50); write16(endView, 8, specs.length); write16(endView, 10, specs.length); write32(endView, 12, centralSize); write32(endView, 16, offset);
+      return new Blob([...localParts, ...centralParts, end], { type:'application/zip' });
+    };
+    const archive = await makeDeflatedZip([
+      { name:'mimetype', bytes:new TextEncoder().encode('image/openraster') },
+      { name:'stack.xml', bytes:new TextEncoder().encode(stackXml), method:8 },
+      { name:'data/top.png', bytes:topPng, method:8 },
+      { name:'data/bottom.png', bytes:bottomPng, method:8 },
+      { name:'mergedimage.png', bytes:bottomPng, method:8 },
+      { name:'Thumbnails/thumbnail.png', bytes:png(64, 48, '#111111'), method:8 }
+    ]);
+    const archiveBytes = new Uint8Array(await archive.arrayBuffer());
+    OS._confirmDiscardUnsaved = async () => true;
+    const imported = await OS._loadORAFile(new File([archiveBytes], 'fixture.ora', { type:'image/openraster' }), { skipConfirm:true });
+    const importedLayers = OS.layers.slice(1).map(layer => ({
+      name:layer.name,
+      left:layer.objects[0]?.left,
+      top:layer.objects[0]?.top,
+      opacity:layer.opacity,
+      visible:layer.visible,
+      blend:layer.blend
+    }));
+    const importReport = OS._lastORAImportReport;
+    let downloaded = null;
+    const exported = await OS.saveFile('ora', {
+      deliver:(blob, filename) => { downloaded = { blob, filename }; return true; }
+    });
+    const exportedBytes = downloaded ? new Uint8Array(await downloaded.blob.arrayBuffer()) : null;
+    const exportedEntries = exportedBytes ? await OS._readORAZipEntries(exportedBytes) : [];
+    const exportedStack = new TextDecoder().decode(exportedEntries.find(entry => entry.name === 'stack.xml')?.bytes || new Uint8Array());
+    const reimported = exportedBytes
+      ? await OS._loadORAFile(new File([exportedBytes], 'roundtrip.ora', { type:'image/openraster' }), { skipConfirm:true })
+      : false;
+    const roundTripLayers = OS.layers.slice(1).map(layer => ({ name:layer.name, left:layer.objects[0]?.left, top:layer.objects[0]?.top }));
+    return {
+      imported,
+      importedLayers,
+      importWarnings:importReport?.warnings || [],
+      exported,
+      filename:downloaded?.filename,
+      entries:exportedEntries.map(entry => ({ name:entry.name, method:entry.method, size:entry.bytes.byteLength })),
+      exportedStack,
+      reimported,
+      roundTripLayers
+    };
+  });
+
+  expect(result.imported).toBe(true);
+  expect(result.importedLayers).toEqual([
+    { name:'Bottom', left:17, top:23, opacity:60, visible:true, blend:'multiply' },
+    { name:'Top', left:8, top:12, opacity:50, visible:false, blend:'source-over' }
+  ]);
+  expect(result.importWarnings.join(' ')).toMatch(/Imported Group.*flattened/);
+  expect(result.exported).toBe(true);
+  expect(result.filename).toBe('fixture.ora');
+  expect(result.entries.map(entry => entry.name)).toEqual([
+    'mimetype', 'stack.xml', 'data/layer0.png', 'data/layer1.png', 'mergedimage.png', 'Thumbnails/thumbnail.png'
+  ]);
+  expect(result.entries[0].method).toBe(0);
+  expect(result.entries.every(entry => entry.size > 0)).toBe(true);
+  expect(result.exportedStack.indexOf('name="Top"')).toBeLessThan(result.exportedStack.indexOf('name="Bottom"'));
+  expect(result.reimported).toBe(true);
+  expect(result.roundTripLayers).toEqual([
+    { name:'Bottom', left:17, top:23 },
+    { name:'Top', left:8, top:12 }
+  ]);
 });
 
 test('mirrors tool, layer, selection, and actions for assistive tech', async ({ page }) => {
