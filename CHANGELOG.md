@@ -5,6 +5,7 @@ All notable changes to Openshop will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Added ICC profile parsing and colour-managed raster import/export across JPEG, PNG, WebP, AVIF, and PSD. Display P3 sources retain their named profile, use a Display P3 working canvas where supported, convert to sRGB with an explicit report elsewhere, and embed the active working profile on export where the container allows it.
 - Added parity-gated GPU kernels for grayscale, threshold, brightness, contrast, blur, and sharpen alongside invert, with WebGPU/WebGL2 fallback and per-operation backend metrics. The release harness now measures each admitted operation against the CPU worker before allowing acceleration.
 - Added lazy PSD structure parsing and per-layer pixel decoding in the worker, with measured time-to-first-layer reporting and an explicit 256 MB ag-psd memory cap below its default allocator limit.
 - Added full-rate pen stroke sampling through coalesced and predicted pointer events, with provisional samples reconciled against the next real event, optional tilt-driven ABR stamp rotation/flattening, and mobile capability reporting.

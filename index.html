@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-b823gwQN0suLWohWgcpZPp3zn6uCPK7Si6liklKLLoM=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-xSR5EFiM+aNAkl9CUXutIIC4TS1XlSD3jQ6IeavH6PQ=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -5358,9 +5358,11 @@ const OS = {
     _lastPSDImportReport: null,
     _lastPSDImportMetrics: null,
     _lastImportRaw: null,
-    // Keep profile bytes opaque: the editor does not convert pixels yet, but
-    // a project round-trip must not silently discard the source profile.
-    _colorProfile: { name:'sRGB', source:'assumed', iccData:null },
+    _lastImportColorProfile: null,
+    _lastRasterExportReport: null,
+    _workingColorSpace: 'srgb',
+    _displayP3Support: null,
+    _colorProfile: { name:'sRGB', source:'assumed', iccData:null, colorSpace:'srgb', workingSpace:'srgb' },
     // AI selections are pixel masks, but retaining their provenance makes
     // them recoverable after a project is reopened instead of collapsing them
     // into an unlabelled transient selection.
@@ -5951,7 +5953,10 @@ const OS = {
         this._lastPSDImportReport = null;
         this._lastPSDImportMetrics = null;
         this._lastImportRaw = null;
-        this._colorProfile = { name:'sRGB', source:'assumed', iccData:null };
+        this._lastImportColorProfile = null;
+        this._lastRasterExportReport = null;
+        this._workingColorSpace = 'srgb';
+        this._colorProfile = { name:'sRGB', sourceKind:'assumed', iccData:null, colorSpace:'srgb', workingSpace:'srgb', conversion:'identity' };
         this._aiMasks = [];
         this._lastPSDExportReport = null;
         this.canvasW = 0;
@@ -6481,7 +6486,10 @@ const OS = {
         this._lastPSDImportReport = null;
         this._lastPSDImportMetrics = null;
         this._lastPSDExportReport = null;
-        this._colorProfile = { name:'sRGB', source:'assumed', iccData:null };
+        this._lastImportColorProfile = null;
+        this._lastRasterExportReport = null;
+        this._workingColorSpace = 'srgb';
+        this._colorProfile = { name:'sRGB', sourceKind:'assumed', iccData:null, colorSpace:'srgb', workingSpace:'srgb', conversion:'identity' };
         this._aiMasks = [];
         this.canvasW = w; this.canvasH = h; this.layers = []; this.canvas.clear();
         this.canvas.setBackgroundColor(null, this.canvas.renderAll.bind(this.canvas));
@@ -6854,6 +6862,209 @@ const OS = {
             return null;
         }
     },
+    _iccBytes(bytes) {
+        if (bytes instanceof Uint8Array) return bytes;
+        if (bytes instanceof ArrayBuffer) return new Uint8Array(bytes);
+        if (ArrayBuffer.isView(bytes)) return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        return null;
+    },
+    _iccFixed16(view, offset) {
+        return offset + 4 <= view.byteLength ? view.getInt32(offset, false) / 65536 : 0;
+    },
+    _iccTagText(bytes, offset, size) {
+        if (offset + 12 > bytes.length) return '';
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        const type = String.fromCharCode(...bytes.slice(offset, offset + 4));
+        if (type === 'desc') {
+            const length = Math.min(view.getUint32(offset + 8, false), Math.max(0, size - 12));
+            return new TextDecoder().decode(bytes.slice(offset + 12, offset + 12 + length)).replace(/\0.*$/s, '').trim();
+        }
+        if (type === 'mluc' && offset + 20 <= bytes.length) {
+            const count = Math.min(64, view.getUint32(offset + 8, false));
+            const recordSize = view.getUint32(offset + 12, false);
+            if (recordSize >= 12 && offset + 16 + recordSize <= bytes.length) {
+                const stringLength = Math.min(view.getUint32(offset + 16 + 4, false), Math.max(0, size - 16));
+                const stringOffset = view.getUint32(offset + 16 + 8, false);
+                if (stringOffset + stringLength <= size) {
+                    const raw = bytes.slice(offset + stringOffset, offset + stringOffset + stringLength);
+                    try {
+                        let text = '';
+                        for (let index = 0; index + 1 < raw.length; index += 2) text += String.fromCharCode((raw[index] << 8) | raw[index + 1]);
+                        if (text.trim()) return text.trim();
+                    } catch (_) {}
+                }
+            }
+            if (count > 0) return '';
+        }
+        if (type === 'text') return new TextDecoder().decode(bytes.slice(offset + 8, offset + size)).replace(/\0.*$/s, '').trim();
+        return '';
+    },
+    _iccCurve(bytes, offset, size) {
+        if (offset + 12 > bytes.length) return { kind:'identity' };
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        const type = String.fromCharCode(...bytes.slice(offset, offset + 4));
+        if (type === 'para' && offset + 16 <= bytes.length) {
+            const functionType = view.getUint16(offset + 8, false);
+            if (functionType === 0) return { kind:'gamma', gamma:Math.max(0.1, this._iccFixed16(view, offset + 12)) };
+        }
+        if (type !== 'curv') return { kind:'identity' };
+        const count = view.getUint32(offset + 8, false);
+        if (count === 0) return { kind:'gamma', gamma:1 };
+        if (count === 1 && offset + 14 <= bytes.length) return { kind:'gamma', gamma:Math.max(0.1, view.getUint16(offset + 12, false) / 256) };
+        if (count > 1 && count <= 4096 && offset + 12 + count * 2 <= bytes.length) {
+            const table = [];
+            for (let index = 0; index < count; index++) table.push(view.getUint16(offset + 12 + index * 2, false) / 65535);
+            return { kind:'table', table };
+        }
+        return { kind:'identity' };
+    },
+    _parseICCProfile(bytes) {
+        const source = this._iccBytes(bytes);
+        if (!source || source.byteLength < 132 || source.byteLength > this._importLimits.maxColorProfileBytes) return null;
+        const view = new DataView(source.buffer, source.byteOffset, source.byteLength);
+        if (String.fromCharCode(...source.slice(36, 40)) !== 'acsp') return null;
+        const declaredSize = view.getUint32(0, false);
+        if (declaredSize && (declaredSize < 132 || declaredSize > source.byteLength)) return null;
+        const tagCount = Math.min(512, view.getUint32(128, false));
+        const tags = new Map();
+        for (let index = 0; index < tagCount; index++) {
+            const row = 132 + index * 12;
+            if (row + 12 > source.byteLength) break;
+            const signature = String.fromCharCode(...source.slice(row, row + 4));
+            const offset = view.getUint32(row + 4, false);
+            const size = view.getUint32(row + 8, false);
+            if (offset < 132 || size < 8 || offset + size > source.byteLength) continue;
+            if (!tags.has(signature)) tags.set(signature, { offset, size });
+        }
+        const readTag = signature => tags.get(signature);
+        const descriptionTag = readTag('desc') || readTag('mluc') || readTag('cprt');
+        const description = descriptionTag ? this._iccTagText(source, descriptionTag.offset, descriptionTag.size) : '';
+        const xyzTags = ['rXYZ', 'gXYZ', 'bXYZ'].map(readTag);
+        const matrixRows = xyzTags.every(Boolean) ? [
+            xyzTags.map(tag => this._iccFixed16(view, tag.offset + 8)),
+            xyzTags.map(tag => this._iccFixed16(view, tag.offset + 12)),
+            xyzTags.map(tag => this._iccFixed16(view, tag.offset + 16))
+        ] : null;
+        const curves = ['rTRC', 'gTRC', 'bTRC'].map(signature => {
+            const tag = readTag(signature);
+            return tag ? this._iccCurve(source, tag.offset, tag.size) : { kind:'identity' };
+        });
+        const lower = (description + ' ' + new TextDecoder().decode(source.slice(16, 20))).toLowerCase();
+        const p3Matrix = [
+            [0.48657095, 0.26566769, 0.19821729],
+            [0.22897456, 0.69173852, 0.07928691],
+            [0, 0.04511338, 1.04394437]
+        ];
+        const srgbMatrix = [
+            [0.4124564, 0.3575761, 0.1804375],
+            [0.2126729, 0.7151524, 0.072175],
+            [0.0193339, 0.119192, 0.9503041]
+        ];
+        const distance = candidate => matrixRows
+            ? matrixRows.reduce((total, row, rowIndex) => total + row.reduce((sum, value, columnIndex) => sum + Math.abs(value - candidate[rowIndex][columnIndex]), 0), 0)
+            : Infinity;
+        const p3 = /\b(display[\s-]?p3|dcip3|p3)\b/.test(lower) || distance(p3Matrix) < 0.035;
+        const srgb = /\bsrgb\b/.test(lower) || distance(srgbMatrix) < 0.035;
+        const colorSpace = p3 ? 'display-p3' : (srgb ? 'srgb' : (matrixRows ? 'icc-rgb' : 'unknown'));
+        const name = description || (p3 ? 'Display P3' : (srgb ? 'sRGB IEC61966-2.1' : 'Embedded ICC profile'));
+        return {
+            valid:true,
+            name:this._safeText(name, 120),
+            colorSpace,
+            matrix:matrixRows,
+            curves,
+            description:this._safeText(description, 160),
+            tagCount,
+            bytes:source.byteLength
+        };
+    },
+    _displayP3CanvasSupported() {
+        if (this._displayP3Support !== null) return this._displayP3Support;
+        try {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d', { colorSpace:'display-p3' });
+            const attributes = context?.getContextAttributes?.();
+            this._displayP3Support = Boolean(context && (!attributes?.colorSpace || attributes.colorSpace === 'display-p3'));
+        } catch (_) {
+            this._displayP3Support = false;
+        }
+        return this._displayP3Support;
+    },
+    _colorSpaceMatrix(space) {
+        if (space === 'display-p3') return [
+            [0.48657095, 0.26566769, 0.19821729],
+            [0.22897456, 0.69173852, 0.07928691],
+            [0, 0.04511338, 1.04394437]
+        ];
+        return [
+            [0.4124564, 0.3575761, 0.1804375],
+            [0.2126729, 0.7151524, 0.072175],
+            [0.0193339, 0.119192, 0.9503041]
+        ];
+    },
+    _inverseSRGBMatrix() {
+        return [
+            [3.2404542, -1.5371385, -0.4985314],
+            [-0.969266, 1.8760108, 0.041556],
+            [0.0556434, -0.2040259, 1.0572252]
+        ];
+    },
+    _decodeColorChannel(value, curve, p3 = false) {
+        const normalized = Math.max(0, Math.min(1, Number(value) || 0));
+        if (curve?.kind === 'table' && curve.table?.length) {
+            const position = normalized * (curve.table.length - 1);
+            const lower = Math.floor(position);
+            const upper = Math.min(curve.table.length - 1, lower + 1);
+            const fraction = position - lower;
+            return curve.table[lower] + (curve.table[upper] - curve.table[lower]) * fraction;
+        }
+        if (p3 || curve?.kind === 'identity') {
+            return normalized <= 0.04045 ? normalized / 12.92 : Math.pow((normalized + 0.055) / 1.055, 2.4);
+        }
+        if (curve?.kind === 'gamma') return Math.pow(normalized, Math.max(0.1, curve.gamma));
+        return normalized;
+    },
+    _encodeColorChannel(value) {
+        const normalized = Math.max(0, Math.min(1, Number(value) || 0));
+        return normalized <= 0.0031308 ? normalized * 12.92 : 1.055 * Math.pow(normalized, 1 / 2.4) - 0.055;
+    },
+    _convertImageDataColorProfile(imageData, profile, targetSpace = 'srgb') {
+        if (!imageData?.data || !profile || profile.colorSpace === targetSpace || profile.colorSpace === 'srgb' && targetSpace === 'srgb') {
+            return { imageData, converted:false, conversion:'identity' };
+        }
+        if (!['display-p3', 'icc-rgb', 'srgb'].includes(profile.colorSpace) || !profile.matrix && profile.colorSpace !== 'display-p3') {
+            return { imageData, converted:false, conversion:'unsupported-profile' };
+        }
+        const sourceMatrix = profile.matrix || this._colorSpaceMatrix(profile.colorSpace);
+        const targetMatrix = this._inverseSRGBMatrix();
+        const sourceIsP3 = profile.colorSpace === 'display-p3';
+        const output = new Uint8ClampedArray(imageData.data);
+        for (let index = 0; index < output.length; index += 4) {
+            const linear = [0, 1, 2].map(channel => this._decodeColorChannel(imageData.data[index + channel] / 255, profile.curves?.[channel], sourceIsP3));
+            const xyz = [
+                sourceMatrix[0][0] * linear[0] + sourceMatrix[0][1] * linear[1] + sourceMatrix[0][2] * linear[2],
+                sourceMatrix[1][0] * linear[0] + sourceMatrix[1][1] * linear[1] + sourceMatrix[1][2] * linear[2],
+                sourceMatrix[2][0] * linear[0] + sourceMatrix[2][1] * linear[1] + sourceMatrix[2][2] * linear[2]
+            ];
+            const targetLinear = targetSpace === 'display-p3'
+                ? [
+                    2.4934969 * xyz[0] - 0.9313836 * xyz[1] - 0.4027108 * xyz[2],
+                    -0.829489 * xyz[0] + 1.762664 * xyz[1] + 0.0236247 * xyz[2],
+                    0.0358458 * xyz[0] - 0.0761724 * xyz[1] + 0.9568845 * xyz[2]
+                ]
+                : [
+                    targetMatrix[0][0] * xyz[0] + targetMatrix[0][1] * xyz[1] + targetMatrix[0][2] * xyz[2],
+                    targetMatrix[1][0] * xyz[0] + targetMatrix[1][1] * xyz[1] + targetMatrix[1][2] * xyz[2],
+                    targetMatrix[2][0] * xyz[0] + targetMatrix[2][1] * xyz[1] + targetMatrix[2][2] * xyz[2]
+                ];
+            targetLinear.forEach((value, channel) => { output[index + channel] = Math.round(this._encodeColorChannel(value) * 255); });
+        }
+        return {
+            imageData:new ImageData(output, imageData.width, imageData.height),
+            converted:true,
+            conversion:profile.colorSpace + '-to-' + targetSpace
+        };
+    },
     _normalizeColorProfile(profile) {
         const value = profile && typeof profile === 'object' ? profile : {};
         const prefix = 'data:application/vnd.openshop.icc;base64,';
@@ -6869,10 +7080,22 @@ const OS = {
         } else if (raw instanceof Uint8Array || raw instanceof ArrayBuffer || ArrayBuffer.isView(raw)) {
             iccData = this._encodeProjectBytes(raw, 'application/vnd.openshop.icc');
         }
+        const parsed = iccData ? this._parseICCProfile(this._decodeProjectBytes(iccData)) : null;
+        const colorSpace = parsed?.colorSpace || (value.colorSpace === 'display-p3' ? 'display-p3' : 'srgb');
+        const workingSpace = value.workingSpace === 'display-p3'
+            ? 'display-p3'
+            : 'srgb';
         return {
-            name: this._safeText(value.name || (iccData ? 'Embedded ICC profile' : 'sRGB'), 120),
+            name: this._safeText(parsed?.name || value.name || (iccData ? 'Embedded ICC profile' : 'sRGB'), 120),
             sourceKind: this._safeText(value.sourceKind || value.source || (iccData ? 'embedded' : 'assumed'), 40),
-            iccData
+            iccData,
+            colorSpace,
+            workingSpace,
+            conversion:this._safeText(value.conversion || (colorSpace === 'srgb' ? 'identity' : 'pending'), 80),
+            description:this._safeText(value.description || parsed?.description || '', 160),
+            matrix:parsed?.matrix || null,
+            curves:parsed?.curves || null,
+            valid:Boolean(parsed || !iccData)
         };
     },
     _normalizeAIMask(entry, { validate = false } = {}) {
@@ -7579,6 +7802,12 @@ const OS = {
         this._restoreGuidesState(state.guides);
         this._restoreSelectionState(state.selection);
         this._colorProfile = this._normalizeColorProfile(state.metadata?.colorProfile);
+        const requestedWorkingSpace = this._colorProfile.workingSpace === 'display-p3' ? 'display-p3' : 'srgb';
+        this._workingColorSpace = requestedWorkingSpace === 'display-p3' && this._displayP3CanvasSupported() ? 'display-p3' : 'srgb';
+        if (requestedWorkingSpace !== this._workingColorSpace && this._colorProfile.colorSpace === 'display-p3' && this._colorProfile.conversion === 'identity') {
+            this._colorProfile.conversion = 'display-p3-to-srgb';
+        }
+        this._lastImportColorProfile = this._colorProfile.iccData ? this._colorProfile : null;
         this._aiMasks = this._normalizeAIMasks(state.metadata?.aiMasks, { validate:true });
         await this._rebuildAdjustmentLayers();
         await this._rebuildLayerMasks();
@@ -7711,7 +7940,7 @@ const OS = {
             requestAnimationFrame(() => { o.classList.add('show'); cancel.focus(); });
         });
     },
-    async _addDecodedImageToCanvas(img, { name, mode, openAction = 'Opening an image' }) {
+    async _addDecodedImageToCanvas(img, { name, mode, openAction = 'Opening an image', colorProfile = null, workingColorSpace = 'srgb', colorConversion = 'identity' }) {
         const { width } = this._validateDecodedImage(img);
         if (mode === 'open') {
             // Returns false when the user keeps their work, so callers that do
@@ -7719,6 +7948,15 @@ const OS = {
             if (!await this._confirmDiscardUnsaved(openAction)) return false;
             if (this.createNewDocument(img.width, img.height, { resetProject:true }) === false) return false;
             this._docName = this._safeText(String(name || '').replace(/\.[^.]+$/, ''), 100) || 'Untitled';
+            const normalizedProfile = this._normalizeColorProfile(colorProfile || { name:'sRGB', sourceKind:'assumed' });
+            const targetSpace = workingColorSpace === 'display-p3' ? 'display-p3' : 'srgb';
+            this._workingColorSpace = targetSpace;
+            this._colorProfile = this._normalizeColorProfile({
+                ...normalizedProfile,
+                workingSpace:targetSpace,
+                conversion:colorConversion || normalizedProfile.conversion
+            });
+            this._lastImportColorProfile = colorProfile ? normalizedProfile : null;
             this._setPersistenceState('dirty');
             img.set({ left:0, top:0, selectable:true, name:this._safeText(name, 120) });
             this.canvas.add(img); this.layers[this.activeLayerIdx].objects.push(img);
@@ -7777,6 +8015,150 @@ const OS = {
             offset += 2 + size;
         }
         return null;
+    },
+    _readJPEGICCProfile(bytes) {
+        const source = this._iccBytes(bytes);
+        if (!source || source.length < 4 || source[0] !== 0xFF || source[1] !== 0xD8) return null;
+        const chunks = new Map();
+        let total = 0;
+        let offset = 2;
+        while (offset + 4 <= source.length) {
+            if (source[offset] !== 0xFF) break;
+            const marker = source[offset + 1];
+            if (marker === 0xDA) break;
+            const size = (source[offset + 2] << 8) | source[offset + 3];
+            const end = offset + 2 + size;
+            if (size < 2 || end > source.length) break;
+            if (marker === 0xE2 && size >= 16) {
+                const label = new TextDecoder().decode(source.slice(offset + 4, offset + 16));
+                if (label === 'ICC_PROFILE\u0000') {
+                    const sequence = source[offset + 16];
+                    total = Math.max(total, source[offset + 17]);
+                    if (sequence > 0 && sequence <= 255) chunks.set(sequence, source.slice(offset + 18, end));
+                }
+            }
+            offset = end;
+        }
+        if (!total || chunks.size !== total) return null;
+        const profile = new Uint8Array([...chunks.keys()].sort((a, b) => a - b).reduce((sum, key) => sum + chunks.get(key).length, 0));
+        let cursor = 0;
+        [...chunks.keys()].sort((a, b) => a - b).forEach(key => { const chunk = chunks.get(key); profile.set(chunk, cursor); cursor += chunk.length; });
+        return profile;
+    },
+    _readPNGICCProfile(bytes) {
+        const source = this._iccBytes(bytes);
+        const signature = [137,80,78,71,13,10,26,10];
+        if (!source || source.length < 33 || !signature.every((value, index) => source[index] === value)) return null;
+        const view = new DataView(source.buffer, source.byteOffset, source.byteLength);
+        let offset = 8;
+        while (offset + 12 <= source.length) {
+            const length = view.getUint32(offset, false);
+            const dataStart = offset + 8;
+            const dataEnd = dataStart + length;
+            if (length > this._importLimits.maxColorProfileBytes || dataEnd + 4 > source.length) return null;
+            const type = String.fromCharCode(...source.slice(offset + 4, offset + 8));
+            if (type === 'iCCP') {
+                const nameEnd = source.indexOf(0, dataStart);
+                if (nameEnd < dataStart || nameEnd + 2 > dataEnd || source[nameEnd + 1] !== 0) return null;
+                return { compressed:source.slice(nameEnd + 2, dataEnd), format:'png' };
+            }
+            offset = dataEnd + 4;
+        }
+        return null;
+    },
+    _readWebPICCProfile(bytes) {
+        const source = this._iccBytes(bytes);
+        if (!source || source.length < 16 || String.fromCharCode(...source.slice(0, 4)) !== 'RIFF' || String.fromCharCode(...source.slice(8, 12)) !== 'WEBP') return null;
+        const view = new DataView(source.buffer, source.byteOffset, source.byteLength);
+        let offset = 12;
+        while (offset + 8 <= source.length) {
+            const length = view.getUint32(offset + 4, true);
+            const dataStart = offset + 8;
+            const dataEnd = dataStart + length;
+            if (dataEnd > source.length) return null;
+            if (String.fromCharCode(...source.slice(offset, offset + 4)) === 'ICCP') return { bytes:source.slice(dataStart, dataEnd), format:'webp' };
+            offset = dataEnd + (length & 1);
+        }
+        return null;
+    },
+    _readAVIFICCProfile(bytes) {
+        const source = this._iccBytes(bytes);
+        if (!source || source.length < 16) return null;
+        const view = new DataView(source.buffer, source.byteOffset, source.byteLength);
+        for (let offset = 0; offset + 12 <= source.length; offset += 1) {
+            if (String.fromCharCode(...source.slice(offset + 4, offset + 8)) !== 'colr') continue;
+            const length = view.getUint32(offset, false);
+            const dataStart = offset + 8;
+            const dataEnd = offset + length;
+            if (length >= 12 && dataEnd <= source.length && String.fromCharCode(...source.slice(dataStart, dataStart + 4)) === 'prof') {
+                return { bytes:source.slice(dataStart + 4, dataEnd), format:'avif' };
+            }
+        }
+        return null;
+    },
+    _inflateStoredZlib(bytes) {
+        const source = this._iccBytes(bytes);
+        if (!source || source.length < 6 || source[0] !== 0x78) return null;
+        const chunks = [];
+        let offset = 2, final = false, total = 0;
+        while (!final && offset < source.length - 4) {
+            const header = source[offset++];
+            final = Boolean(header & 1);
+            if (((header >> 1) & 3) !== 0 || offset + 4 > source.length) return null;
+            const length = source[offset] | (source[offset + 1] << 8);
+            const inverse = source[offset + 2] | (source[offset + 3] << 8);
+            offset += 4;
+            if ((length ^ inverse) !== 0xFFFF || offset + length > source.length) return null;
+            const chunk = source.slice(offset, offset + length);
+            chunks.push(chunk);
+            total += chunk.length;
+            offset += length;
+            if (total > this._importLimits.maxColorProfileBytes) return null;
+        }
+        if (!final || offset + 4 > source.length) return null;
+        return this._concatByteArrays(chunks);
+    },
+    async _inflateICCProfile(bytes) {
+        const source = this._iccBytes(bytes);
+        if (!source || source.byteLength > this._importLimits.maxColorProfileBytes) return null;
+        const stored = this._inflateStoredZlib(source);
+        if (stored) return stored;
+        if (typeof DecompressionStream !== 'function') return null;
+        try {
+            const stream = new Blob([source]).stream().pipeThrough(new DecompressionStream('deflate'));
+            const inflated = new Uint8Array(await new Response(stream).arrayBuffer());
+            return inflated.byteLength <= this._importLimits.maxColorProfileBytes ? inflated : null;
+        } catch (_) {
+            return null;
+        }
+    },
+    async _readEmbeddedColorProfile(bytes, mime = '') {
+        const source = this._iccBytes(bytes);
+        if (!source) return null;
+        let candidate = null;
+        if (/jpe?g/i.test(mime)) {
+            const profile = this._readJPEGICCProfile(source);
+            if (profile) candidate = { bytes:profile, format:'jpeg' };
+        } else if (/png/i.test(mime)) {
+            const profile = this._readPNGICCProfile(source);
+            if (profile) candidate = {
+                bytes:await this._inflateICCProfile(profile.compressed),
+                format:profile.format
+            };
+        } else if (/webp/i.test(mime)) {
+            candidate = this._readWebPICCProfile(source);
+        } else if (/avif/i.test(mime)) {
+            candidate = this._readAVIFICCProfile(source);
+        }
+        if (!candidate?.bytes) return null;
+        const parsed = this._parseICCProfile(candidate.bytes);
+        return this._normalizeColorProfile({
+            name:parsed?.name || 'Embedded ICC profile',
+            sourceKind:'embedded-' + candidate.format,
+            iccData:candidate.bytes,
+            colorSpace:parsed?.colorSpace,
+            description:parsed?.description
+        });
     },
     _neutralizeExifOrientation(buffer) {
         const bytes = new Uint8Array(buffer.slice(0));
@@ -7849,7 +8231,7 @@ const OS = {
         return out;
     },
     // Orientation 1-8 as defined by TIFF: 2/4/5/7 mirror, 3/6/8 rotate.
-    _applyExifOrientation(source, orientation) {
+    _applyExifOrientation(source, orientation, { colorSpace = 'srgb' } = {}) {
         const value = Number(orientation) || 1;
         if (value <= 1 || value > 8) return null;
         const width = source.naturalWidth || source.width;
@@ -7858,7 +8240,7 @@ const OS = {
         const out = document.createElement('canvas');
         out.width = swap ? height : width;
         out.height = swap ? width : height;
-        const ctx = out.getContext('2d');
+        const ctx = out.getContext('2d', colorSpace === 'display-p3' ? { colorSpace:'display-p3' } : undefined);
         switch (value) {
             case 2: ctx.transform(-1, 0, 0, 1, width, 0); break;
             case 3: ctx.transform(-1, 0, 0, -1, width, height); break;
@@ -7870,6 +8252,47 @@ const OS = {
         }
         ctx.drawImage(source, 0, 0);
         return out;
+    },
+    async _colorManagedImageFromSource(source, profile, { orientation = 1, targetSpace = 'srgb' } = {}) {
+        let bitmap = null;
+        let canvas = null;
+        try {
+            if (typeof createImageBitmap !== 'function') throw new Error('ImageBitmap is unavailable');
+            bitmap = await createImageBitmap(source, { colorSpaceConversion:'none' });
+            const width = Number(bitmap.width || bitmap.codedWidth || 0);
+            const height = Number(bitmap.height || bitmap.codedHeight || 0);
+            this._validateDecodedImage({ width, height });
+            canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext('2d', targetSpace === 'display-p3' ? { colorSpace:'display-p3' } : { colorSpace:'srgb' });
+            if (!context) throw new Error('Could not create the color-managed image canvas');
+            context.drawImage(bitmap, 0, 0);
+            const raw = context.getImageData(0, 0, width, height);
+            const converted = this._convertImageDataColorProfile(raw, profile, targetSpace);
+            if (converted.converted) context.putImageData(converted.imageData, 0, 0);
+            if (orientation > 1) canvas = this._applyExifOrientation(canvas, orientation, { colorSpace:targetSpace }) || canvas;
+            return {
+                image:new fabric.Image(canvas),
+                conversion:converted.conversion,
+                targetSpace
+            };
+        } finally {
+            bitmap?.close?.();
+        }
+    },
+    _colorProfileImportContext(profile, mode = 'open') {
+        const normalized = this._normalizeColorProfile(profile);
+        const targetSpace = mode === 'open'
+            ? (normalized.colorSpace === 'display-p3' && this._displayP3CanvasSupported() ? 'display-p3' : 'srgb')
+            : (this._workingColorSpace === 'display-p3' ? 'display-p3' : 'srgb');
+        const convertible = ['display-p3', 'icc-rgb', 'srgb'].includes(normalized.colorSpace);
+        const conversion = normalized.colorSpace === targetSpace
+            ? 'identity'
+            : convertible
+                ? `${normalized.colorSpace}-to-${targetSpace}`
+                : 'unsupported-profile';
+        return { profile:normalized, targetSpace, conversion };
     },
     _isRAWFile(file) {
         const name = String(file?.name || '').toLowerCase();
@@ -8122,66 +8545,127 @@ const OS = {
             return false;
         }
     },
-    async _loadRasterFile(file) {
-        if (this._isAvifFile(file)) return this._loadAvifFile(file, 'open');
-        if (this._isSVGFile(file)) return this._loadSVGFile(file, 'open');
+    async _loadRasterFile(file, mode = 'open') {
+        if (this._isAvifFile(file)) return this._loadAvifFile(file, mode);
+        if (this._isSVGFile(file)) return this._loadSVGFile(file, mode);
         try {
-            const buffer = /jpeg|jpg/i.test(file.type || file.name) ? await file.arrayBuffer() : null;
+            const buffer = typeof file.arrayBuffer === 'function' ? await file.arrayBuffer() : null;
             const exif = buffer ? this._readExif(buffer) : null;
             const orientation = exif?.orientation;
+            const embeddedProfile = buffer ? await this._readEmbeddedColorProfile(buffer, file.type || file.name || '') : null;
+            const colorContext = embeddedProfile
+                ? this._colorProfileImportContext(embeddedProfile, mode)
+                : {
+                    profile:this._normalizeColorProfile({ name:'sRGB', sourceKind:'assumed' }),
+                    targetSpace:mode === 'open' ? 'srgb' : this._workingColorSpace,
+                    conversion:'identity'
+                };
             // HTML image decoders apply EXIF by default. Clear only the copied
             // orientation tag before decoding, then bake the transform below;
             // the original file and the metadata shown in Info stay untouched.
             const decodeSource = orientation > 1
                 ? new Blob([this._neutralizeExifOrientation(buffer)], { type:file.type || 'image/jpeg' })
                 : file;
-            const url = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = ev => resolve(ev.target.result);
-                reader.onerror = () => reject(new Error('Could not read the file'));
-                reader.readAsDataURL(decodeSource);
-            });
-            let img = await fabric.Image.fromURL(url);
-            if (orientation > 1) {
-                // Rotate the pixels rather than the object: the correction has
-                // to survive export, and every downstream consumer works on the
-                // layer's pixels.
-                const corrected = this._applyExifOrientation(img.getElement(), orientation);
-                if (corrected) img = await fabric.Image.fromURL(corrected.toDataURL('image/png'));
+            let img = null;
+            let colorConversion = colorContext.conversion;
+            if (embeddedProfile) {
+                try {
+                    const managed = await this._colorManagedImageFromSource(decodeSource, colorContext.profile, {
+                        orientation,
+                        targetSpace:colorContext.targetSpace
+                    });
+                    img = managed.image;
+                    colorConversion = managed.conversion;
+                } catch (error) {
+                    console.warn('Color-managed image import fell back to the browser decoder:', error.message);
+                    colorConversion = 'profile-unconverted';
+                }
+            }
+            if (!img) {
+                const url = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = ev => resolve(ev.target.result);
+                    reader.onerror = () => reject(new Error('Could not read the file'));
+                    reader.readAsDataURL(decodeSource);
+                });
+                img = await fabric.Image.fromURL(url);
+                if (orientation > 1) {
+                    // Rotate the pixels rather than the object: the correction
+                    // has to survive export, and every downstream consumer
+                    // works on the layer's pixels.
+                    const corrected = this._applyExifOrientation(img.getElement(), orientation, { colorSpace:colorContext.targetSpace });
+                    if (corrected) img = await fabric.Image.fromURL(corrected.toDataURL('image/png'));
+                }
             }
             this._lastImportExif = exif || null;
-            const added = await this._addDecodedImageToCanvas(img, { name:file.name, mode:'open' });
+            const added = await this._addDecodedImageToCanvas(img, {
+                name:file.name,
+                mode,
+                colorProfile:embeddedProfile,
+                workingColorSpace:colorContext.targetSpace,
+                colorConversion
+            });
             if (added !== false && exif && orientation > 1) {
                 this.toast(`Rotated to match the photo's EXIF orientation`, 'info');
             }
+            if (added !== false && embeddedProfile && colorConversion !== 'identity') {
+                this.toast(`${embeddedProfile.name} converted to ${colorContext.targetSpace === 'display-p3' ? 'Display P3' : 'sRGB'} for editing`, 'info');
+            }
+            return added;
         } catch (err) {
             this.toast(err.message, 'error');
+            return false;
         }
     },
     async _loadAvifFile(file, mode = 'open') {
         try {
-            const decoded = await this._decodeAvif(await file.arrayBuffer());
+            const buffer = await file.arrayBuffer();
+            const embeddedProfile = await this._readEmbeddedColorProfile(buffer, file.type || file.name || 'image/avif');
+            const colorContext = embeddedProfile
+                ? this._colorProfileImportContext(embeddedProfile, mode)
+                : {
+                    profile:this._normalizeColorProfile({ name:'sRGB', sourceKind:'assumed' }),
+                    targetSpace:mode === 'open' ? 'srgb' : this._workingColorSpace,
+                    conversion:'identity'
+                };
+            const decoded = await this._decodeAvif(buffer);
             const canvas = document.createElement('canvas');
             canvas.width = decoded.width;
             canvas.height = decoded.height;
-            const context = canvas.getContext('2d');
+            const context = canvas.getContext('2d', colorContext.targetSpace === 'display-p3' ? { colorSpace:'display-p3' } : { colorSpace:'srgb' });
             if (!context) throw new Error('Could not create the AVIF import canvas');
-            context.putImageData(decoded, 0, 0);
+            const converted = embeddedProfile
+                ? this._convertImageDataColorProfile(decoded, colorContext.profile, colorContext.targetSpace)
+                : { imageData:decoded, conversion:'identity', converted:false };
+            context.putImageData(converted.imageData, 0, 0);
             const image = await fabric.Image.fromURL(canvas.toDataURL('image/png'));
             this._lastImportExif = null;
-            return await this._addDecodedImageToCanvas(image, { name:file.name || 'Imported AVIF', mode });
+            const added = await this._addDecodedImageToCanvas(image, {
+                name:file.name || 'Imported AVIF',
+                mode,
+                colorProfile:embeddedProfile,
+                workingColorSpace:colorContext.targetSpace,
+                colorConversion:converted.conversion
+            });
+            if (added !== false && embeddedProfile && converted.conversion !== 'identity') {
+                this.toast(`${embeddedProfile.name} converted to ${colorContext.targetSpace === 'display-p3' ? 'Display P3' : 'sRGB'} for editing`, 'info');
+            }
+            return added;
         } catch (error) {
             this.toast(`AVIF import failed: ${error.message}`, 'error');
             return false;
         }
     },
-    async _installAnimationFrames(frames, delays, file, formatLabel) {
+    async _installAnimationFrames(frames, delays, file, formatLabel, { colorProfile = null, workingColorSpace = 'srgb', colorConversion = 'identity' } = {}) {
         if (!Array.isArray(frames) || !frames.length) throw new Error('Animated decoder returned no frames');
         const image = await fabric.Image.fromURL(frames[0]);
         if (await this._addDecodedImageToCanvas(image, {
             name:file.name,
             mode:'open',
-            openAction:`Opening animated ${formatLabel}`
+            openAction:`Opening animated ${formatLabel}`,
+            colorProfile,
+            workingColorSpace,
+            colorConversion
         }) === false) return false;
         this._animFrames = frames;
         this._animDelays = this._normalizeAnimationDelays(delays, frames.length);
@@ -8209,6 +8693,11 @@ const OS = {
         try {
             const generation = this._documentGeneration;
             const buffer = await file.arrayBuffer();
+            const embeddedProfile = await this._readEmbeddedColorProfile(buffer, file.type || file.name || '');
+            const colorContext = embeddedProfile
+                ? this._colorProfileImportContext(embeddedProfile, 'open')
+                : { profile:null, targetSpace:'srgb', conversion:'identity' };
+            let colorConversion = colorContext.conversion;
             decoder = new ImageDecoder({
                 data:new Uint8Array(buffer),
                 type:this._isAPNGFile(file) ? 'image/apng' : 'image/webp',
@@ -8246,16 +8735,33 @@ const OS = {
                 const canvas = document.createElement('canvas');
                 canvas.width = frameW;
                 canvas.height = frameH;
-                const context = canvas.getContext('2d', { alpha:true, willReadFrequently:false });
+                const context = canvas.getContext('2d', {
+                    alpha:true,
+                    willReadFrequently:Boolean(embeddedProfile),
+                    colorSpace:colorContext.targetSpace
+                });
                 if (!context) throw new Error('Could not create the animation frame canvas');
                 context.drawImage(frame, 0, 0, frameW, frameH);
+                if (embeddedProfile) {
+                    const converted = this._convertImageDataColorProfile(
+                        context.getImageData(0, 0, frameW, frameH),
+                        colorContext.profile,
+                        colorContext.targetSpace
+                    );
+                    context.putImageData(converted.imageData, 0, 0);
+                    colorConversion = converted.conversion;
+                }
                 frames.push(canvas.toDataURL('image/png'));
                 delays.push(Math.max(10, Math.min(60000, Math.round((Number(frame.duration || track.frameDuration) || fallbackDelay * 1000) / 1000))));
                 frame.close?.();
                 canvas.width = 1;
                 canvas.height = 1;
             }
-            return await this._installAnimationFrames(frames, delays, file, this._isAPNGFile(file) ? 'PNG' : 'WebP');
+            return await this._installAnimationFrames(frames, delays, file, this._isAPNGFile(file) ? 'PNG' : 'WebP', {
+                colorProfile:embeddedProfile,
+                workingColorSpace:colorContext.targetSpace,
+                colorConversion
+            });
         } catch (error) {
             console.warn('Animated image import failed, loading as static:', error.message);
             this.toast(`Animated import unavailable — ${error.message}. Loading the first frame instead.`, 'info');
@@ -8362,11 +8868,7 @@ const OS = {
             void this._loadSVGFile(file, 'drop');
             return;
         }
-        const r = new FileReader(); r.onload = ev => {
-            fabric.Image.fromURL(ev.target.result, img => {
-                void Promise.resolve(this._addDecodedImageToCanvas(img, { name:file.name, mode:'drop' })).catch(err => this.toast(err.message, 'error'));
-            });
-        }; r.readAsDataURL(file);
+        void this._loadRasterFile(file, 'drop');
     },
     _exportFileName(format) {
         const base = (this._docName || 'openshop-export').replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -8447,7 +8949,7 @@ const OS = {
     },
     _captureExportRaster(options = {}) {
         const normalized = this._normalizeExportOptions(options);
-        const dataUrl = this._withExportCanvasState(normalized, () => {
+        let dataUrl = this._withExportCanvasState(normalized, () => {
             const renderOptions = {
                 format:normalized.format,
                 quality:normalized.quality,
@@ -8463,7 +8965,381 @@ const OS = {
         if (typeof dataUrl !== 'string' || !dataUrl.startsWith(`data:${mime}`)) {
             throw new Error(`${normalized.format.toUpperCase()} encoding is not supported by this browser`);
         }
-        return { dataUrl, options:normalized };
+        let profileEmbedded = false;
+        const profileBytes = this._getWorkingICCProfileBytes();
+        if (profileBytes?.byteLength && ['png', 'jpeg', 'webp'].includes(normalized.format)) {
+            try {
+                dataUrl = this._embedRasterICCDataUrl(dataUrl, normalized.format, profileBytes);
+                profileEmbedded = true;
+            } catch (error) {
+                console.warn('Raster ICC embedding unavailable:', error.message);
+            }
+        }
+        return {
+            dataUrl,
+            options:{
+                ...normalized,
+                profileEmbedded,
+                profileName:this._documentColorProfileLabel(),
+                profileBytes:profileBytes?.byteLength || 0
+            }
+        };
+    },
+    _concatByteArrays(parts) {
+        const arrays = parts.filter(part => part instanceof Uint8Array);
+        const output = new Uint8Array(arrays.reduce((total, part) => total + part.byteLength, 0));
+        let offset = 0;
+        arrays.forEach(part => { output.set(part, offset); offset += part.byteLength; });
+        return output;
+    },
+    _bytesToBase64(bytes) {
+        const source = this._iccBytes(bytes) || new Uint8Array();
+        let binary = '';
+        for (let offset = 0; offset < source.length; offset += 0x8000) binary += String.fromCharCode(...source.subarray(offset, offset + 0x8000));
+        return btoa(binary);
+    },
+    _dataUrlToBytes(dataUrl) {
+        const match = /^data:([^;,]*)(;base64)?,(.*)$/s.exec(String(dataUrl || ''));
+        if (!match) throw new Error('Not a data URL');
+        if (!match[2]) return new TextEncoder().encode(decodeURIComponent(match[3]));
+        const binary = atob(match[3]);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+        return bytes;
+    },
+    _crc32(bytes) {
+        let crc = 0xFFFFFFFF;
+        for (const value of bytes) {
+            crc ^= value;
+            for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (crc & 1 ? 0xEDB88320 : 0);
+        }
+        return (crc ^ 0xFFFFFFFF) >>> 0;
+    },
+    _adler32(bytes) {
+        let a = 1, b = 0;
+        for (const value of bytes) {
+            a = (a + value) % 65521;
+            b = (b + a) % 65521;
+        }
+        return ((b << 16) | a) >>> 0;
+    },
+    _zlibStore(bytes) {
+        const source = this._iccBytes(bytes) || new Uint8Array();
+        const blockCount = Math.max(1, Math.ceil(source.length / 65535));
+        const output = new Uint8Array(2 + blockCount * 5 + source.length + 4);
+        output.set([0x78, 0x01], 0);
+        let sourceOffset = 0, outputOffset = 2;
+        for (let block = 0; block < blockCount; block += 1) {
+            const length = Math.min(65535, source.length - sourceOffset);
+            output[outputOffset++] = block === blockCount - 1 ? 1 : 0;
+            output[outputOffset++] = length & 0xFF;
+            output[outputOffset++] = (length >>> 8) & 0xFF;
+            output[outputOffset++] = (~length) & 0xFF;
+            output[outputOffset++] = (~length >>> 8) & 0xFF;
+            output.set(source.subarray(sourceOffset, sourceOffset + length), outputOffset);
+            outputOffset += length;
+            sourceOffset += length;
+        }
+        const checksum = this._adler32(source);
+        output[outputOffset++] = (checksum >>> 24) & 0xFF;
+        output[outputOffset++] = (checksum >>> 16) & 0xFF;
+        output[outputOffset++] = (checksum >>> 8) & 0xFF;
+        output[outputOffset] = checksum & 0xFF;
+        return output;
+    },
+    _makeMatrixICCProfile(space = 'srgb') {
+        const p3 = space === 'display-p3';
+        const name = p3 ? 'Display P3' : 'sRGB IEC61966-2.1';
+        const matrix = p3
+            ? [[0.48657095, 0.26566769, 0.19821729], [0.22897456, 0.69173852, 0.07928691], [0, 0.04511338, 1.04394437]]
+            : [[0.4124564, 0.3575761, 0.1804375], [0.2126729, 0.7151524, 0.072175], [0.0193339, 0.119192, 0.9503041]];
+        const writeAscii = (target, offset, value) => target.set([...String(value).slice(0, 4)].map(character => character.charCodeAt(0)), offset);
+        const fixed = value => Math.max(-0x80000000, Math.min(0x7FFFFFFF, Math.round(value * 65536)));
+        const descriptionBytes = new TextEncoder().encode(`${name}\0`);
+        const description = new Uint8Array(12 + descriptionBytes.length);
+        writeAscii(description, 0, 'desc');
+        new DataView(description.buffer).setUint32(8, descriptionBytes.length, false);
+        description.set(descriptionBytes, 12);
+        // ICC XYZ tags are stored per channel (rXYZ/gXYZ/bXYZ), while the
+        // conversion matrix used by OpenShop is arranged as XYZ rows.
+        const xyzTags = [
+            ['rXYZ', [matrix[0][0], matrix[1][0], matrix[2][0]]],
+            ['gXYZ', [matrix[0][1], matrix[1][1], matrix[2][1]]],
+            ['bXYZ', [matrix[0][2], matrix[1][2], matrix[2][2]]]
+        ].map(([signature, values]) => {
+            const tag = new Uint8Array(20);
+            writeAscii(tag, 0, 'XYZ ');
+            const tagView = new DataView(tag.buffer);
+            values.forEach((value, index) => tagView.setInt32(8 + index * 4, fixed(value), false));
+            return [signature, tag];
+        });
+        const curve = new Uint8Array(16);
+        writeAscii(curve, 0, 'curv');
+        new DataView(curve.buffer).setUint32(8, 1, false);
+        new DataView(curve.buffer).setUint16(12, Math.round((p3 ? 2.4 : 2.2) * 256), false);
+        const tags = [
+            ['desc', description],
+            ...xyzTags,
+            ['rTRC', curve], ['gTRC', curve], ['bTRC', curve]
+        ];
+        const headerSize = 132 + tags.length * 12;
+        const total = headerSize + tags.reduce((sum, [, value]) => sum + ((value.length + 3) & ~3), 0);
+        const output = new Uint8Array(total);
+        const view = new DataView(output.buffer);
+        view.setUint32(0, total, false);
+        view.setUint32(8, 0x04300000, false);
+        writeAscii(output, 12, 'mntr');
+        writeAscii(output, 16, 'RGB ');
+        writeAscii(output, 20, 'XYZ ');
+        writeAscii(output, 36, 'acsp');
+        view.setUint32(64, 0, false);
+        [0.9642, 1, 0.8249].forEach((value, index) => view.setInt32(68 + index * 4, fixed(value), false));
+        writeAscii(output, 80, 'OSHP');
+        view.setUint32(128, tags.length, false);
+        let offset = headerSize;
+        tags.forEach(([signature, value], index) => {
+            const row = 132 + index * 12;
+            writeAscii(output, row, signature);
+            view.setUint32(row + 4, offset, false);
+            view.setUint32(row + 8, value.length, false);
+            output.set(value, offset);
+            offset += (value.length + 3) & ~3;
+        });
+        return output;
+    },
+    _getWorkingICCProfileBytes() {
+        const normalized = this._normalizeColorProfile(this._colorProfile);
+        const workingSpace = this._workingColorSpace === 'display-p3' ? 'display-p3' : 'srgb';
+        const bytes = this._decodeProjectBytes(normalized.iccData);
+        const parsed = bytes ? this._parseICCProfile(bytes) : null;
+        if (bytes && parsed?.colorSpace === workingSpace) return bytes;
+        return this._makeMatrixICCProfile(workingSpace);
+    },
+    _makePNGChunk(type, data) {
+        const body = new Uint8Array(4 + data.length);
+        body.set([...String(type).slice(0, 4)].map(character => character.charCodeAt(0)), 0);
+        body.set(data, 4);
+        const chunk = new Uint8Array(12 + data.length);
+        const view = new DataView(chunk.buffer);
+        view.setUint32(0, data.length, false);
+        chunk.set(body, 4);
+        view.setUint32(8 + data.length, this._crc32(body), false);
+        return chunk;
+    },
+    _embedPNGICCProfile(bytes, profileBytes) {
+        const source = this._iccBytes(bytes);
+        const signature = [137,80,78,71,13,10,26,10];
+        if (!source || source.length < 33 || !signature.every((value, index) => source[index] === value)) throw new Error('PNG ICC resource cannot be embedded');
+        const keyword = new TextEncoder().encode('OpenShop');
+        const compressed = this._zlibStore(profileBytes);
+        const profileData = new Uint8Array(keyword.length + 2 + compressed.length);
+        profileData.set(keyword, 0);
+        profileData[keyword.length + 1] = 0;
+        profileData.set(compressed, keyword.length + 2);
+        const profileChunk = this._makePNGChunk('iCCP', profileData);
+        const chunks = [];
+        let offset = 8, inserted = false;
+        while (offset + 12 <= source.length) {
+            const view = new DataView(source.buffer, source.byteOffset, source.byteLength);
+            const length = view.getUint32(offset, false);
+            const end = offset + 12 + length;
+            if (end > source.length) throw new Error('PNG chunks are truncated');
+            const type = String.fromCharCode(...source.slice(offset + 4, offset + 8));
+            if (type !== 'iCCP') chunks.push(source.slice(offset, end));
+            if (type === 'IHDR' && !inserted) { chunks.push(profileChunk); inserted = true; }
+            offset = end;
+        }
+        if (offset !== source.length || !inserted) throw new Error('PNG header is invalid');
+        return this._concatByteArrays([source.slice(0, 8), ...chunks]);
+    },
+    _embedJPEGICCProfile(bytes, profileBytes) {
+        const source = this._iccBytes(bytes);
+        if (!source || source.length < 4 || source[0] !== 0xFF || source[1] !== 0xD8) throw new Error('JPEG ICC resource cannot be embedded');
+        const chunkSize = 65519;
+        const total = Math.ceil(profileBytes.length / chunkSize);
+        if (!total || total > 255) throw new Error('JPEG ICC profile is too large');
+        const iccSegments = [];
+        for (let index = 0; index < total; index += 1) {
+            const chunk = profileBytes.slice(index * chunkSize, Math.min(profileBytes.length, (index + 1) * chunkSize));
+            const segment = new Uint8Array(18 + chunk.length);
+            segment.set([0xFF, 0xE2], 0);
+            new DataView(segment.buffer).setUint16(2, 16 + chunk.length, false);
+            segment.set(new TextEncoder().encode('ICC_PROFILE\0'), 4);
+            segment[16] = index + 1;
+            segment[17] = total;
+            segment.set(chunk, 18);
+            iccSegments.push(segment);
+        }
+        const segments = [];
+        let offset = 2, tail = source.length;
+        while (offset + 4 <= source.length) {
+            if (source[offset] !== 0xFF) throw new Error('JPEG marker stream is invalid');
+            const marker = source[offset + 1];
+            if (marker === 0xDA || marker === 0xD9) { tail = offset; break; }
+            const size = (source[offset + 2] << 8) | source[offset + 3];
+            const end = offset + 2 + size;
+            if (size < 2 || end > source.length) throw new Error('JPEG marker stream is truncated');
+            const isICC = marker === 0xE2 && size >= 16 && new TextDecoder().decode(source.slice(offset + 4, offset + 16)) === 'ICC_PROFILE\0';
+            if (!isICC) segments.push(source.slice(offset, end));
+            offset = end;
+        }
+        return this._concatByteArrays([source.slice(0, 2), ...iccSegments, ...segments, source.slice(tail)]);
+    },
+    _embedWebPICCProfile(bytes, profileBytes) {
+        const source = this._iccBytes(bytes);
+        if (!source || source.length < 12 || String.fromCharCode(...source.slice(0, 4)) !== 'RIFF' || String.fromCharCode(...source.slice(8, 12)) !== 'WEBP') throw new Error('WebP ICC resource cannot be embedded');
+        const view = new DataView(source.buffer, source.byteOffset, source.byteLength);
+        const chunks = [];
+        let offset = 12;
+        while (offset + 8 <= source.length) {
+            const length = view.getUint32(offset + 4, true);
+            const end = offset + 8 + length + (length & 1);
+            if (end > source.length) throw new Error('WebP chunks are truncated');
+            const type = String.fromCharCode(...source.slice(offset, offset + 4));
+            if (type !== 'ICCP') chunks.push(source.slice(offset, end));
+            offset = end;
+        }
+        if (offset !== source.length) throw new Error('WebP chunk stream is invalid');
+        const profileChunk = new Uint8Array(8 + profileBytes.length + (profileBytes.length & 1));
+        profileChunk.set([0x49, 0x43, 0x43, 0x50], 0);
+        new DataView(profileChunk.buffer).setUint32(4, profileBytes.length, true);
+        profileChunk.set(profileBytes, 8);
+        const output = this._concatByteArrays([source.slice(0, 12), profileChunk, ...chunks]);
+        new DataView(output.buffer).setUint32(4, output.length - 8, true);
+        return output;
+    },
+    _readBMFFBoxes(bytes, start = 0, end = null) {
+        const source = this._iccBytes(bytes);
+        const limit = end ?? source?.length ?? 0;
+        if (!source || start < 0 || limit > source.length || start > limit) return null;
+        const boxes = [];
+        let offset = start;
+        while (offset + 8 <= limit) {
+            const view = new DataView(source.buffer, source.byteOffset, source.byteLength);
+            const declared = view.getUint32(offset, false);
+            const type = String.fromCharCode(...source.slice(offset + 4, offset + 8));
+            let headerSize = 8;
+            let size = declared;
+            if (declared === 1) return null;
+            if (declared === 0) size = limit - offset;
+            const boxEnd = offset + size;
+            if (size < headerSize || boxEnd > limit) return null;
+            boxes.push({ type, start:offset, end:boxEnd, headerSize });
+            offset = boxEnd;
+        }
+        return offset === limit ? boxes : null;
+    },
+    _makeBMFFBox(type, payload) {
+        const body = this._iccBytes(payload) || new Uint8Array();
+        if (body.length + 8 > 0xFFFFFFFF) throw new Error('AVIF ICC property is too large');
+        const output = new Uint8Array(8 + body.length);
+        const view = new DataView(output.buffer);
+        view.setUint32(0, output.length, false);
+        output.set([...String(type).slice(0, 4)].map(character => character.charCodeAt(0)), 4);
+        output.set(body, 8);
+        return output;
+    },
+    _embedAVIFICCProfile(bytes, profileBytes) {
+        const source = this._iccBytes(bytes);
+        const top = this._readBMFFBoxes(source);
+        const meta = top?.find(box => box.type === 'meta');
+        if (!meta) throw new Error('AVIF metadata box is missing');
+        const metaChildren = this._readBMFFBoxes(source, meta.start + 12, meta.end);
+        const iprp = metaChildren?.find(box => box.type === 'iprp');
+        const pitm = metaChildren?.find(box => box.type === 'pitm');
+        if (!iprp || !pitm) throw new Error('AVIF item properties are missing');
+        const iprpChildren = this._readBMFFBoxes(source, iprp.start + 8, iprp.end);
+        const ipco = iprpChildren?.find(box => box.type === 'ipco');
+        const ipma = iprpChildren?.find(box => box.type === 'ipma');
+        if (!ipco || !ipma) throw new Error('AVIF colour property associations are missing');
+        const properties = this._readBMFFBoxes(source, ipco.start + 8, ipco.end);
+        const profileBox = this._makeBMFFBox('colr', this._concatByteArrays([
+            new TextEncoder().encode('prof'),
+            this._iccBytes(profileBytes) || new Uint8Array()
+        ]));
+        const propertyIndex = (properties?.length || 0) + 1;
+        const ipcoPayload = this._concatByteArrays([source.slice(ipco.start + 8, ipco.end), profileBox]);
+        const newIpco = this._makeBMFFBox('ipco', ipcoPayload);
+
+        const ipmaView = new DataView(source.buffer, source.byteOffset, source.byteLength);
+        const version = source[ipma.start + 8];
+        const flags = (source[ipma.start + 9] << 16) | (source[ipma.start + 10] << 8) | source[ipma.start + 11];
+        const entryCount = ipmaView.getUint32(ipma.start + 12, false);
+        const itemIdBytes = version >= 1 ? 4 : 2;
+        let cursor = ipma.start + 16;
+        const entries = [];
+        for (let entryIndex = 0; entryIndex < entryCount; entryIndex += 1) {
+            if (cursor + itemIdBytes + 1 > ipma.end) throw new Error('AVIF property associations are truncated');
+            const itemId = itemIdBytes === 4 ? ipmaView.getUint32(cursor, false) : ipmaView.getUint16(cursor, false);
+            cursor += itemIdBytes;
+            const associationCount = source[cursor++];
+            const associations = [];
+            for (let associationIndex = 0; associationIndex < associationCount; associationIndex += 1) {
+                const wide = Boolean(flags & 1);
+                if (wide) {
+                    if (cursor + 2 > ipma.end) throw new Error('AVIF property association is truncated');
+                    const value = ipmaView.getUint16(cursor, false);
+                    cursor += 2;
+                    associations.push({ index:value & 0x7FFF, essential:Boolean(value & 0x8000) });
+                } else {
+                    if (cursor + 1 > ipma.end) throw new Error('AVIF property association is truncated');
+                    const value = source[cursor++];
+                    associations.push({ index:value & 0x7F, essential:Boolean(value & 0x80) });
+                }
+            }
+            entries.push({ itemId, associations });
+        }
+        if (cursor !== ipma.end) throw new Error('AVIF property associations contain trailing data');
+        const pitmVersion = source[pitm.start + 8];
+        const primaryId = pitmVersion === 0 ? ipmaView.getUint16(pitm.start + 12, false) : ipmaView.getUint32(pitm.start + 12, false);
+        let primary = entries.find(entry => entry.itemId === primaryId);
+        if (!primary) {
+            primary = { itemId:primaryId, associations:[] };
+            entries.push(primary);
+        }
+        primary.associations.push({ index:propertyIndex, essential:false });
+        const wide = Boolean(flags & 1) || propertyIndex > 0x7F;
+        const associationBytes = [];
+        const appendByte = value => associationBytes.push(value & 0xFF);
+        const appendUint16 = value => { appendByte(value >>> 8); appendByte(value); };
+        const appendUint32 = value => { appendByte(value >>> 24); appendByte(value >>> 16); appendByte(value >>> 8); appendByte(value); };
+        entries.forEach(entry => {
+            if (itemIdBytes === 4) appendUint32(entry.itemId); else appendUint16(entry.itemId);
+            appendByte(entry.associations.length);
+            entry.associations.forEach(association => {
+                const value = association.index | (association.essential ? (wide ? 0x8000 : 0x80) : 0);
+                if (wide) appendUint16(value); else appendByte(value);
+            });
+        });
+        const newIpma = this._makeBMFFBox('ipma', this._concatByteArrays([
+            source.slice(ipma.start + 8, ipma.start + 12),
+            (() => { const count = new Uint8Array(4); new DataView(count.buffer).setUint32(0, entries.length, false); return count; })(),
+            new Uint8Array(associationBytes)
+        ]));
+        const newIprpChildren = iprpChildren.map(box => {
+            if (box === ipco) return newIpco;
+            if (box === ipma) return newIpma;
+            return source.slice(box.start, box.end);
+        });
+        const newIprp = this._makeBMFFBox('iprp', this._concatByteArrays(newIprpChildren));
+        const newMetaChildren = metaChildren.map(box => box === iprp ? newIprp : source.slice(box.start, box.end));
+        const newMeta = this._makeBMFFBox('meta', this._concatByteArrays([source.slice(meta.start + 8, meta.start + 12), ...newMetaChildren]));
+        const output = top.map(box => box === meta ? newMeta : source.slice(box.start, box.end));
+        return this._concatByteArrays(output);
+    },
+    _embedRasterICCDataUrl(dataUrl, format, profileBytes) {
+        const source = this._dataUrlToBytes(dataUrl);
+        const normalized = String(format || '').toLowerCase();
+        const embedded = normalized === 'png'
+            ? this._embedPNGICCProfile(source, profileBytes)
+            : normalized === 'jpeg'
+                ? this._embedJPEGICCProfile(source, profileBytes)
+                : normalized === 'webp'
+                    ? this._embedWebPICCProfile(source, profileBytes)
+                    : null;
+        if (!embedded) throw new Error(`${normalized.toUpperCase()} does not support synchronous ICC embedding`);
+        const mime = normalized === 'jpeg' ? 'image/jpeg' : `image/${normalized}`;
+        return `data:${mime};base64,${this._bytesToBase64(embedded)}`;
     },
     _captureExportImageData(options = {}) {
         const normalized = this._normalizeExportOptions(options);
@@ -8480,7 +9356,10 @@ const OS = {
             const copy = document.createElement('canvas');
             copy.width = width;
             copy.height = height;
-            const context = copy.getContext('2d', { willReadFrequently:true });
+            const context = copy.getContext('2d', {
+                willReadFrequently:true,
+                colorSpace:this._workingColorSpace === 'display-p3' ? 'display-p3' : 'srgb'
+            });
             if (!context) throw new Error('Could not create the AVIF export canvas');
             context.drawImage(rendered, 0, 0, width, height);
             return context.getImageData(0, 0, width, height);
@@ -8543,6 +9422,13 @@ const OS = {
         if (this._animFrames.length > 1) warnings.push(`Only the current canvas is exported; ${this._animFrames.length} animation frames remain in the project.`);
         if (normalizedFormat === 'jpeg') warnings.push('JPEG has no alpha channel; transparent pixels will use the selected matte color.');
         else if (['png','webp','avif'].includes(normalizedFormat) && !transparent) warnings.push('Transparency is disabled; transparent pixels will use the selected matte color.');
+        const profile = this._normalizeColorProfile(this._colorProfile);
+        if (profile.iccData && !profile.valid) {
+            warnings.push('The embedded ICC profile could not be parsed; pixels remain in the browser fallback colour space and the original bytes are retained.');
+        } else if (profile.iccData && profile.conversion && profile.conversion !== 'identity') {
+            warnings.push(`Pixels were converted from ${profile.name} to ${profile.workingSpace === 'display-p3' ? 'Display P3' : 'sRGB'} (${profile.conversion}).`);
+        }
+        if (profile.iccData && normalizedFormat === 'avif') warnings.push('The verified AVIF encoder cannot embed ICC payloads; the export is tagged by the report as unprofiled.');
         warnings.push('History, selections, guides, and other project-only editing state are not included in this export.');
         if (this._isDirty) warnings.push('This export does not save the editable project; unsaved project changes will remain.');
         return { format:normalizedFormat, warnings };
@@ -8578,9 +9464,25 @@ const OS = {
                 matte:options.matte || '#ffffff'
             });
             this.toast('Encoding AVIF with the verified local codec…', 'info');
-            const bytes = await this._encodeAvifImageData(captured.imageData, captured.options.quality);
+            let bytes = new Uint8Array(await this._encodeAvifImageData(captured.imageData, captured.options.quality));
+            let profileEmbedded = false;
+            const profileBytes = this._getWorkingICCProfileBytes();
+            if (profileBytes?.byteLength) {
+                try {
+                    bytes = this._embedAVIFICCProfile(bytes, profileBytes);
+                    profileEmbedded = true;
+                } catch (error) {
+                    console.warn('AVIF ICC embedding unavailable:', error.message);
+                }
+            }
+            this._lastRasterExportReport = {
+                format:'avif',
+                profileEmbedded,
+                profileName:this._documentColorProfileLabel(),
+                profileBytes:profileBytes?.byteLength || 0
+            };
             this._downloadBlob(new Blob([bytes], { type:'image/avif' }), this._exportFileName('avif'), options.deliver);
-            this.toast('Exported as AVIF', 'success');
+            this.toast(profileEmbedded ? 'Exported as AVIF with ICC profile' : 'Exported as AVIF', 'success');
             return true;
         } catch (error) {
             console.error('AVIF export error:', error);
@@ -10173,15 +11075,17 @@ self.onmessage = function(event) {
             }, [copy]);
         });
     },
-    _fabricImageFromPSDPixels(pixels, options) {
+    _fabricImageFromPSDPixels(pixels, options, colorProfile = null, targetSpace = 'srgb') {
         const canvas = document.createElement('canvas');
         canvas.width = pixels.width;
         canvas.height = pixels.height;
-        const context = canvas.getContext('2d');
+        const context = canvas.getContext('2d', targetSpace === 'display-p3' ? { colorSpace:'display-p3' } : { colorSpace:'srgb' });
         const buffer = pixels.buffer instanceof ArrayBuffer
             ? pixels.buffer
             : pixels.buffer.buffer.slice(pixels.buffer.byteOffset, pixels.buffer.byteOffset + pixels.buffer.byteLength);
-        context.putImageData(new ImageData(new Uint8ClampedArray(buffer), pixels.width, pixels.height), 0, 0);
+        const source = new ImageData(new Uint8ClampedArray(buffer), pixels.width, pixels.height);
+        const converted = colorProfile ? this._convertImageDataColorProfile(source, colorProfile, targetSpace) : { imageData:source };
+        context.putImageData(converted.imageData, 0, 0);
         return new fabric.Image(canvas, options);
     },
     _fabricTextFromPSD(layer, name) {
@@ -10391,7 +11295,7 @@ self.onmessage = function(event) {
                 iccData: raw
             });
         }
-        return { name:'sRGB', source:'assumed', iccData:null };
+        return this._normalizeColorProfile({ name:'sRGB', sourceKind:'assumed' });
     },
     _showPSDCompatibilityReport(report, title = 'PSD compatibility report') {
         const warnings = Array.isArray(report?.warnings) ? report.warnings.filter(Boolean) : [];
@@ -10457,7 +11361,7 @@ self.onmessage = function(event) {
         }
         return { visible, opacity };
     },
-    async _preparePSDImport(psd, job) {
+    async _preparePSDImport(psd, job, { colorProfile = null, targetSpace = 'srgb' } = {}) {
         const boundary = this._createCheckerBoundary(psd.width, psd.height);
         const layers = [
             { id:this._newDocumentId('layer'), name:'Background', visible:true, locked:true, opacity:100, blend:'source-over', objects:[boundary] }
@@ -10472,7 +11376,7 @@ self.onmessage = function(event) {
                 top:0,
                 selectable:true,
                 name:'PSD Flattened Appearance'
-            });
+            }, colorProfile, targetSpace);
             layers.push({
                 id:this._newDocumentId('layer'),
                 name:'PSD Flattened Appearance',
@@ -10529,9 +11433,9 @@ self.onmessage = function(event) {
             };
             let image = layer.text?.simple
                 ? this._fabricTextFromPSD(layer, name)
-                : this._fabricImageFromPSDPixels(layer.pixels, sharedOptions);
+                : this._fabricImageFromPSDPixels(layer.pixels, sharedOptions, colorProfile, targetSpace);
             if (!image && layer.pixels) {
-                image = this._fabricImageFromPSDPixels(layer.pixels, sharedOptions);
+                image = this._fabricImageFromPSDPixels(layer.pixels, sharedOptions, colorProfile, targetSpace);
             }
             if (!image) continue;
             image.set(sharedOptions);
@@ -10560,7 +11464,7 @@ self.onmessage = function(event) {
             }
         }
         if (layers.length === 1 && psd.composite) {
-            const image = this._fabricImageFromPSDPixels(psd.composite, { left:0, top:0, selectable:true, name:'PSD Composite Fallback' });
+            const image = this._fabricImageFromPSDPixels(psd.composite, { left:0, top:0, selectable:true, name:'PSD Composite Fallback' }, colorProfile, targetSpace);
             layers.push({ id:this._newDocumentId('layer'), name:'PSD Composite Fallback', visible:true, locked:false, opacity:100, blend:'source-over', objects:[image] });
             objects.push(image);
             report.warnings.unshift('No supported drawable layer pixels were available, so the document composite was imported as one flattened fallback layer.');
@@ -10575,7 +11479,7 @@ self.onmessage = function(event) {
             objects,
             decodedLayerCount:Math.max(0, layers.length - 1),
             psdInterchange:this._normalizePSDInterchange({ groups:report.groups, warnings:report.warnings }),
-            colorProfile:this._extractPSDColorProfile(psd),
+            colorProfile,
             report
         };
     },
@@ -10618,6 +11522,8 @@ self.onmessage = function(event) {
             lastPSDImportReport:this._lastPSDImportReport,
             lastPSDImportMetrics:this._lastPSDImportMetrics,
             colorProfile:this._colorProfile,
+            workingColorSpace:this._workingColorSpace,
+            lastImportColorProfile:this._lastImportColorProfile,
             aiMasks:this._aiMasks
         };
         try {
@@ -10639,6 +11545,8 @@ self.onmessage = function(event) {
             this._lastPSDImportReport = prepared.report;
             this._lastPSDImportMetrics = psd.decodeMetrics || null;
             this._colorProfile = this._normalizeColorProfile(prepared.colorProfile);
+            this._workingColorSpace = this._colorProfile.workingSpace === 'display-p3' ? 'display-p3' : 'srgb';
+            this._lastImportColorProfile = this._colorProfile.iccData ? this._colorProfile : null;
             this._aiMasks = [];
             this.guides = [];
             this._selectionMask = null;
@@ -10687,6 +11595,8 @@ self.onmessage = function(event) {
             this._lastPSDImportReport = previous.lastPSDImportReport;
             this._lastPSDImportMetrics = previous.lastPSDImportMetrics;
             this._colorProfile = previous.colorProfile;
+            this._workingColorSpace = previous.workingColorSpace;
+            this._lastImportColorProfile = previous.lastImportColorProfile;
             this._aiMasks = previous.aiMasks;
             if (previous.activeObject) this.canvas.setActiveObject(previous.activeObject);
             this.canvas.renderAll();
@@ -10726,15 +11636,30 @@ self.onmessage = function(event) {
             this._updatePSDImportProgress(job, 'Validating decoded memory…');
             this._validatePSDDecodedPayload(psd);
             if (psd.width !== header.width || psd.height !== header.height) throw new Error('PSD decoded dimensions do not match its header');
-            const prepared = await this._preparePSDImport(psd, job);
-            prepared.colorProfile = this._extractPSDColorProfile(psd, bytes);
-            if (prepared.colorProfile?.iccData) prepared.report.losses.push({
-                code:'psd.icc-opaque',
-                path:'document.colorProfile',
-                feature:'ICC profile metadata',
-                fallback:'The embedded profile is retained as opaque bytes; imported pixels are not color-converted.',
-                message:'ICC profile metadata was retained without pixel color conversion.'
-            });
+            const colorProfile = this._extractPSDColorProfile(psd, bytes);
+            const targetSpace = colorProfile.colorSpace === 'display-p3' && this._displayP3CanvasSupported() ? 'display-p3' : 'srgb';
+            const prepared = await this._preparePSDImport(psd, job, { colorProfile, targetSpace });
+            prepared.colorProfile = colorProfile;
+            if (colorProfile?.iccData) {
+                const conversion = colorProfile.colorSpace === targetSpace
+                    ? 'identity'
+                    : ['display-p3', 'icc-rgb', 'srgb'].includes(colorProfile.colorSpace)
+                        ? `${colorProfile.colorSpace}-to-${targetSpace}`
+                        : 'unsupported-profile';
+                colorProfile.workingSpace = targetSpace;
+                colorProfile.conversion = conversion;
+                prepared.report.losses.push({
+                    code:colorProfile.valid ? 'psd.icc-managed' : 'psd.icc-unparsed',
+                    path:'document.colorProfile',
+                    feature:'ICC profile metadata',
+                    fallback:colorProfile.valid
+                        ? (conversion === 'identity' ? `The ${targetSpace === 'display-p3' ? 'Display P3' : 'sRGB'} working colour space was retained.` : `Imported pixels were converted from ${colorProfile.name} to ${targetSpace === 'display-p3' ? 'Display P3' : 'sRGB'} using ${conversion}.`)
+                        : 'The original ICC bytes are retained, but imported pixels remain in the browser fallback colour space.',
+                    message:colorProfile.valid
+                        ? (conversion === 'identity' ? `ICC profile ${colorProfile.name} was parsed and retained as the working colour space.` : `ICC profile ${colorProfile.name} was parsed and imported with ${conversion} conversion.`)
+                        : 'The embedded ICC profile could not be parsed; pixel conversion was not available.'
+                });
+            }
             this._assertComputeJobCurrent(job);
             this._updatePSDImportProgress(job, 'Committing document…');
             this._commitPSDImport(prepared, psd, file, job);
@@ -16335,8 +17260,18 @@ self.onmessage = function(event) {
         })).values()];
     },
     _buildPsdExportStructure() {
-        const iccProfile = this._decodeProjectBytes(this._colorProfile?.iccData);
-        const report = { warnings:[], losses:[], flattenWholeDocument:false, iccProfileAvailable:Boolean(iccProfile?.byteLength) };
+        const iccProfile = this._getWorkingICCProfileBytes();
+        const colorProfile = this._normalizeColorProfile(this._colorProfile);
+        const report = {
+            warnings:[],
+            losses:[],
+            flattenWholeDocument:false,
+            iccProfileAvailable:Boolean(iccProfile?.byteLength),
+            iccProfileName:this._documentColorProfileLabel(),
+            iccProfileWorkingSpace:this._workingColorSpace,
+            iccProfileConversion:colorProfile.conversion,
+            iccProfileValid:colorProfile.valid
+        };
         const structure = {
             width:this.canvasW,
             height:this.canvasH,
@@ -16458,13 +17393,20 @@ self.onmessage = function(event) {
         }
         report.warnings = [...new Set(report.warnings)].slice(0, 100);
         report.losses = this._structuredPSDExportLosses(report.warnings);
-        if (report.iccProfileAvailable) report.losses.push({
-            code:'psd.icc-opaque',
-            path:'document.colorProfile',
-            feature:'ICC profile metadata',
-            fallback:'The embedded profile is preserved as opaque bytes; pixel values are not converted.',
-            message:'ICC profile metadata was embedded without color conversion.'
-        });
+        if (report.iccProfileAvailable) {
+            const converted = report.iccProfileConversion && report.iccProfileConversion !== 'identity';
+            report.losses.push({
+                code:report.iccProfileValid ? 'psd.icc-managed' : 'psd.icc-unparsed',
+                path:'document.colorProfile',
+                feature:'ICC profile metadata',
+                fallback:report.iccProfileValid
+                    ? (converted ? `Pixels were converted to ${report.iccProfileWorkingSpace === 'display-p3' ? 'Display P3' : 'sRGB'} before export.` : 'The working ICC profile is embedded with the exported pixels.')
+                    : 'The original ICC bytes are retained, but the working export profile is used because the source could not be parsed.',
+                message:report.iccProfileValid
+                    ? (converted ? `ICC profile ${report.iccProfileName} was parsed and pixels were converted using ${report.iccProfileConversion}.` : `ICC profile ${report.iccProfileName} was parsed and embedded as the working profile.`)
+                    : 'The embedded ICC profile could not be parsed; a standard working profile was embedded.'
+            });
+        }
         return { structure, report };
     },
     exportPSD() {
@@ -16477,10 +17419,22 @@ self.onmessage = function(event) {
                 () => this._buildPsdExportStructure()
             );
             let buffer = lib.writePsd(structure, { trimImageData:true, noBackground:true });
-            const iccProfile = this._decodeProjectBytes(this._colorProfile?.iccData);
+            const iccProfile = this._getWorkingICCProfileBytes();
             if (iccProfile?.byteLength) {
-                buffer = this._embedPSDICCProfile(buffer, iccProfile);
-                report.iccProfileEmbedded = true;
+                try {
+                    buffer = this._embedPSDICCProfile(buffer, iccProfile);
+                    report.iccProfileEmbedded = true;
+                } catch (error) {
+                    report.iccProfileEmbedded = false;
+                    report.warnings.push(`ICC profile embedding was unavailable for this PSD writer output: ${error.message}.`);
+                    report.losses.push({
+                        code:'psd.icc-embed-failed',
+                        path:'document.colorProfile',
+                        feature:'ICC profile metadata',
+                        fallback:'The PSD was written without the working ICC resource because its writer output was not a valid PSD container.',
+                        message:'The working ICC profile could not be embedded in the PSD output.'
+                    });
+                }
             } else {
                 report.iccProfileEmbedded = false;
             }
@@ -23624,12 +24578,7 @@ self.onmessage = async function(e) {
                         void this._loadAvifFile(blob, 'paste');
                         return;
                     }
-                    const reader = new FileReader();
-                    reader.onload = ev => {
-                        fabric.Image.fromURL(ev.target.result, img => {
-                            void Promise.resolve(this._addDecodedImageToCanvas(img, { name:blob.name || 'Pasted Image', mode:'paste' })).catch(err => this.toast(err.message, 'error'));
-                        });
-                    }; reader.readAsDataURL(blob);
+                    void this._loadRasterFile(blob, 'paste');
                     return;
                 }
             }

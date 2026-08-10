@@ -1950,11 +1950,11 @@ describe('OpenShop core object', () => {
     expect(state.layers).toHaveLength(1);
     expect(state.layers[0].objectIds).toHaveLength(2);
 
-    OS._colorProfile = {
+    OS._colorProfile = OS._normalizeColorProfile({
       name: 'Display P3',
       sourceKind: 'embedded-icc',
       iccData: 'data:application/vnd.openshop.icc;base64,AAECAwQ='
-    };
+    });
     OS._selectionMask = { w: 2, h: 2, mask: new Uint8Array([255, 0, 0, 255]) };
     expect(OS._recordAIMask({ label: 'Subject', source: 'ai-segment' })).toBe(true);
     const metadataRoundTrip = JSON.parse(JSON.stringify(OS._captureDocumentState())).metadata;
@@ -2568,6 +2568,44 @@ describe('OpenShop core object', () => {
       sourceKind: 'psd',
       iccData: 'data:application/vnd.openshop.icc;base64,AAECAwQ='
     }));
+  });
+
+  it('parses matrix ICC profiles, converts P3 pixels, and embeds the working profile in raster formats', async () => {
+    const OS = loadOpenShop();
+    const p3Bytes = OS._makeMatrixICCProfile('display-p3');
+    const p3 = OS._parseICCProfile(p3Bytes);
+    const srgb = OS._parseICCProfile(OS._makeMatrixICCProfile('srgb'));
+
+    expect(p3).toEqual(expect.objectContaining({ name:'Display P3', colorSpace:'display-p3', valid:true }));
+    expect(p3.matrix).toHaveLength(3);
+    expect(p3.matrix[0]).toHaveLength(3);
+
+    const source = new ImageData(new Uint8ClampedArray([64, 128, 150, 255, 180, 140, 120, 127]), 2, 1);
+    const toSRGB = OS._convertImageDataColorProfile(source, p3, 'srgb');
+    const backToP3 = OS._convertImageDataColorProfile(toSRGB.imageData, srgb, 'display-p3');
+    expect(toSRGB).toMatchObject({ converted:true, conversion:'display-p3-to-srgb' });
+    expect(backToP3.imageData.data[3]).toBe(255);
+    expect(backToP3.imageData.data[7]).toBe(127);
+    for (const index of [0, 1, 2, 4, 5, 6]) expect(Math.abs(backToP3.imageData.data[index] - source.data[index])).toBeLessThanOrEqual(2);
+
+    const png = OS._concatByteArrays([
+      new Uint8Array([137,80,78,71,13,10,26,10]),
+      OS._makePNGChunk('IHDR', new Uint8Array([0,0,0,1,0,0,0,1,8,6,0,0,0])),
+      OS._makePNGChunk('IEND', new Uint8Array())
+    ]);
+    const pngUrl = `data:image/png;base64,${OS._bytesToBase64(png)}`;
+    const embeddedPng = OS._embedRasterICCDataUrl(pngUrl, 'png', p3Bytes);
+    await expect(OS._readEmbeddedColorProfile(OS._dataUrlToBytes(embeddedPng), 'image/png')).resolves.toEqual(expect.objectContaining({
+      name:'Display P3', colorSpace:'display-p3', sourceKind:'embedded-png'
+    }));
+
+    const jpeg = OS._concatByteArrays([new Uint8Array([0xFF, 0xD8]), new Uint8Array([0xFF, 0xD9])]);
+    const jpegUrl = `data:image/jpeg;base64,${OS._bytesToBase64(jpeg)}`;
+    expect(OS._readJPEGICCProfile(OS._dataUrlToBytes(OS._embedRasterICCDataUrl(jpegUrl, 'jpeg', p3Bytes)))).toEqual(p3Bytes);
+
+    const webp = new Uint8Array([0x52,0x49,0x46,0x46,0x04,0x00,0x00,0x00,0x57,0x45,0x42,0x50]);
+    const webpUrl = `data:image/webp;base64,${OS._bytesToBase64(webp)}`;
+    expect(OS._readWebPICCProfile(OS._dataUrlToBytes(OS._embedRasterICCDataUrl(webpUrl, 'webp', p3Bytes))).bytes).toEqual(p3Bytes);
   });
 
   it('chooses one explicit PSD composite fallback for unsupported document-wide semantics', () => {

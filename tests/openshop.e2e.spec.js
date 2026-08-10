@@ -171,6 +171,42 @@ test('surfaces active document color metadata without stale blank-state values @
   await expect(page.locator('#info-color-profile')).toHaveText('—');
 });
 
+test('opens a tagged Display P3 raster with an explicit working-space conversion and embeds it on export', async ({ page }) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).evaluate(button => button.click());
+  const result = await page.evaluate(async () => {
+    const source = document.createElement('canvas');
+    source.width = 2;
+    source.height = 1;
+    const sourceContext = source.getContext('2d');
+    sourceContext.fillStyle = '#d06040';
+    sourceContext.fillRect(0, 0, 1, 1);
+    sourceContext.fillStyle = '#4070d0';
+    sourceContext.fillRect(1, 0, 1, 1);
+    const tagged = OS._embedRasterICCDataUrl(source.toDataURL('image/png'), 'png', OS._makeMatrixICCProfile('display-p3'));
+    const file = new File([OS._dataUrlToBytes(tagged)], 'display-p3.png', { type:'image/png' });
+    OS._confirmDiscardUnsaved = async () => true;
+    const opened = await OS._loadRasterFile(file, 'open');
+    const exported = OS._captureExportRaster({ format:'png', transparent:true });
+    const outputProfile = await OS._readEmbeddedColorProfile(OS._dataUrlToBytes(exported.dataUrl), 'image/png');
+    return {
+      opened,
+      displayP3Supported:OS._displayP3CanvasSupported(),
+      profile:OS._colorProfile,
+      workingSpace:OS._workingColorSpace,
+      outputProfile,
+      lossReport:OS._getExportImpact('png').warnings
+    };
+  });
+
+  expect(result.opened).toBe(true);
+  expect(result.profile).toMatchObject({ name:'Display P3', colorSpace:'display-p3', valid:true });
+  expect(result.workingSpace).toBe(result.displayP3Supported ? 'display-p3' : 'srgb');
+  expect(result.profile.conversion).toBe(result.displayP3Supported ? 'identity' : 'display-p3-to-srgb');
+  expect(result.outputProfile).toMatchObject({ colorSpace:result.workingSpace, sourceKind:'embedded-png' });
+  if (!result.displayP3Supported) expect(result.lossReport.join(' ')).toMatch(/converted from Display P3/i);
+});
+
 test('frames desktop documents with persistent measured rulers @cross-browser', async ({ page }) => {
   await openApp(page);
   await expect(page.locator('#ruler-h')).toBeHidden();
