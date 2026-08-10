@@ -652,6 +652,27 @@ test('applies a one-click pixel filter to an active image layer @cross-browser',
   expect(result.photonDisabled).toBe(false);
 });
 
+test('reports the OffscreenCanvas filter path and its main-thread fallback @cross-browser', async ({ page }) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).click();
+
+  const renderer = await page.evaluate(async () => {
+    await OS._ensureRendererReady();
+    return OS.aiBackendReport().renderer;
+  });
+
+  expect(renderer.contract).toBe('openshop-render-v1');
+  expect(renderer.paths.preview).toMatch(/^(offscreen-filter-worker|fabric-main-thread)$/);
+  expect(renderer.paths.filter).toMatch(/^(offscreen-filter-worker|filter-worker)$/);
+  if (renderer.capabilities.offscreenFilter) {
+    expect(renderer.paths.preview).toBe('offscreen-filter-worker');
+    expect(renderer.paths.filter).toBe('offscreen-filter-worker');
+  } else {
+    expect(renderer.paths.preview).toBe('fabric-main-thread');
+    expect(renderer.paths.filter).toBe('filter-worker');
+  }
+});
+
 test('cancels a running pixel filter without changing pixels or history', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));

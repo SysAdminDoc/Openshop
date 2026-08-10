@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createCanvasMock,
   loadOpenShop,
@@ -75,5 +75,55 @@ describe('OpenShop renderer-agnostic document seam', () => {
 
     expect(preview.sceneFingerprint).toBe(reference.sceneFingerprint);
     expect(reference.nodeCount).toBe(scene.nodes.length);
+  });
+
+  it('publishes renderer capabilities and fallback paths through the AI report', () => {
+    const OS = createDocument();
+    const report = OS.aiBackendReport().renderer;
+
+    expect(report).toMatchObject({
+      contract:'openshop-render-v1',
+      capabilities:{
+        transferControlToOffscreen:false,
+        offscreenCanvasWorker:false,
+        offscreenFilter:false
+      },
+      paths:{ preview:'fabric-main-thread', filter:'filter-worker' }
+    });
+  });
+
+  it('maps supported Fabric filters to the worker pipeline and keeps unknown filters on fallback', () => {
+    const OS = createDocument();
+    expect(OS._offscreenFilterSpecs([
+      { type:'Brightness', brightness:0.2 },
+      { type:'Contrast', contrast:-0.1 },
+      { type:'Pixelate', blocksize:6 }
+    ])).toEqual([
+      { op:'brightness', params:{ value:0.2 } },
+      { op:'contrast', params:{ value:-0.1 } },
+      { op:'pixelate', params:{ blocksize:6 } }
+    ]);
+    expect(OS._offscreenFilterSpecs([{ type:'Noise', noise:10 }])).toBeNull();
+  });
+
+  it('routes an opted-in filter operation through the OffscreenCanvas worker seam', async () => {
+    const OS = createDocument();
+    OS.renderer.capabilities.offscreenFilter = true;
+    OS._runFilterJob = vi.fn().mockResolvedValue('offscreen-result');
+
+    await expect(OS._runOffscreenFilterInWorker(
+      'pipeline',
+      { data:new Uint8ClampedArray([10,20,30,255]) },
+      1,
+      1,
+      { filters:[{ op:'brightness', params:{ value:0.2 } }] }
+    )).resolves.toBe('offscreen-result');
+    expect(OS._runFilterJob).toHaveBeenCalledWith(
+      { backend:'offscreen', op:'pipeline' },
+      expect.anything(),
+      1,
+      1,
+      { filters:[{ op:'brightness', params:{ value:0.2 } }] }
+    );
   });
 });

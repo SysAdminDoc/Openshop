@@ -51,6 +51,9 @@ All notable changes to Openshop will be documented in this file.
   fullscreen now expose their current state visually and through `aria-checked`.
 
 ### Fixed
+- Added a capability-tested OffscreenCanvas renderer worker for supported
+  filter application and capped previews, with the existing Fabric/main-thread
+  and CPU-worker paths retained for Firefox, WebKit, and unsupported contexts.
 - History budgeting now maintains entry sizes incrementally, and periodic
   pixel checkpoints bound reconstruction to a fixed delta window; the 8K
   performance gate covers a 119-step history replay.

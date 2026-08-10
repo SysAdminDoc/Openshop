@@ -27,6 +27,8 @@ const baselineP95Ms = Object.freeze({
     filterApply:4_000,
     historyCapture:1_000,
     historyReplay:1_000,
+    rendererFilter:1_000,
+    rendererFallback:1_000,
     undoRedo:1_000,
     export:500,
     batch:2_500,
@@ -102,6 +104,12 @@ function checkReport(report) {
         }
         if (name === 'historyReplay' && result.historyReplay?.reconstructionSteps > result.historyReplay?.checkpointInterval - 1) {
             failures.push(`${fixture.name}.historyReplay replayed ${result.historyReplay.reconstructionSteps} deltas without a nearby checkpoint`);
+        }
+        if (name === 'rendererFilter' && result.rendererFilter?.path !== 'offscreen-filter-worker') {
+            failures.push(`${fixture.name}.rendererFilter did not exercise the OffscreenCanvas worker path`);
+        }
+        if (name === 'rendererFallback' && result.rendererFallback?.path !== 'filter-worker') {
+            failures.push(`${fixture.name}.rendererFallback did not exercise the CPU worker fallback`);
         }
     }));
     if (failures.length) throw new Error(`Performance budget failure: ${failures.join(', ')}`);
@@ -229,6 +237,45 @@ async function runFixtureSample(page, fixture, slowMs) {
             }
         }, pathFor(null, 'CanvasRenderingContext2D'));
 
+        const rendererFilter = await timed('rendererFilter', async () => {
+            await OS._ensureRendererReady();
+            const sourcePixels = new Uint8ClampedArray(64 * 64 * 4);
+            for (let index = 0; index < sourcePixels.length; index += 4) {
+                sourcePixels[index] = 40;
+                sourcePixels[index + 1] = 80;
+                sourcePixels[index + 2] = 120;
+                sourcePixels[index + 3] = 255;
+            }
+            await OS._runFilterWithPhoton('sharpen', new ImageData(sourcePixels, 64, 64), 64, 64, {});
+            const report = OS.aiBackendReport();
+            return {
+                path:report.renderer.paths.filter,
+                backends:Object.keys(report.filterBackends.sharpen?.backends || {})
+            };
+        }, { backend:'offscreen-filter-worker', worker:true, gpu:false, cpu:false });
+
+        const rendererFallback = await timed('rendererFallback', async () => {
+            const previous = {
+                capabilities:{ ...OS.renderer.capabilities },
+                paths:{ ...OS.renderer.paths }
+            };
+            OS.renderer.capabilities.offscreenFilter = false;
+            OS.renderer.paths.filter = 'filter-worker';
+            try {
+                const sourcePixels = new Uint8ClampedArray(64 * 64 * 4);
+                sourcePixels.fill(128);
+                await OS._runFilterWithPhoton('sharpen', new ImageData(sourcePixels, 64, 64), 64, 64, {});
+                const report = OS.aiBackendReport();
+                return {
+                    path:report.renderer.paths.filter,
+                    backends:Object.keys(report.filterBackends.sharpen?.backends || {})
+                };
+            } finally {
+                OS.renderer.capabilities = previous.capabilities;
+                OS.renderer.paths = previous.paths;
+            }
+        }, { backend:'filter-worker', worker:true, gpu:false, cpu:true });
+
         const exported = await timed('export', async () => {
             const captured = await OS._captureExportedBlob('png');
             if (!captured?.blob?.size) throw new Error('Export probe produced an empty blob');
@@ -283,6 +330,8 @@ async function runFixtureSample(page, fixture, slowMs) {
             filterApply:{ ...applied, value:applyMetrics },
             historyCapture,
             historyReplay,
+            rendererFilter,
+            rendererFallback,
             export:exported,
             undoRedo:history,
             batch,
@@ -306,6 +355,8 @@ async function benchmark(page) {
                     executionPaths:result.executionPaths,
                     historyCapture:name === 'historyCapture' ? result.value : undefined,
                     historyReplay:name === 'historyReplay' ? result.value : undefined,
+                    rendererFilter:name === 'rendererFilter' ? result.value : undefined,
+                    rendererFallback:name === 'rendererFallback' ? result.value : undefined,
                     cancellation:name === 'cancel' ? { tested:true, observed:Boolean(result.value?.observed && result.value.signalAborted) } : undefined,
                     staleResultHandling:name === 'staleResult' ? { tested:true, discarded:Boolean(result.value?.discarded) } : undefined
                 });
@@ -318,6 +369,8 @@ async function benchmark(page) {
                 executionPaths:values.at(-1).executionPaths,
                 historyCapture:values.at(-1).historyCapture,
                 historyReplay:values.at(-1).historyReplay,
+                rendererFilter:values.at(-1).rendererFilter,
+                rendererFallback:values.at(-1).rendererFallback,
                 cancellation:values.at(-1).cancellation,
                 staleResultHandling:values.at(-1).staleResultHandling
         }]));
