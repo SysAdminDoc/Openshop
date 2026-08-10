@@ -25,7 +25,7 @@ describe('canonical runtime asset manifest', () => {
   test('matches the shipped page and service-worker manifests', () => {
     expect(check(html)).toMatchObject({ bootAssets: 3, lazyAssets: 23 });
     expect(checkServiceWorker(serviceWorker)).toMatchObject({
-      requiredAssets: 10,
+      requiredAssets: 12,
       optionalAssets: 4,
       cacheableAssets: 26
     });

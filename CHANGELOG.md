@@ -5,6 +5,7 @@ All notable changes to Openshop will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Completed the hosted PWA contract with maskable icons, wide/compact install screenshots, New/Open shortcuts, existing-client launch handling, complete import file handlers, and a multipart share target that persists files locally before handing them to the editor.
 - Added a WCAG-audited light theme with system `prefers-color-scheme` detection on first run, persisted theme selection, light-aware studio surfaces, and menu/command-palette access.
 - Added live layer groups with collapsible hierarchy rows, Shift/Cmd multi-selection, Ctrl+G/Ctrl+Shift+G grouping shortcuts, group visibility/lock/opacity cascading, drag-to-group/reparent, project schema v2 migration, and PSD nested-group materialization for round-trip export.
 - Added OpenRaster (`.ora`) layered import and export with bounded stored/deflated ZIP parsing, PNG layer offsets, opacity, visibility, blend mapping, merged-image and thumbnail output, plus explicit group and unsupported-construct compatibility reports.

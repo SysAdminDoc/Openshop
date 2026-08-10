@@ -277,7 +277,9 @@ export const OPENSHOP_LOCAL_SHELL_ASSETS = Object.freeze([
   './plugin-sandbox.js',
   './manifest.webmanifest',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './design/openshop-studio-master.png',
+  './design/openshop-menu-states.png'
 ]);
 export const OPENSHOP_OPTIONAL_RUNTIME_KEYS = Object.freeze([
   'photonModule',

@@ -349,11 +349,11 @@ The portable `file://` lane enforces the policy embedded in `index.html`; becaus
 OpenShop has two explicit distribution contracts:
 
 - `index.html` opened from disk remains the portable one-file editor. Core libraries are pinned but CDN-hosted, so a cold launch and any uncached optional helper require a connection. Browsers do not allow this lane to register a service worker.
-- An HTTPS or localhost deployment that includes `sw.js`, `plugin-sandbox.html`, `plugin-sandbox.js`, `manifest.webmanifest`, `icon-192.png`, and `icon-512.png` stages the editor, plugin runtime, manifest, icons, Fabric, ag-psd, and jsPDF as one verified shell. The status bar reports readiness. Once ready, the core editor reloads offline.
+- An HTTPS or localhost deployment that includes `sw.js`, `plugin-sandbox.html`, `plugin-sandbox.js`, `manifest.webmanifest`, both icons, and the two `design/` install screenshots stages the editor, plugin runtime, manifest, install assets, Fabric, ag-psd, and jsPDF as one verified shell. The status bar reports readiness. Once ready, the core editor reloads offline.
 
 Hosted updates install into a separate cache and remain waiting until applied. The new shell must complete an editor health check; if it does not, the next launch returns to the last verified shell. The Offline & Install dialog exposes update, rollback, connection, install, optional-helper, and pinned AI-model cache state.
 
-Installed-app file launch is progressively enhanced through `launchQueue`. Supporting desktop Chromium releases can launch PNG, JPEG, WebP, GIF, PSD, OpenRaster, and `.openshop` project files; other browsers retain Open, drag/drop, and file-picker workflows. AI models are intentionally outside the core shell and require one successful online use before their own cache can help offline.
+Installed-app file launch is progressively enhanced through `launchQueue`. Supporting Chromium releases can launch raster, vector, AVIF/APNG, PDF, RAW, PSD, OpenRaster, and `.openshop` project files. Installed browsers can also receive image files from the system share sheet; OpenShop stores the multipart handoff locally before opening it, so document pixels never upload. Other browsers retain Open, drag/drop, and file-picker workflows. AI models are intentionally outside the core shell and require one successful online use before their own cache can help offline.
 
 ## Self-Hosting
 
@@ -363,16 +363,16 @@ cp index.html /var/www/html/index.html
 
 # Hosted offline/install lane, scoped to one application directory
 mkdir -p /var/www/html/openshop
-cp index.html plugin-sandbox.html plugin-sandbox.js sw.js manifest.webmanifest icon-192.png icon-512.png /var/www/html/openshop/
+cp index.html plugin-sandbox.html plugin-sandbox.js sw.js manifest.webmanifest icon-192.png icon-512.png design/openshop-studio-master.png design/openshop-menu-states.png /var/www/html/openshop/
 
 # Or with GitHub Pages
 git init && git add . && git commit -m "init"
 # Enable Pages in repo settings → serves as a live editor
 ```
 
-No build step. No bundler. No runtime `node_modules`. `index.html` remains usable by itself; the six static companions enable the hosted PWA and sandboxed-plugin contract.
+No build step. No bundler. No runtime `node_modules`. `index.html` remains usable by itself; the eight static companions enable the hosted PWA and sandboxed-plugin contract.
 
-Keep those seven hosted files together in their own directory. A service worker's default scope is the directory containing `sw.js`; placing it at `/sw.js` grants it navigation control over every path on that origin. GitHub project Pages sites such as `/Openshop/` already provide the desired directory scope. A user/organization Pages site served at the origin root should publish OpenShop below a subdirectory instead.
+Keep those nine hosted files together in their own directory. A service worker's default scope is the directory containing `sw.js`; placing it at `/sw.js` grants it navigation control over every path on that origin. GitHub project Pages sites such as `/Openshop/` already provide the desired directory scope. A user/organization Pages site served at the origin root should publish OpenShop below a subdirectory instead.
 
 If the hosted directory is embedded by another site, add the response header shown in
 the Embedding section at the server or reverse proxy. The allowed ancestor list belongs

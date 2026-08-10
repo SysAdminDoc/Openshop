@@ -237,8 +237,23 @@ test.describe('hosted offline contract', () => {
     const manifestResponse = await request.get(`${origin}/manifest.webmanifest`);
     expect(manifestResponse.ok()).toBe(true);
     const manifest = await manifestResponse.json();
+    expect(manifest.icons.filter(icon => icon.purpose === 'maskable')).toHaveLength(2);
+    expect(manifest.screenshots.map(screenshot => screenshot.form_factor)).toEqual(['wide', 'narrow']);
+    expect(manifest.shortcuts.map(shortcut => shortcut.url)).toEqual(['./?action=new', './?action=open']);
+    expect(manifest.launch_handler.client_mode).toBe('navigate-existing');
+    expect(manifest.share_target).toMatchObject({
+      action: './?share=target',
+      method: 'POST',
+      enctype: 'multipart/form-data'
+    });
+    expect(manifest.share_target.params.files[0].accept).toContain('image/*');
     expect(manifest.file_handlers[0].accept['image/vnd.adobe.photoshop']).toContain('.psd');
     expect(manifest.file_handlers[0].accept['application/vnd.openshop+json']).toContain('.openshop');
+    expect(manifest.file_handlers[0].accept['application/pdf']).toContain('.pdf');
+    expect(manifest.file_handlers[0].accept['application/octet-stream']).toContain('.cr3');
+    for (const screenshot of manifest.screenshots) {
+      expect((await request.get(`${origin}/${screenshot.src.slice(2)}`)).ok()).toBe(true);
+    }
 
     await page.goto(`${origin}/`, { waitUntil: 'domcontentloaded' });
     // Libraries are verified and executed asynchronously, so there is no OS
@@ -283,6 +298,50 @@ test.describe('hosted offline contract', () => {
       state: 'clean',
       welcomeHidden: true
     });
+  });
+
+  test('stores a multipart share target and opens the handed-off image', async ({ page }) => {
+    test.setTimeout(90000);
+    await page.goto(`${origin}/`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => document.documentElement.dataset.osBoot === 'ready', null, { timeout: 60000 });
+    await expect(page.locator('#editor-canvas')).toBeVisible();
+    await page.evaluate(async () => { await navigator.serviceWorker.ready; });
+    if (!await page.evaluate(() => Boolean(navigator.serviceWorker.controller))) {
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.waitForFunction(() => document.documentElement.dataset.osBoot === 'ready', null, { timeout: 60000 });
+    }
+    await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller), null, { timeout: 30000 });
+
+    const redirect = await page.evaluate(async () => {
+      const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+3MxZ5wAAAABJRU5ErkJggg=='), character => character.charCodeAt(0));
+      const body = new FormData();
+      body.append('files', new File([bytes], 'shared.png', { type:'image/png' }));
+      const response = await fetch('./?share=target', { method:'POST', body });
+      return {
+        status:response.status,
+        location:response.url
+      };
+    });
+    expect(redirect.status).toBe(200);
+    expect(redirect.location).toContain('share=ready');
+    expect(redirect.location).toContain('share_id=share-');
+
+    await page.goto(new URL(redirect.location, origin).href, { waitUntil:'domcontentloaded' });
+    await page.waitForFunction(() => document.documentElement.dataset.osBoot === 'ready', null, { timeout: 60000 });
+    await page.waitForFunction(() => OS._docName === 'shared', null, { timeout: 30000 });
+    await expect(page.locator('#welcome-overlay')).toHaveClass(/hidden/);
+    const remaining = await page.evaluate(async () => new Promise((resolve, reject) => {
+      const request = indexedDB.open('openshop-share-v1', 1);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const database = request.result;
+        const transaction = database.transaction('payloads', 'readonly');
+        const getAll = transaction.objectStore('payloads').getAll();
+        getAll.onsuccess = () => { database.close(); resolve(getAll.result.length); };
+        getAll.onerror = () => { database.close(); reject(getAll.error); };
+      };
+    }));
+    expect(remaining).toBe(0);
   });
 
   test('returns to the last verified shell when an update cannot confirm boot', async ({ page, request }) => {

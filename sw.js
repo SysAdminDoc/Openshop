@@ -45,6 +45,15 @@ const META_CACHE = 'openshop-offline-meta-v1';
 const MAX_TRIAL_NAVIGATIONS = 3;
 const SCOPE_URL = new URL('./', self.registration.scope).href;
 const STATE_URL = new URL('./__openshop_offline_state__', self.registration.scope).href;
+const SHARE_DATABASE_NAME = 'openshop-share-v1';
+const SHARE_DATABASE_VERSION = 1;
+const SHARE_STORE_NAME = 'payloads';
+const SHARE_TARGET_PATH = new URL('./', self.registration.scope).pathname;
+const SHARE_TARGET_QUERY = 'target';
+const SHARE_MAX_FILES = 8;
+const SHARE_MAX_FILE_BYTES = 128 * 1024 * 1024;
+const SHARE_MAX_TOTAL_BYTES = 256 * 1024 * 1024;
+const SHARE_MAX_AGE_MS = 30 * 60 * 1000;
 
 /* OPENSHOP_RUNTIME_MANIFEST:SHELL:BEGIN */
 const REQUIRED_ASSETS = [
@@ -55,6 +64,8 @@ const REQUIRED_ASSETS = [
     "./manifest.webmanifest",
     "./icon-192.png",
     "./icon-512.png",
+    "./design/openshop-studio-master.png",
+    "./design/openshop-menu-states.png",
     "https://cdn.jsdelivr.net/npm/fabric@7.4.0/dist/index.min.js",
     "https://cdn.jsdelivr.net/npm/ag-psd@31.0.2/dist/bundle.js",
     "https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js"
@@ -502,6 +513,125 @@ async function cachedShellResponse(request, revision, navigation = false, cacheN
     return cache.match(request);
 }
 
+function isShareTargetRequest(request) {
+    if (request.method !== 'POST') return false;
+    try {
+        const url = new URL(request.url);
+        return url.origin === new URL(SCOPE_URL).origin
+            && url.pathname === SHARE_TARGET_PATH
+            && url.searchParams.get('share') === SHARE_TARGET_QUERY;
+    } catch {
+        return false;
+    }
+}
+
+function openShareDatabase() {
+    if (!self.indexedDB) throw new Error('IndexedDB is unavailable');
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(SHARE_DATABASE_NAME, SHARE_DATABASE_VERSION);
+        request.onupgradeneeded = event => {
+            const database = event.target.result;
+            if (!database.objectStoreNames.contains(SHARE_STORE_NAME)) {
+                database.createObjectStore(SHARE_STORE_NAME, { keyPath:'id' });
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error('Could not open share storage'));
+    });
+}
+
+function shareFileName(value) {
+    return String(value || 'shared-file')
+        .replace(/[\u0000-\u001f\u007f]/g, '')
+        .slice(0, 240)
+        || 'shared-file';
+}
+
+async function purgeExpiredSharePayloads(database, now = Date.now()) {
+    await new Promise((resolve, reject) => {
+        const transaction = database.transaction(SHARE_STORE_NAME, 'readwrite');
+        const cursorRequest = transaction.objectStore(SHARE_STORE_NAME).openCursor();
+        cursorRequest.onsuccess = () => {
+            const cursor = cursorRequest.result;
+            if (!cursor) return;
+            const record = cursor.value;
+            if (!record || now - Number(record.createdAt || 0) > SHARE_MAX_AGE_MS) cursor.delete();
+            cursor.continue();
+        };
+        cursorRequest.onerror = () => reject(cursorRequest.error || new Error('Could not inspect share storage'));
+        transaction.oncomplete = resolve;
+        transaction.onerror = () => reject(transaction.error || new Error('Could not clean share storage'));
+    });
+}
+
+async function storeShareTarget(request) {
+    const form = await request.formData();
+    const values = form.getAll('files');
+    if (!values.length) throw new Error('No shared files were supplied');
+    if (values.length > SHARE_MAX_FILES) throw new Error('Too many shared files');
+
+    const files = [];
+    let totalBytes = 0;
+    for (const value of values) {
+        if (!value || typeof value.arrayBuffer !== 'function') continue;
+        const declaredSize = Number(value.size);
+        if (Number.isFinite(declaredSize) && declaredSize > SHARE_MAX_FILE_BYTES) {
+            throw new Error('A shared file is too large');
+        }
+        const data = await value.arrayBuffer();
+        const size = data.byteLength;
+        if (size > SHARE_MAX_FILE_BYTES || totalBytes + size > SHARE_MAX_TOTAL_BYTES) {
+            throw new Error('Shared files exceed the import limit');
+        }
+        totalBytes += size;
+        files.push({
+            name:shareFileName(value.name),
+            type:String(value.type || '').slice(0, 120),
+            lastModified:Number(value.lastModified) || Date.now(),
+            size,
+            data
+        });
+    }
+    if (!files.length) throw new Error('No shared files were supplied');
+
+    const id = `share-${Date.now().toString(36)}-${(self.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)).replace(/[^a-z0-9-]/gi, '').slice(0, 40)}`;
+    const database = await openShareDatabase();
+    try {
+        await purgeExpiredSharePayloads(database);
+        await new Promise((resolve, reject) => {
+            const transaction = database.transaction(SHARE_STORE_NAME, 'readwrite');
+            transaction.objectStore(SHARE_STORE_NAME).put({ id, createdAt:Date.now(), files });
+            transaction.oncomplete = resolve;
+            transaction.onerror = () => reject(transaction.error || new Error('Could not save shared files'));
+        });
+    } finally {
+        database.close();
+    }
+    return id;
+}
+
+function shareRedirectUrl(id = null, error = null) {
+    const url = new URL(SCOPE_URL);
+    if (id) {
+        url.searchParams.set('share', 'ready');
+        url.searchParams.set('share_id', id);
+    } else {
+        url.searchParams.set('share', 'error');
+        url.searchParams.set('share_error', error || 'unavailable');
+    }
+    return url.href;
+}
+
+async function handleShareTarget(request) {
+    try {
+        const id = await storeShareTarget(request);
+        return Response.redirect(shareRedirectUrl(id), 303);
+    } catch (error) {
+        console.error('OpenShop share target failed:', error);
+        return Response.redirect(shareRedirectUrl(null, 'unavailable'), 303);
+    }
+}
+
 async function handleNavigation(request) {
     const target = await revisionForNavigation();
     const cached = await cachedShellResponse(request, target.revision, true, target.cacheName);
@@ -637,6 +767,10 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
     const request = event.request;
+    if (isShareTargetRequest(request)) {
+        event.respondWith(handleShareTarget(request));
+        return;
+    }
     if (request.method !== 'GET') return;
     if (request.mode === 'navigate') {
         event.respondWith(handleNavigation(request));

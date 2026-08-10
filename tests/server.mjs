@@ -19,7 +19,9 @@ const publicFiles = new Map([
   ['/sw.js', 'sw.js'],
   ['/manifest.webmanifest', 'manifest.webmanifest'],
   ['/icon-192.png', 'icon-192.png'],
-  ['/icon-512.png', 'icon-512.png']
+  ['/icon-512.png', 'icon-512.png'],
+  ['/design/openshop-studio-master.png', 'design/openshop-studio-master.png'],
+  ['/design/openshop-menu-states.png', 'design/openshop-menu-states.png']
 ]);
 let workerRevision = productionRevision;
 let badShell = false;
