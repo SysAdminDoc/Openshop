@@ -186,6 +186,69 @@ test('opens command search and keeps both zoom readouts synchronized @cross-brow
   await expect(statusReadout).toHaveText(await canvasReadout.textContent());
 });
 
+test('keeps every slider paired with a keyboard-editable number and supports pixel-perfect zoom @cross-browser', async ({ page }) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).evaluate(button => button.click());
+
+  const ranges = await page.evaluate(() => [...document.querySelectorAll('input[type="range"]')].map(range => ({
+    id:range.id,
+    numberId:range.dataset.rangeNumberId,
+    numberExists:Boolean(range.dataset.rangeNumberId && document.getElementById(range.dataset.rangeNumberId)),
+    numberType:range.dataset.rangeNumberId ? document.getElementById(range.dataset.rangeNumberId)?.type : null
+  })));
+  expect(ranges.length).toBeGreaterThan(20);
+  expect(ranges.filter(range => !range.numberId || !range.numberExists || range.numberType !== 'number')).toEqual([]);
+
+  await page.evaluate(() => OS.setTool('brush'));
+  const brushSize = page.locator('#brush-size');
+  const brushSizeNumber = page.locator('#brush-size-number');
+  await expect(brushSizeNumber).toBeVisible();
+  await brushSizeNumber.fill('42');
+  await expect(brushSize).toHaveValue('42');
+  await expect.poll(() => page.evaluate(() => OS.state.brushSize)).toBe(42);
+  await brushSizeNumber.fill('999');
+  await brushSizeNumber.press('Enter');
+  await expect(brushSize).toHaveValue('150');
+
+  await page.evaluate(() => {
+    const row = document.createElement('div');
+    const label = document.createElement('label');
+    label.textContent = 'Dynamic';
+    const range = document.createElement('input');
+    range.id = 'dynamic-range';
+    range.type = 'range';
+    range.min = '0';
+    range.max = '10';
+    range.value = '3';
+    const output = document.createElement('span');
+    output.textContent = '3';
+    row.append(label, range, output);
+    document.body.appendChild(row);
+  });
+  const dynamicNumber = page.locator('#dynamic-range-number');
+  await expect(dynamicNumber).toHaveAttribute('aria-label', 'Dynamic numeric value');
+  await dynamicNumber.fill('8');
+  await expect(page.locator('#dynamic-range')).toHaveValue('8');
+
+  await page.evaluate(() => OS.setTool('zoom'));
+  const pixelZoom = page.locator('#zoom-pixel-snap');
+  await expect(pixelZoom).toBeVisible();
+  await pixelZoom.check();
+  const snapped = await page.evaluate(() => {
+    OS.zoom = 1;
+    OS.zoomIn();
+    OS.canvas.renderAll();
+    return {
+      zoom:OS.zoom,
+      canvasSmoothing:OS.canvas.imageSmoothingEnabled,
+      contextSmoothing:OS.canvas.contextContainer?.imageSmoothingEnabled
+    };
+  });
+  expect(snapped).toEqual({ zoom:2, canvasSmoothing:false, contextSmoothing:false });
+  await page.evaluate(() => OS.zoomOut());
+  await expect.poll(() => page.evaluate(() => OS.zoom)).toBe(1);
+});
+
 test('surfaces active document color metadata without stale blank-state values @cross-browser', async ({ page }) => {
   await openApp(page);
 

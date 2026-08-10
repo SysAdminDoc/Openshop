@@ -1827,6 +1827,35 @@ describe('OpenShop core object', () => {
     expect(history.valid).toBe(false);
   });
 
+  it('clamps paired slider numbers and preserves fractional slider steps', () => {
+    const OS = loadOpenShop();
+    const range = {
+      min:'-100', max:'100', value:'0', step:'1',
+      getAttribute(name) { return name === 'step' ? this.step : null; }
+    };
+    expect(OS._readRangeNumberInput(range, '42')).toEqual({ value:42, valid:true });
+    expect(OS._readRangeNumberInput(range, '-999')).toEqual({ value:-100, valid:false });
+    expect(OS._readRangeNumberInput(range, 'bad', 12)).toEqual({ value:12, valid:false });
+
+    const gamma = {
+      min:'0.1', max:'4', value:'1', step:'0.1',
+      getAttribute(name) { return name === 'step' ? this.step : null; }
+    };
+    expect(OS._readRangeNumberInput(gamma, '1.26')).toEqual({ value:1.3, valid:false });
+    expect(OS._readRangeNumberInput(gamma, '2.4')).toEqual({ value:2.4, valid:true });
+  });
+
+  it('offers reciprocal and integer pixel-perfect zoom levels', () => {
+    const OS = loadOpenShop();
+    expect(OS._snapPixelZoom(1.8)).toBe(2);
+    expect(OS._snapPixelZoom(0.34)).toBeCloseTo(1 / 3);
+    OS.zoom = 1;
+    expect(OS._nextPixelZoom(1)).toBe(2);
+    expect(OS._nextPixelZoom(-1)).toBe(0.5);
+    OS.zoom = 2;
+    expect(OS._nextPixelZoom(-1)).toBe(1);
+  });
+
   it('keeps the open document when an image open is cancelled', async () => {
     const OS = loadOpenShop();
     OS.canvas = createCanvasMock();

@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10" id="theme-color-meta">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-ZB8neXbx9BhBNIJ/2ch8K4wePWGf0wVHHQMHpU19f/Q=' 'sha256-WPmmFHlmeB2H6USHwjS7mC3LfWilORxEh2qgzo6oY9Q=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-ZB8neXbx9BhBNIJ/2ch8K4wePWGf0wVHHQMHpU19f/Q=' 'sha256-eUfH6uFCDukf5hkjr2geUSMosPZ4r+JSu8Qp4nHWv/Y=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // OpenShop-specific Fabric configuration. The editor uses Fabric 7's native
@@ -448,6 +448,9 @@ html.os-native-popovers #context-menu[popover]{position-area:block-end span-inli
 .opt-group select{width:auto;padding:0 6px;text-align:left;cursor:pointer}
 .opt-group input[type="color"]{width:24px;height:22px;border:1px solid var(--border);border-radius:4px;background:none;cursor:pointer;padding:0}
 .opt-val{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-secondary);min-width:24px;text-align:center}
+.range-number{flex:0 0 48px!important;width:48px!important;min-width:0!important;height:24px!important;padding:0 4px!important;background:var(--bg-depth-3);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);text-align:center;font:11px 'JetBrains Mono',monospace;outline:none}
+.range-number:focus{border-color:var(--accent)}
+.range-number[aria-invalid="true"]{border-color:var(--danger)}
 .opt-group input[type="checkbox"]{accent-color:var(--accent)}
 #tool-options-reset{margin-inline-start:auto;flex:0 0 auto;padding:3px 10px;font-size:10px;min-height:24px}
 
@@ -1258,6 +1261,7 @@ body{
 input[type="range"]{
   -webkit-appearance:none;
   appearance:none;
+  min-width:0;
   height:3px;
   background:var(--border);
   border-radius:2px;
@@ -1294,6 +1298,7 @@ input[type="range"]::-moz-range-track{
 }
 input[type="range"]::-webkit-slider-thumb:hover{transform:scale(1.15)}
 input[type="range"]::-moz-range-thumb:hover{transform:scale(1.15)}
+input[type="number"].range-number{box-sizing:border-box}
 
 #panels{
   right:8px;
@@ -3610,7 +3615,7 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
             <button type="button" data-os-click="click-173" title="Align bottom" aria-label="Align bottom"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 20h18M6 5v11h4V5zM14 9v7h4V9z"/></svg></button>
         </div>
     </div>
-    <div class="opt-group" id="opt-zoom" style="display:none"><span style="color:var(--text-muted);font-size:11px">Click to zoom in. Alt-click to zoom out.</span><button type="button" class="btn" data-os-click="click-103">Fit</button></div>
+    <div class="opt-group" id="opt-zoom" style="display:none"><span style="color:var(--text-muted);font-size:11px">Click to zoom in. Alt-click to zoom out.</span><label title="Snap zoom to integer ratios and use nearest-neighbour sampling above 100%"><input type="checkbox" id="zoom-pixel-snap" data-os-change="change-048"> Pixel-perfect</label><button type="button" class="btn" data-os-click="click-103">Fit</button></div>
     <button type="button" id="tool-options-reset" class="btn" data-os-click="click-227" aria-label="Reset options" title="Reset the current tool options">Reset</button>
 </div>
 
@@ -4340,7 +4345,8 @@ const OS_EVENT_HANDLERS = Object.freeze({
         "change-044": function(event) { OS.selectGradientPreset(this.value) },
         "change-045": function(event) { OS.setAutoSelect(this.checked) },
         "change-046": function(event) { OS.setTransformControls(this.checked) },
-        "change-047": function(event) { OS.setTiltDynamics(this.checked) }
+        "change-047": function(event) { OS.setTiltDynamics(this.checked) },
+        "change-048": function(event) { OS.setPixelZoomSnap(this.checked); }
     }),
     input: Object.freeze({
         "input-001": function(event) { OS.setBrushSize(this.value) },
@@ -5529,6 +5535,10 @@ const OS = {
     _systemThemeMediaQuery: null,
     _systemThemeListener: null,
     _pixelGridVisible: false,
+    _pixelZoomSnap: false,
+    _zoomSamplingOriginals: null,
+    _rangeNumberObserver: null,
+    _rangeNumberSequence: 0,
     _animFrames: [], _animDelays: [], _animIdx: 0, _animPreviewIdx: null, _animPlaying: false, _animTimer: null,
     _macroRecording: false, _macroPlaying: false, _macroSteps: [],
     _liquifyData: null,
@@ -5544,11 +5554,11 @@ const OS = {
     }),
     _preferenceKnownKeys: Object.freeze([
         'version', 'defaultW', 'defaultH', 'gridSize', 'snapTolerance', 'maxHistory',
-        'stackNewObjects', 'vectorStrokes', 'rulersVisible', 'toolOptions', 'panelSizes', 'accent'
+        'stackNewObjects', 'vectorStrokes', 'rulersVisible', 'pixelZoomSnap', 'toolOptions', 'panelSizes', 'accent'
     ]),
     _lastPreferenceMigrationReport: null,
     _preferenceExtras: {},
-    _prefs: { gridSize: 20, historyStates: 120, defaultW: 1920, defaultH: 1080, theme: 'dark', snapTolerance: 5, maxHistory: 120, stackNewObjects: false, vectorStrokes: false, rulersVisible: true, accent: null, toolOptions: {}, panelSizes: [] },
+    _prefs: { gridSize: 20, historyStates: 120, defaultW: 1920, defaultH: 1080, theme: 'dark', snapTolerance: 5, maxHistory: 120, stackNewObjects: false, vectorStrokes: false, rulersVisible: true, pixelZoomSnap: false, accent: null, toolOptions: {}, panelSizes: [] },
     _canvasCeilingStorageKey: 'openshop.canvas-ceiling.v1',
     _canvasCeilingProbeVersion: 1,
     _canvasCeiling: null,
@@ -6128,6 +6138,8 @@ const OS = {
             // that request one render at the end instead.
             renderOnAddRemove: false,
         });
+        this.canvas.on('before:render', () => this._beginZoomSampling());
+        this.canvas.on('after:render', () => this._endZoomSampling());
         this._ensureCanvasCeiling();
         this._initializeBlankWorkspace();
         this._rendererReadyPromise = this._initializeRenderer();
@@ -6192,6 +6204,7 @@ const OS = {
         window.addEventListener('beforeunload', e => {
             if (this._isDirty) { e.preventDefault(); e.returnValue = ''; }
         });
+        this._initRangeNumberInputs();
         this.initSwatches();
         this._restorePreferences();
         this.rulersVisible = this._prefs.rulersVisible !== false;
@@ -6829,6 +6842,137 @@ const OS = {
         if (!raw || !Number.isFinite(value)) return { value: fallback, valid: false };
         const clamped = Math.min(max, Math.max(min, Math.round(value)));
         return { value: clamped, valid: clamped === Math.round(value) };
+    },
+    // Range value fields use the same finite-value and clamp-on-error policy
+    // as numeric dialogs, while preserving a range's fractional step when it
+    // has one (the adjustment-layer Gamma control is the current example).
+    _readRangeNumberInput(range, raw, fallback = Number(range?.value)) {
+        const text = String(raw ?? '').trim();
+        const candidate = Number(text);
+        if (!text || !Number.isFinite(candidate)) return { value:fallback, valid:false };
+        const minCandidate = Number(range?.min);
+        const maxCandidate = Number(range?.max);
+        const min = Number.isFinite(minCandidate) ? minCandidate : 0;
+        const max = Number.isFinite(maxCandidate) ? maxCandidate : 100;
+        const stepAttribute = typeof range?.getAttribute === 'function'
+            ? range.getAttribute('step')
+            : range?.step;
+        const step = stepAttribute && stepAttribute !== 'any' ? Number(stepAttribute) : 0;
+        const clamped = Math.min(max, Math.max(min, candidate));
+        let value = clamped;
+        if (Number.isFinite(step) && step > 0) {
+            value = min + Math.round((clamped - min) / step) * step;
+            const precision = String(step).includes('.')
+                ? Math.min(10, String(step).split('.')[1].length + 2)
+                : 0;
+            value = Number(value.toFixed(precision));
+            value = Math.min(max, Math.max(min, value));
+        }
+        return { value:Object.is(value, -0) ? 0 : value, valid:value === candidate };
+    },
+    _rangeNumberLabel(range) {
+        const explicit = range?.getAttribute?.('aria-label');
+        if (explicit) return explicit;
+        let sibling = range?.previousElementSibling;
+        while (sibling) {
+            if (sibling.matches?.('label')) {
+                const text = sibling.textContent.replace(/\s+/g, ' ').trim();
+                if (text) return text;
+            }
+            sibling = sibling.previousElementSibling;
+        }
+        const parentLabel = range?.closest?.('.modal-row,.adj-row,.text-fx-row,.layer-style-row,.hsb-row,.cr-fuzz-row,#liquify-topbar')?.querySelector?.('label');
+        return parentLabel?.textContent?.replace(/\s+/g, ' ').trim() || range?.id || 'Slider';
+    },
+    _syncRangeNumber(range, number) {
+        if (!range || !number) return;
+        number.min = range.min || '0';
+        number.max = range.max || '100';
+        number.step = range.step || '1';
+        number.value = range.value;
+        number.setCustomValidity?.('');
+        number.setAttribute('aria-invalid', 'false');
+    },
+    _upgradeRangeInputs(root = document) {
+        const ranges = root?.matches?.('input[type="range"]')
+            ? [root]
+            : [...(root?.querySelectorAll?.('input[type="range"]') || [])];
+        ranges.forEach(range => {
+            if (!range.isConnected) return;
+            let number = range.nextElementSibling?.matches?.('input[type="number"]')
+                ? range.nextElementSibling
+                : null;
+            if (!number && range.dataset.rangeNumberId) {
+                number = document.getElementById(range.dataset.rangeNumberId);
+            }
+            if (!number) {
+                number = document.createElement('input');
+                number.type = 'number';
+                number.className = 'range-number';
+                if (!range.id) {
+                    this._rangeNumberSequence += 1;
+                    range.id = `openshop-range-${this._rangeNumberSequence}`;
+                }
+                let numberId = `${range.id}-number`;
+                while (document.getElementById(numberId)) numberId += '-value';
+                number.id = numberId;
+                const output = range.nextElementSibling?.matches?.('output,span')
+                    ? range.nextElementSibling
+                    : null;
+                (output || range).insertAdjacentElement('afterend', number);
+            }
+            number.classList.add('range-number');
+            if (!range.id) {
+                this._rangeNumberSequence += 1;
+                range.id = `openshop-range-${this._rangeNumberSequence}`;
+            }
+            range.dataset.rangeNumberId = number.id || `${range.id}-number`;
+            number.dataset.rangeFor = range.id;
+            number.setAttribute('aria-label', `${this._rangeNumberLabel(range)} numeric value`);
+            if (number.dataset.rangeNumberBound === 'true') {
+                this._syncRangeNumber(range, number);
+                return;
+            }
+            const sync = () => this._syncRangeNumber(range, number);
+            const setFromNumber = commit => {
+                const result = this._readRangeNumberInput(range, number.value, Number(range.value));
+                if (!String(number.value ?? '').trim() || !Number.isFinite(Number(number.value))) {
+                    number.setAttribute('aria-invalid', 'true');
+                    number.setCustomValidity?.('Enter a number');
+                    if (commit) sync();
+                    return false;
+                }
+                range.value = String(result.value);
+                number.dataset.rangeClamped = result.valid ? 'false' : 'true';
+                sync();
+                range.dispatchEvent(new Event('input', { bubbles:true }));
+                if (commit) range.dispatchEvent(new Event('change', { bubbles:true }));
+                return result.valid;
+            };
+            range.addEventListener('input', sync);
+            range.addEventListener('change', sync);
+            number.addEventListener('input', () => setFromNumber(false));
+            number.addEventListener('change', () => setFromNumber(true));
+            number.addEventListener('blur', () => setFromNumber(true));
+            number.addEventListener('keydown', event => {
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                setFromNumber(true);
+                number.blur();
+            });
+            number.dataset.rangeNumberBound = 'true';
+            sync();
+        });
+    },
+    _initRangeNumberInputs() {
+        this._upgradeRangeInputs(document);
+        if (this._rangeNumberObserver || typeof MutationObserver === 'undefined' || !document.body) return;
+        this._rangeNumberObserver = new MutationObserver(mutations => {
+            mutations.forEach(mutation => mutation.addedNodes.forEach(node => {
+                if (node.nodeType === Node.ELEMENT_NODE) this._upgradeRangeInputs(node);
+            }));
+        });
+        this._rangeNumberObserver.observe(document.body, { childList:true, subtree:true });
     },
     _isEmbeddedAssetUrl(value) {
         return /^\s*(data:|blob:)/i.test(String(value ?? ''));
@@ -14076,7 +14220,7 @@ self.onmessage = function(event) {
             star: schema('opt-star', true, ['star-points', 'star-inner', 'star-fill', 'star-filled']),
             measure: schema('opt-measure', true),
             'ai-segment': schema('opt-ai-segment', true),
-            zoom: schema('opt-zoom', true)
+            zoom: schema('opt-zoom', true, ['zoom-pixel-snap'])
         });
         return this._toolOptionSchemaCache;
     },
@@ -15034,8 +15178,7 @@ self.onmessage = function(event) {
     onMouseWheel(opt) {
         opt.e.preventDefault(); let z=this.zoom*(0.999**opt.e.deltaY);
         z=Math.min(Math.max(0.05,z),20);
-        this.canvas.zoomToPoint({x:opt.e.offsetX,y:opt.e.offsetY},z);
-        this.zoom=z; this._renderZoomReadout(z); this.drawGrid(); this.drawRulers(); this._drawPixelGrid(); this._updateMinimapViewport();
+        this._zoomToPoint(z, {x:opt.e.offsetX,y:opt.e.offsetY});
     },
 
     _initTouchGestures(area) {
@@ -15059,8 +15202,10 @@ self.onmessage = function(event) {
                 const scale = dist / lastDist;
                 let z = Math.min(Math.max(this.zoom * scale, 0.05), 20);
                 const rect = area.getBoundingClientRect();
+                if (this._pixelZoomSnap) z = this._snapPixelZoom(z);
                 this.canvas.zoomToPoint({ x: center.x - rect.left, y: center.y - rect.top }, z);
                 this.zoom = z;
+                this._applyZoomRendering();
                 this._renderZoomReadout(z);
             }
             if (lastCenter) {
@@ -18362,6 +18507,108 @@ self.onmessage = function(event) {
     },
 
     // ====================== ZOOM ======================
+    _pixelZoomLevels() {
+        const levels = [];
+        for (let denominator = 20; denominator >= 2; denominator -= 1) levels.push(1 / denominator);
+        for (let ratio = 1; ratio <= 20; ratio += 1) levels.push(ratio);
+        return levels.sort((a, b) => a - b);
+    },
+    _snapPixelZoom(value) {
+        const raw = Number(value);
+        const bounded = Number.isFinite(raw) ? Math.min(20, Math.max(0.05, raw)) : 1;
+        return this._pixelZoomLevels().reduce((nearest, candidate) =>
+            Math.abs(candidate - bounded) < Math.abs(nearest - bounded) ? candidate : nearest);
+    },
+    _nextPixelZoom(direction) {
+        const levels = this._pixelZoomLevels();
+        const current = Math.min(20, Math.max(0.05, Number(this.zoom) || 1));
+        const epsilon = 1e-9;
+        if (direction > 0) return levels.find(level => level > current + epsilon) || levels.at(-1);
+        return [...levels].reverse().find(level => level < current - epsilon) || levels[0];
+    },
+    _syncPixelZoomControl() {
+        const control = document.getElementById('zoom-pixel-snap');
+        if (control) control.checked = Boolean(this._pixelZoomSnap);
+    },
+    _applyZoomRendering() {
+        if (!this.canvas) return;
+        const nearest = Boolean(this._pixelZoomSnap && Number(this.zoom) > 1);
+        const smoothing = !nearest;
+        this.canvas.imageSmoothingEnabled = smoothing;
+        const contexts = [
+            this.canvas.contextContainer,
+            this.canvas.contextTop,
+            this.canvas.contextCache,
+            this.canvas.lowerCanvasEl?.getContext?.('2d'),
+            this.canvas.upperCanvasEl?.getContext?.('2d')
+        ];
+        [...new Set(contexts.filter(Boolean))].forEach(context => {
+            context.imageSmoothingEnabled = smoothing;
+            if ('imageSmoothingQuality' in context) context.imageSmoothingQuality = smoothing ? 'high' : 'low';
+        });
+    },
+    _beginZoomSampling() {
+        if (!this.canvas) return;
+        this._applyZoomRendering();
+        const originals = new Map();
+        this.canvas.getObjects?.().filter(object => object.type === 'image').forEach(object => {
+            originals.set(object, {
+                own: Object.prototype.hasOwnProperty.call(object, 'imageSmoothing'),
+                value: object.imageSmoothing
+            });
+            object.imageSmoothing = !(this._pixelZoomSnap && Number(this.zoom) > 1);
+        });
+        this._zoomSamplingOriginals = originals;
+    },
+    _endZoomSampling() {
+        if (!this._zoomSamplingOriginals) return;
+        this._zoomSamplingOriginals.forEach((original, object) => {
+            if (original.own) object.imageSmoothing = original.value;
+            else delete object.imageSmoothing;
+        });
+        this._zoomSamplingOriginals = null;
+    },
+    setPixelZoomSnap(enabled, { announce = true, persist = true } = {}) {
+        this._pixelZoomSnap = Boolean(enabled);
+        this._prefs.pixelZoomSnap = this._pixelZoomSnap;
+        this._syncPixelZoomControl();
+        if (this._pixelZoomSnap && this.canvas) {
+            const snapped = this._snapPixelZoom(this.zoom);
+            if (snapped !== this.zoom && this.canvas.zoomToPoint) {
+                this.canvas.zoomToPoint({ x:this.canvas.width / 2, y:this.canvas.height / 2 }, snapped);
+                this.zoom = snapped;
+            }
+        }
+        this._applyZoomRendering();
+        this.canvas?.renderAll?.();
+        this._renderZoomReadout();
+        this._syncSessionWorkspace();
+        if (this.canvas) {
+            this.drawGrid();
+            this.drawRulers();
+        }
+        if (persist) {
+            const saved = this._persistPreferences?.(null, { announce:false });
+            if (saved === false && announce) this.toast('Pixel-perfect zoom preference could not be saved', 'error');
+        }
+        if (announce) this.toast(this._pixelZoomSnap ? 'Pixel-perfect zoom on' : 'Pixel-perfect zoom off', 'info');
+        return this._pixelZoomSnap;
+    },
+    _zoomToPoint(value, point, { snap = this._pixelZoomSnap } = {}) {
+        const raw = Number(value);
+        const bounded = Number.isFinite(raw) ? Math.min(20, Math.max(0.05, raw)) : (Number(this.zoom) || 1);
+        const next = snap ? this._snapPixelZoom(bounded) : bounded;
+        this.canvas?.zoomToPoint?.(point, next);
+        this.zoom = next;
+        this._applyZoomRendering();
+        this._renderZoomReadout(next);
+        this._syncSessionWorkspace();
+        this.drawGrid();
+        this.drawRulers();
+        this._drawPixelGrid?.();
+        this._updateMinimapViewport?.();
+        return next;
+    },
     _renderZoomReadout(value = this.zoom) {
         const text = typeof value === 'string' ? value : `${Math.round(value * 100)}%`;
         ['zoom-display', 'canvas-zoom-display'].forEach(id => {
@@ -18369,8 +18616,16 @@ self.onmessage = function(event) {
             if (element) element.textContent = text;
         });
     },
-    zoomIn() { this.zoom=Math.min(this.zoom*1.25,20); this.canvas.zoomToPoint({x:this.canvas.width/2,y:this.canvas.height/2},this.zoom); this._renderZoomReadout(); this._syncSessionWorkspace(); this.drawGrid(); this.drawRulers(); },
-    zoomOut() { this.zoom=Math.max(this.zoom/1.25,0.05); this.canvas.zoomToPoint({x:this.canvas.width/2,y:this.canvas.height/2},this.zoom); this._renderZoomReadout(); this._syncSessionWorkspace(); this.drawGrid(); this.drawRulers(); },
+    zoomIn() {
+        const current = Number(this.zoom) || 1;
+        const next = this._pixelZoomSnap ? this._nextPixelZoom(1) : Math.min(current * 1.25, 20);
+        return this._zoomToPoint(next, { x:(this.canvas?.width || 0) / 2, y:(this.canvas?.height || 0) / 2 }, { snap:false });
+    },
+    zoomOut() {
+        const current = Number(this.zoom) || 1;
+        const next = this._pixelZoomSnap ? this._nextPixelZoom(-1) : Math.max(current / 1.25, 0.05);
+        return this._zoomToPoint(next, { x:(this.canvas?.width || 0) / 2, y:(this.canvas?.height || 0) / 2 }, { snap:false });
+    },
     zoomFit() {
         if (!this.canvasW || !this.canvasH) return false;
         const a=document.getElementById('canvas-area'), pad=40;
@@ -18378,15 +18633,15 @@ self.onmessage = function(event) {
         this.canvas.setViewportTransform([1,0,0,1,0,0]); this.canvas.zoomToPoint({x:0,y:0},this.zoom);
         const vpt=this.canvas.viewportTransform;
         vpt[4]=(a.clientWidth-this.canvasW*this.zoom)/2; vpt[5]=(a.clientHeight-this.canvasH*this.zoom)/2;
-        this.canvas.setViewportTransform(vpt); this._renderZoomReadout(); this._syncSessionWorkspace(); this.drawGrid(); this.drawRulers();
+        this.canvas.setViewportTransform(vpt); this._applyZoomRendering(); this._renderZoomReadout(); this._syncSessionWorkspace(); this.drawGrid(); this.drawRulers();
     },
     zoomReset() {
         this.zoom=1; const a=document.getElementById('canvas-area');
         this.canvas.setViewportTransform([1,0,0,1,0,0]); this.canvas.zoomToPoint({x:0,y:0},1);
         const vpt=this.canvas.viewportTransform; vpt[4]=(a.clientWidth-this.canvasW)/2; vpt[5]=(a.clientHeight-this.canvasH)/2;
-        this.canvas.setViewportTransform(vpt); this._renderZoomReadout(1); this._syncSessionWorkspace(); this.drawGrid(); this.drawRulers();
+        this.canvas.setViewportTransform(vpt); this._applyZoomRendering(); this._renderZoomReadout(1); this._syncSessionWorkspace(); this.drawGrid(); this.drawRulers();
     },
-    resizeCanvas() { const a=document.getElementById('canvas-area'); this.canvas.setDimensions({ width:a.clientWidth, height:a.clientHeight }); this.canvas.renderAll(); },
+    resizeCanvas() { const a=document.getElementById('canvas-area'); this.canvas.setDimensions({ width:a.clientWidth, height:a.clientHeight }); this._applyZoomRendering(); this.canvas.renderAll(); },
     zoomActual() { this.zoomReset(); },
     _layerViaCopy() {
         const active = this.canvas.getActiveObject();
@@ -23853,7 +24108,7 @@ self.onmessage = async function(event) {
     _preferenceDefaults() {
         return {
             defaultW:1920, defaultH:1080, gridSize:20, snapTolerance:5, maxHistory:120,
-            stackNewObjects:false, vectorStrokes:false, rulersVisible:true,
+            stackNewObjects:false, vectorStrokes:false, rulersVisible:true, pixelZoomSnap:false,
             toolOptions:{}, panelSizes:[]
         };
     },
@@ -23899,6 +24154,9 @@ self.onmessage = async function(event) {
         normalized.rulersVisible = normalized.rulersVisible === undefined
             ? defaults.rulersVisible
             : Boolean(normalized.rulersVisible);
+        normalized.pixelZoomSnap = normalized.pixelZoomSnap === undefined
+            ? defaults.pixelZoomSnap
+            : Boolean(normalized.pixelZoomSnap);
         normalized.toolOptions = normalized.toolOptions && typeof normalized.toolOptions === 'object' && !Array.isArray(normalized.toolOptions)
             ? Object.fromEntries(Object.entries(normalized.toolOptions).slice(0, 120))
             : {};
@@ -23921,10 +24179,14 @@ self.onmessage = async function(event) {
         this._prefs.stackNewObjects = normalized.stackNewObjects;
         this._prefs.vectorStrokes = normalized.vectorStrokes;
         this._prefs.rulersVisible = normalized.rulersVisible;
+        this._prefs.pixelZoomSnap = normalized.pixelZoomSnap;
         this._prefs.toolOptions = normalized.toolOptions;
         this._prefs.panelSizes = normalized.panelSizes;
         this._prefs.accent = normalized.accent || null;
         this.rulersVisible = normalized.rulersVisible;
+        this._pixelZoomSnap = normalized.pixelZoomSnap;
+        this._syncPixelZoomControl?.();
+        this._applyZoomRendering?.();
         if (normalized.accent) document.documentElement.style.setProperty('--accent', normalized.accent);
         else document.documentElement.style.removeProperty('--accent');
         return normalized;
@@ -23941,6 +24203,7 @@ self.onmessage = async function(event) {
             stackNewObjects:Boolean(this._prefs.stackNewObjects),
             vectorStrokes:Boolean(this._prefs.vectorStrokes),
             rulersVisible:this.rulersVisible !== false,
+            pixelZoomSnap:Boolean(this._pixelZoomSnap),
             toolOptions:this._prefs.toolOptions,
             panelSizes:this._prefs.panelSizes,
             ...( /^#[0-9a-fA-F]{6}$/.test(String(requestedAccent || ''))
@@ -23975,6 +24238,7 @@ self.onmessage = async function(event) {
                 <h4>Interface</h4>
                 <div class="pref-row"><label>Accent Color</label><input id="pref-accent" type="color" value="#6c8cff"></div>
                 <div class="pref-row"><label>Show rulers on desktop</label><input id="pref-rulers" type="checkbox" ${this.rulersVisible ? 'checked' : ''}></div>
+                <div class="pref-row"><label>Snap zoom to integer ratios</label><input id="pref-pixel-zoom" type="checkbox" ${this._pixelZoomSnap ? 'checked' : ''}></div>
                 <div class="pref-row"><label>Language</label><select id="pref-lang"><option value="en" ${this._lang === 'en' ? 'selected' : ''}>English</option><option value="zh" ${this._lang === 'zh' ? 'selected' : ''}>简体中文</option></select></div>
             </div>
             <div class="pref-actions" style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px">
@@ -24017,6 +24281,7 @@ self.onmessage = async function(event) {
         this._prefs.vectorStrokes = Boolean(overlay.querySelector('#pref-vector')?.checked);
         this.rulersVisible = Boolean(overlay.querySelector('#pref-rulers')?.checked);
         this._prefs.rulersVisible = this.rulersVisible;
+        this.setPixelZoomSnap(Boolean(overlay.querySelector('#pref-pixel-zoom')?.checked), { announce:false, persist:false });
         this.maxHistory = history.value;
         const accent = overlay.querySelector('#pref-accent').value;
         this._prefs.accent = accent;
@@ -28289,10 +28554,7 @@ self.onmessage = async function(e) {
     },
     setZoom(level) {
         const center = { x: this.canvas.width / 2, y: this.canvas.height / 2 };
-        this.canvas.zoomToPoint(center, level);
-        this.zoom = level;
-        this._renderZoomReadout(level);
-        this.drawGrid(); this.drawRulers(); this._drawPixelGrid();
+        return this._zoomToPoint(level, center);
     },
     freeTransform() {
         const active = this.canvas.getActiveObject();

@@ -5,6 +5,7 @@ All notable changes to Openshop will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Added validated number fields beside every range slider, plus a persisted Zoom-tool Pixel-perfect mode with reciprocal/integer snapping and nearest-neighbour sampling above 100%.
 - Added document-backed EXIF/XMP import metadata, Image Information reporting, and export choices for Preserve, Strip, or Strip location only (the privacy-preserving default); JPEG export reattaches selected APP1 fields after pixel encoding and reports unsupported-format losses.
 - Added a worker-backed Refine Edge selection workflow with checkerboard matte preview and soft alpha coverage, plus Telea fast-marching Spot Healing with selection-aware brush masks, cancellation, and one history commit per stroke.
 - Implemented polygonal and magnetic lasso, Quick Selection, perspective crop, spot healing, path/direct selection, rounded rectangles, and custom heart shapes; the registry now exposes these tools as enabled workflows with document-space selection masks, lock-aware raster edits, and one-step perspective-crop history.

@@ -40,6 +40,7 @@ Or download `index.html` and open it locally. Everything runs client-side. Your 
 | **Snapshots & Branches** | Name the current state and return to it later, outside the undo step limit; editing after an undo archives the abandoned line as a branch instead of deleting it. Session-scoped and memory-budgeted |
 | **Free Transform** | Resize, rotate, skew, perspective, and warp on any object |
 | **Text Styling** | Bold, italic, underline, overline, and line-through, with the decoration line's own colour and thickness rather than the fill's |
+| **Numeric Controls & Pixel Zoom** | Every slider has a keyboard-editable, validated number field; the Zoom tool can snap to reciprocal/integer ratios and use nearest-neighbour sampling above 100% |
 | **Trace to Vector** | Converts a raster layer into editable paths with colour-count, smoothing, and detail controls; the source layer is hidden, not destroyed |
 | **Gradient Stops** | Linear gradients expose draggable start and end handles on the canvas; imported `.grd` presets retain their stops and can be selected for linear or radial fills |
 | **Auto-Save** | Dirty project revisions are written to browser recovery storage every 30 seconds and cleared only after the storage path acknowledges the write |
@@ -182,6 +183,11 @@ requests without revoking consent.
 | `X` | Swap FG/BG Colors |
 | `D` | Reset to Black/White |
 | `V B E T G C Z H L R P M W S I J A N` | Tool shortcuts |
+
+Select the Zoom tool and enable **Pixel-perfect** when working on pixel art. The
+mode keeps zoom controls on reciprocal/integer ratios and switches image
+sampling to nearest-neighbour above 100%; the setting is persisted with
+Preferences.
 
 ## How It Works
 
