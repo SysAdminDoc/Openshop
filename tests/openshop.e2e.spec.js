@@ -3124,6 +3124,68 @@ test('drags gradient stops on canvas and colours text decorations @cross-browser
   expect(pageErrors).toEqual([]);
 });
 
+test('formats text ranges through project save/load and export loss reporting @cross-browser', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).click();
+
+  const result = await page.evaluate(async () => {
+    const text = new fabric.IText('Hello world', { left:30, top:30, fontSize:24, fill:'#ffffff' });
+    const layer = OS._addObjectAsLayer(text, 'Range Text');
+    OS.canvas.setActiveObject(text);
+    text.enterEditing();
+    text.selectionStart = 0;
+    text.selectionEnd = 5;
+    document.getElementById('text-font').value = 'Georgia';
+    document.getElementById('text-size').value = '42';
+    document.getElementById('text-color').value = '#ff3355';
+    document.getElementById('text-bold').checked = true;
+    document.getElementById('text-italic').checked = true;
+    document.getElementById('text-underline').checked = true;
+    document.getElementById('text-decoration-color').value = '#22cc88';
+    document.getElementById('text-decoration-thickness').value = '180';
+    OS._syncTextRangeControls();
+    document.getElementById('apply-text-range').click();
+    const applied = text.styles?.['0']?.['0']?.fill === '#ff3355';
+    const before = JSON.parse(JSON.stringify(text.styles));
+    const project = OS._captureDocumentState();
+    const objectId = text._openShopObjectId;
+    const serialized = project.canvas.fabric.objects.find(object => object._openShopObjectId === objectId);
+    const svg = OS._exportSVGMarkup();
+    const impact = OS._getExportImpact('psd');
+    const psd = OS._buildPsdExportStructure();
+    await OS._loadDocumentState(project, { trusted:true });
+    const restored = OS.canvas.getObjects().find(object => object._openShopObjectId === objectId);
+    return {
+      applied,
+      layerName:layer.name,
+      style:before['0']['0'],
+      serialized:serialized?.styles?.[0]?.style,
+      restored:restored?.styles?.['0']?.['0'],
+      schemaVersion:project.schemaVersion,
+      svgHasSpans:/<tspan\b/i.test(svg),
+      svgHasRangeFill:/<tspan[\s\S]*?fill:\s*rgb\(255,51,85\)/i.test(svg),
+      impactWarning:impact.warnings.find(warning => warning.includes('per-range formatting')) || null,
+      psdWarning:psd.report.warnings.find(warning => warning.includes('per-range formatting')) || null
+    };
+  });
+  expect(result.applied).toBe(true);
+  expect(result.layerName).toBe('Range Text');
+  expect(result.style).toMatchObject({
+    fontFamily:'Georgia', fontSize:42, fill:'#ff3355', fontWeight:'bold', fontStyle:'italic',
+    underline:true, textDecorationColor:'#22cc88', textDecorationThickness:180
+  });
+  expect(result.serialized).toMatchObject(result.style);
+  expect(result.restored).toMatchObject(result.style);
+  expect(result.schemaVersion).toBe(3);
+  expect(result.svgHasSpans).toBe(true);
+  expect(result.svgHasRangeFill).toBe(true);
+  expect(result.impactWarning).toMatch(/rasterized/);
+  expect(result.psdWarning).toMatch(/rasterized/);
+  expect(pageErrors).toEqual([]);
+});
+
 test('reports what it sent and can refuse every uncached download @cross-browser', async ({ page }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).click();

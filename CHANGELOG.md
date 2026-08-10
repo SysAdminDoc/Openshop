@@ -5,6 +5,7 @@ All notable changes to Openshop will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Added per-range text formatting for Fabric text objects with selected-range fill, size, weight, and decoration controls, schema-3 save/load migration, SVG `<tspan>` preservation, and explicit PSD rasterization loss reporting.
 - Added release-surface checks for local social preview, manifest, icon, and install-screenshot assets in standalone-file and hosted lanes, plus an explicit release manifest for the required Chromium visual baselines.
 - Added a roadmap consistency validator and regression suite that treats `ROADMAP.md` as the actionable queue, classifies the Photoshop parity file as historical evidence, and rejects checked-off rows, duplicate items, impossible totals, and stale drained claims.
 - Added explicit ownership and disposal for verified lazy runtimes: raw asset buffers leave the session after initialization, shared worker/module blob URLs use reference counts, failed loads remain retryable, and deterministic lifecycle probes verify zero retained payloads after disposal.

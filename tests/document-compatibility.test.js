@@ -44,9 +44,10 @@ describe('document migrations and compatibility reports', () => {
       canvas:{ width:1, height:1, fabric:{ objects:[] } },
       layers:[{ id:'layer-1', name:'Layer 1', visible:true, locked:false, opacity:100, blend:'source-over', objectIds:[] }]
     };
-    expect(OS._normalizeDocumentState(current).schemaVersion).toBe(2);
+    expect(OS._normalizeDocumentState(current).schemaVersion).toBe(3);
     expect(OS._lastDocumentMigrationReport).toMatchObject({
-      format:'openshop', direction:'import', accepted:true, sourceVersion:1, targetVersion:2, steps:['schema-1-to-2']
+      format:'openshop', direction:'import', accepted:true, sourceVersion:1, targetVersion:3,
+      steps:['schema-1-to-2', 'schema-2-to-3']
     });
     expect(OS._documentMigrationRegistry[1]).toEqual(expect.any(Function));
 
@@ -55,7 +56,7 @@ describe('document migrations and compatibility reports', () => {
     expect(migrated.kind).toBe('openshop-document');
     expect(migrated.migratedFrom).toBe('0.18.13');
     expect(OS._lastDocumentMigrationReport).toMatchObject({
-      sourceVersion:'legacy', steps:['legacy-envelope-to-schema-1', 'schema-1-to-2']
+      sourceVersion:'legacy', steps:['legacy-envelope-to-schema-1', 'schema-1-to-2', 'schema-2-to-3']
     });
     expect(OS._lastDocumentMigrationReport.losses[0]).toMatchObject({
       code:'openshop.legacy-envelope', path:'root'
@@ -122,6 +123,6 @@ describe('document migrations and compatibility reports', () => {
       code:'psd.export-compatibility', path:'Photo', feature:'masks were baked into pixels'
     });
     const report = OS._documentExportCompatibilityReport();
-    expect(report).toMatchObject({ format:'openshop', direction:'export', accepted:true, targetVersion:2 });
+    expect(report).toMatchObject({ format:'openshop', direction:'export', accepted:true, targetVersion:3 });
   });
 });

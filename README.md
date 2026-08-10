@@ -28,7 +28,7 @@ Or download `index.html` and open it locally. Everything runs client-side. Your 
 
 | Feature | Description |
 |---------|-------------|
-| **Layer System** | Multi-layer canvas with live nested groups/folders, collapsible rows, group visibility/lock/opacity, canonical render/export stacking, non-destructive Levels, Curves, and HSL adjustment layers, independent raster masks with feather and density controls, re-editable embedded Smart Objects, editable vector paths with draggable anchors and Bezier controls, text-on-path with basic OpenType features, protected hidden or locked content, and undoable visibility, lock, opacity, blend, rename, grouping, and drag-reorder changes |
+| **Layer System** | Multi-layer canvas with live nested groups/folders, collapsible rows, group visibility/lock/opacity, canonical render/export stacking, non-destructive Levels, Curves, and HSL adjustment layers, independent raster masks with feather and density controls, re-editable embedded Smart Objects, editable vector paths with draggable anchors and Bezier controls, text-on-path with basic OpenType features, per-range text styling, protected hidden or locked content, and undoable visibility, lock, opacity, blend, rename, grouping, and drag-reorder changes |
 | **34 Tools** | Move, Brush, Pencil, Eraser, Spray, Clone Stamp, Healing Brush, Dodge, Burn, Sponge, Smudge, Shapes (rect, ellipse, triangle, polygon, star, arrow, line), Pen, Text, Gradient, Pattern Fill, Flood Fill, Eyedropper, Crop, Measure, Sticky Notes, AI Segment Select, Pan, Zoom |
 | **Brush Engine** | Round, Soft, Flat, Scatter, Pixel presets with adjustable size, opacity, and flow; coalesced/predicted pen samples, pressure sizing, optional tilt dynamics, and bounded `.abr` brush-set import with persistent raster stamps |
 | **Mobile Workspace** | Switch the Workspace selector to Mobile for a compact bottom toolbar, slide-out panels, touch-safe canvas targets, and variance-detected pen pressure sizing |
@@ -39,7 +39,7 @@ Or download `index.html` and open it locally. Everything runs client-side. Your 
 | **Undo/Redo** | 120-step versioned transaction history with dirty 64×64 raster tiles, named entries, exact destructive-edit rollback, and a visual history panel |
 | **Snapshots & Branches** | Name the current state and return to it later, outside the undo step limit; editing after an undo archives the abandoned line as a branch instead of deleting it. Session-scoped and memory-budgeted |
 | **Free Transform** | Resize, rotate, skew, perspective, and warp on any object |
-| **Text Styling** | Bold, italic, underline, overline, and line-through, with independent LTR/RTL artwork direction commands and decoration line colour/thickness rather than the fill's; interface locale direction never rewrites text objects |
+| **Text Styling** | Bold, italic, underline, overline, and line-through on whole objects or selected character ranges, with per-range fill, size, weight, decoration colour, and thickness; independent LTR/RTL artwork direction commands keep interface locale changes from rewriting text objects |
 | **Numeric Controls & Pixel Zoom** | Every slider has a keyboard-editable, validated number field; the Zoom tool can snap to reciprocal/integer ratios and use nearest-neighbour sampling above 100% |
 | **Trace to Vector** | Converts a raster layer into editable paths with colour-count, smoothing, and detail controls; the source layer is hidden, not destroyed |
 | **Gradient Stops** | Linear gradients expose draggable start and end handles on the canvas; imported `.grd` presets retain their stops and can be selected for linear or radial fills |
@@ -55,11 +55,11 @@ Or download `index.html` and open it locally. Everything runs client-side. Your 
 | **WebP** | Yes (animated frames with timing) | Yes |
 | **APNG** | Yes (animated frames with timing) | — |
 | **AVIF** | Yes (verified WASM decoder) | Yes (deterministic verified WASM encoder) |
-| **SVG** | Yes (editable shapes, text, and groups — not rasterized) | Yes |
+| **SVG** | Yes (editable shapes, text, groups, and per-range text spans — not rasterized) | Yes |
 | **Vector PDF** | — | Yes (real path operators when no raster layer is visible) |
 | **PDF** | Yes (page per layer) | Yes |
 | **RAW** | Yes (LibRaw/WASM demosaic preview) | — |
-| **PSD** | Yes (pixel layers, nested groups, supported blends, opacity, visibility, basic text, and embedded ICC profile metadata) | Yes (same supported semantics; explicit raster fallbacks and `0x040F` ICC profile resource when a profile is present) |
+| **PSD** | Yes (pixel layers, nested groups, supported blends, opacity, visibility, basic single-style text, and embedded ICC profile metadata) | Yes (same supported semantics; per-range text is rasterized with a loss report, plus explicit raster fallbacks and `0x040F` ICC profile resource when a profile is present) |
 | **OpenRaster (`.ora`)** | Yes (PNG layers, offsets, opacity, visibility, supported blend modes, and named compatibility warnings for groups or unsupported constructs) | Yes (layered PNGs with `stack.xml`, merged image, thumbnail, and required stored `mimetype`) |
 | **GIF** | Yes (animated, frame-based) | Yes (animated, frame-based) |
 | **OpenShop Project (`.openshop` / legacy `.json`)** | Yes | Yes (full project with layers) |
@@ -244,7 +244,7 @@ that optional dependency is not reachable. `tests/runtime-assets.test.js` ties
 the finding to the exact URL and version and fails if a future pin makes it
 stale.
 
-OpenShop `.openshop` files are JSON-encoded document schema v2. The same envelope drives project save/open, recovery, and undo/redo so live layer hierarchy and order, masks, guides, selections, animation frames, color-profile metadata/bytes, AI segment masks, and active state stay synchronized. Schema v1 projects and legacy `.json`, Fabric 5, and OpenShop 0.18.13 projects are migrated on load through an explicit version registry; unknown future schemas are rejected before the active document is touched. Native project import/export records a structured compatibility report, and PSD import/export reports unsupported fields, color modes, metadata, and approximations. JPEG APP2, PNG `iCCP`, WebP `ICCP`, AVIF `colr`, and PSD profiles are parsed when present; matrix/TRC profiles are converted into the browser's sRGB working space or a supported Display P3 canvas, with the conversion recorded in the import/export report. PNG, JPEG, WebP, AVIF, and PSD exports embed the active working profile when their writer/container supports it, and explicitly report when embedding is unavailable.
+OpenShop `.openshop` files are JSON-encoded document schema v3. The same envelope drives project save/open, recovery, and undo/redo so live layer hierarchy and order, masks, guides, selections, animation frames, per-character text styles, color-profile metadata/bytes, AI segment masks, and active state stay synchronized. Schema v1/v2 projects and legacy `.json`, Fabric 5, and OpenShop 0.18.13 projects are migrated on load through an explicit version registry; unknown future schemas are rejected before the active document is touched. Native project import/export records a structured compatibility report, and PSD import/export reports unsupported fields, color modes, metadata, and approximations. JPEG APP2, PNG `iCCP`, WebP `ICCP`, AVIF `colr`, and PSD profiles are parsed when present; matrix/TRC profiles are converted into the browser's sRGB working space or a supported Display P3 canvas, with the conversion recorded in the import/export report. PNG, JPEG, WebP, AVIF, and PSD exports embed the active working profile when their writer/container supports it, and explicitly report when embedding is unavailable.
 
 At startup, the editor probes the active browser engine's usable canvas dimension and pixel-area ceiling, caches the result for the current browser/device profile, and applies it to New Image and every raster import path. A document above the measured ceiling is refused before allocation, with the measured per-side and total-pixel limits included in the error.
 

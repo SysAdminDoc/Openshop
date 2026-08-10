@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10" id="theme-color-meta">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-5Xys7KB9Jtdsiqs5vqpI3JpkPXQktYoeMgjrfUG5FUA=' 'sha256-5aN2x3uLEL+4zsisDkPm0P5BN1aa+gfeO2dhFoS25HI=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-5Xys7KB9Jtdsiqs5vqpI3JpkPXQktYoeMgjrfUG5FUA=' 'sha256-juIgeeN2bA52p9TA9ESOtP3QwWZTMC5BJnPwcvZi6HQ=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // OpenShop-specific Fabric configuration. The editor uses Fabric 7's native
@@ -3527,6 +3527,9 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
         <label><input type="checkbox" id="text-linethrough" data-os-change="change-040"> S</label>
         <label>Stroke</label><input type="color" id="text-decoration-color" value="#ffffff" data-os-change="change-041">
         <label>Width</label><input type="number" id="text-decoration-thickness" value="100" min="10" max="500" step="10" data-os-change="change-042">
+        <span class="opt-val text-range-status" id="text-range-status" aria-live="polite">Select characters to format</span>
+        <button type="button" class="btn" id="apply-text-range">Apply to range</button>
+        <button type="button" class="btn" id="clear-text-range">Clear range</button>
     </div>
     <div class="opt-group" id="opt-gradient" style="display:none">
         <label>Preset</label>
@@ -5577,7 +5580,7 @@ const OS = {
     // created in millimetres or inches carries whatever it was created at, and
     // the PSD and PDF exporters declare that rather than assuming 96.
     _documentResolution: 96,
-    _documentSchemaVersion: 2,
+    _documentSchemaVersion: 3,
     // Migrations are keyed by the schema they accept and must return the next
     // schema shape. Keeping the registry explicit makes a future schema bump
     // auditable instead of silently accepting an incompatible payload.
@@ -5593,7 +5596,24 @@ const OS = {
                 }))
                 : []
         }),
-        2: project => project
+        2: function(project) {
+            const fabric = project?.canvas?.fabric;
+            if (!fabric || !Array.isArray(fabric.objects)) return project;
+            return {
+                ...project,
+                canvas: {
+                    ...project.canvas,
+                    fabric: {
+                        ...fabric,
+                        objects: fabric.objects.map(object => {
+                            if (!object || !['i-text', 'text', 'textbox'].includes(object.type) || !object.styles) return object;
+                            return { ...object, styles:this._normalizeTextRangeStyles(object.styles) };
+                        })
+                    }
+                }
+            };
+        },
+        3: project => project
     }),
     _lastDocumentMigrationReport: null,
     _lastDocumentExportReport: null,
@@ -6343,9 +6363,11 @@ const OS = {
             this.saveHistory('Object Modified', { command });
             this.drawRulers();
         });
-        this.canvas.on('selection:created', () => this.updateStatus());
-        this.canvas.on('selection:cleared', () => { this.exitGradientStops(); this.updateStatus(); });
-        this.canvas.on('selection:updated', () => { this.exitGradientStops(); this._syncTextDirectionControl(); });
+        this.canvas.on('selection:created', () => { this.updateStatus(); this._syncTextRangeControls(); });
+        this.canvas.on('selection:cleared', () => { this.exitGradientStops(); this.updateStatus(); this._syncTextRangeControls(); });
+        this.canvas.on('selection:updated', () => { this.exitGradientStops(); this._syncTextDirectionControl(); this._syncTextRangeControls(); });
+        this.canvas.on('text:selection:changed', () => this._syncTextRangeControls());
+        this.canvas.on('text:changed', () => this._syncTextRangeControls());
         this.canvas.on('mouse:wheel', opt => this.onMouseWheel(opt));
         // Every zoom and pan path ends in a render, so re-place the screen-space
         // selection box here rather than chasing each caller.
@@ -6402,6 +6424,8 @@ const OS = {
         document.getElementById('convert-vector-path')?.addEventListener('click', () => { this.convertSelectedVectorToPath(); });
         document.getElementById('edit-vector-path')?.addEventListener('click', () => { this.editSelectedVectorPath(); });
         document.getElementById('apply-text-features')?.addEventListener('click', () => { this.applySelectedTextFeatures(); });
+        document.getElementById('apply-text-range')?.addEventListener('click', () => { this.applySelectedTextRange(); });
+        document.getElementById('clear-text-range')?.addEventListener('click', () => { this.applySelectedTextRange({ clear:true }); });
         document.getElementById('attach-text-path')?.addEventListener('click', () => { this.attachSelectedTextToPath(); });
         document.getElementById('edit-text-path')?.addEventListener('click', () => { this.editSelectedTextOnPath(); });
         const ca = document.getElementById('canvas-area');
@@ -7867,7 +7891,10 @@ const OS = {
         this._lastDocumentExportReport = compatibility;
         const canvasObjects = this.canvas.getObjects().filter(object => !object.excludeFromExport);
         const usedObjectIds = new Set();
-        canvasObjects.forEach(object => this._ensureObjectId(object, usedObjectIds));
+        canvasObjects.forEach(object => {
+            this._ensureObjectId(object, usedObjectIds);
+            if (this._isTextObject(object) && object.styles) object.styles = this._normalizeTextRangeStyles(object.styles);
+        });
 
         const fabricState = this.canvas.toJSON(this._fabricDocumentProperties);
         const serializedObjects = Array.isArray(fabricState.objects) ? fabricState.objects : [];
@@ -8126,7 +8153,7 @@ const OS = {
                     { code:'openshop.missing-migration', path:'schemaVersion', feature:`schema ${version}`, sourceVersion }
                 );
             }
-            state = migrate(state);
+            state = migrate.call(this, state);
             if (!state || typeof state !== 'object') {
                 throw this._makeDocumentCompatibilityError(
                     `OpenShop document migration ${version} returned invalid data`,
@@ -8156,7 +8183,7 @@ const OS = {
             report = this._documentCompatibilityReport({
                 direction:'import',
                 sourceVersion:'legacy',
-                steps:['legacy-envelope-to-schema-1', 'schema-1-to-2'],
+                steps:['legacy-envelope-to-schema-1', 'schema-1-to-2', 'schema-2-to-3'],
                 losses:[{
                     code:'openshop.legacy-envelope',
                     path:'root',
@@ -8246,6 +8273,7 @@ const OS = {
         const objectsById = new Map();
         objects.forEach(object => {
             if (this._isTextObject(object)) {
+                if (object.styles) object.styles = this._normalizeTextRangeStyles(object.styles);
                 const direction = this._normalizeTextDirection(
                     object._openShopTextDirection ?? object.direction
                 );
@@ -10713,7 +10741,9 @@ const OS = {
                 return layerObjects.length === 1 && Boolean(this._fabricTextToPSD(layerObjects[0]));
             }).length;
             const flattenedTextCount = Math.max(0, textCount - nativeTextCount);
+            const rangedTextCount = objects.filter(object => this._hasTextRangeFormatting(object)).length;
             if (nativeTextCount) warnings.push(`${nativeTextCount} single-style text layer${nativeTextCount === 1 ? '' : 's'} will remain editable in PSD.`);
+            if (rangedTextCount) warnings.push(`${rangedTextCount} text object${rangedTextCount === 1 ? '' : 's'} with per-range formatting will be rasterized in PSD because PSD text layers support one style.`);
             if (flattenedTextCount) warnings.push(`${flattenedTextCount} text object${flattenedTextCount === 1 ? '' : 's'} will be rasterized because its layer contains mixed content.`);
             if (vectorCount) warnings.push(`${vectorCount} vector object${vectorCount === 1 ? '' : 's'} will be rasterized by the current PSD exporter.`);
             if (maskCount) warnings.push(`${maskCount} OpenShop mask${maskCount === 1 ? '' : 's'} will be baked into layer pixels.`);
@@ -14619,7 +14649,7 @@ self.onmessage = function(event) {
             sponge: schema('opt-sponge', true, ['sponge-size', 'sponge-flow', 'sponge-mode']),
             smudge: schema('opt-smudge', true, ['smudge-size', 'smudge-str']),
             pen: schema('opt-pen', true, ['pen-stroke', 'pen-width', 'pen-filled']),
-            type: schema('opt-text', true, ['text-font', 'text-size', 'text-color', 'text-direction', 'text-bold', 'text-italic']),
+            type: schema('opt-text', true, ['text-font', 'text-size', 'text-color', 'text-direction', 'text-bold', 'text-italic', 'apply-text-range', 'clear-text-range']),
             shape: schema('opt-shape', true, ['shape-fill', 'shape-stroke', 'shape-stroke-w', 'shape-filled', 'shape-dash']),
             polygon: schema('opt-polygon', true, ['poly-sides', 'poly-fill', 'poly-stroke', 'poly-filled']),
             star: schema('opt-star', true, ['star-points', 'star-inner', 'star-fill', 'star-filled']),
@@ -14853,6 +14883,7 @@ self.onmessage = function(event) {
         const toolNames = {'marquee-rect':'Rect Marquee','marquee-ellipse':'Ellipse Marquee','magic-wand':'Magic Wand','quick-selection':'Quick Selection','ai-segment':'AI Segment','spot-healing':'Spot Healing','perspective-crop':'Perspective Crop'};
         document.getElementById('tool-display').textContent = toolNames[tool] || tool.charAt(0).toUpperCase()+tool.replace(/-/g,' ').slice(1);
         this._syncTextDirectionControl();
+        this._syncTextRangeControls();
         this._syncSessionWorkspace();
         this._renderAccessibilityTree();
         return true;
@@ -19510,6 +19541,7 @@ self.onmessage = function(event) {
     _fabricTextToPSD(object) {
         const type = String(object?.type || '').toLowerCase();
         if (!object || !['i-text','itext','text','textbox'].includes(type) || typeof object.text !== 'string') return null;
+        if (this._hasTextRangeFormatting(object)) return null;
         const angle = Number(object.angle || 0) * Math.PI / 180;
         const scaleX = Number(object.scaleX || 1);
         const scaleY = Number(object.scaleY || 1);
@@ -19720,8 +19752,11 @@ self.onmessage = function(event) {
                 node.text = nativeText;
             } else {
                 const textCount = objects.filter(object => ['i-text','itext','text','textbox'].includes(String(object.type || '').toLowerCase())).length;
+                const rangedTextCount = objects.filter(object => this._hasTextRangeFormatting(object)).length;
                 const vectorCount = objects.filter(object => !['image'].includes(String(object.type || '').toLowerCase())).length - textCount;
-                if (textCount) report.warnings.push(`"${node.name}": ${textCount} text object${textCount === 1 ? '' : 's'} were flattened because the layer is not one basic editable text object.`);
+                if (rangedTextCount) report.warnings.push(`"${node.name}": ${rangedTextCount} text object${rangedTextCount === 1 ? '' : 's'} with per-range formatting were rasterized because PSD text layers support one style.`);
+                const basicTextCount = Math.max(0, textCount - rangedTextCount);
+                if (basicTextCount) report.warnings.push(`"${node.name}": ${basicTextCount} text object${basicTextCount === 1 ? '' : 's'} were flattened because the layer is not one basic editable text object.`);
                 if (vectorCount > 0) report.warnings.push(`"${node.name}": ${vectorCount} vector object${vectorCount === 1 ? '' : 's'} were rasterized.`);
             }
             if (objects.some(object => object._hasMask || object.clipPath)) {
@@ -23603,6 +23638,175 @@ self.onmessage = async function(event) {
             return active.getObjects().filter(object => this._isTextObject(object));
         }
         return this._isTextObject(active) ? [active] : [];
+    },
+    _normalizeTextRangeStyles(value) {
+        const source = value && typeof value === 'object' ? value : {};
+        const keys = [
+            'fontFamily', 'fontSize', 'fill', 'stroke', 'strokeWidth', 'fontWeight', 'fontStyle',
+            'underline', 'overline', 'linethrough', 'textDecorationColor', 'textDecorationThickness',
+            'backgroundColor', 'textBackgroundColor', 'deltaY', 'charSpacing'
+        ];
+        const normalizeStyle = style => {
+            if (!style || typeof style !== 'object' || Array.isArray(style)) return null;
+            const safeStyle = {};
+            keys.forEach(key => {
+                if (!Object.prototype.hasOwnProperty.call(style, key)) return;
+                const candidate = style[key];
+                if (typeof candidate === 'boolean') safeStyle[key] = candidate;
+                else if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+                    safeStyle[key] = Math.max(-10000, Math.min(10000, candidate));
+                } else if (typeof candidate === 'string' && candidate.length) {
+                    safeStyle[key] = candidate.slice(0, 120);
+                }
+            });
+            return Object.keys(safeStyle).length ? safeStyle : null;
+        };
+        if (Array.isArray(value)) {
+            return value.slice(0, 10000).map(range => {
+                if (!range || typeof range !== 'object') return null;
+                const start = Math.max(0, Math.min(100000, Math.round(Number(range.start) || 0)));
+                const end = Math.max(start, Math.min(100000, Math.round(Number(range.end) || 0)));
+                const style = normalizeStyle(range.style);
+                return end > start && style ? { start, end, style } : null;
+            }).filter(Boolean);
+        }
+        const normalized = {};
+        Object.keys(source).slice(0, 10000).forEach(lineKey => {
+            if (!/^\d+$/.test(lineKey)) return;
+            const line = source[lineKey];
+            if (!line || typeof line !== 'object' || Array.isArray(line)) return;
+            const lineStyles = {};
+            Object.keys(line).slice(0, 10000).forEach(charKey => {
+                if (!/^\d+$/.test(charKey)) return;
+                const style = normalizeStyle(line[charKey]);
+                if (style) lineStyles[String(Number(charKey))] = style;
+            });
+            if (Object.keys(lineStyles).length) normalized[String(Number(lineKey))] = lineStyles;
+        });
+        return normalized;
+    },
+    _textSelectionRange(object = this.canvas?.getActiveObject()) {
+        if (!this._isTextObject(object)) return null;
+        const text = String(object.text ?? '');
+        const length = text.length;
+        const clamp = value => Math.max(0, Math.min(length, Math.round(Number(value) || 0)));
+        const start = clamp(object.selectionStart);
+        const end = clamp(object.selectionEnd);
+        return end > start ? { start, end, length } : null;
+    },
+    _textRangeStyleFromControls(object = this.canvas?.getActiveObject()) {
+        const control = id => document.getElementById(id);
+        const value = (id, fallback) => control(id)?.value ?? fallback;
+        const checked = (id, fallback) => control(id)?.checked ?? Boolean(fallback);
+        const number = (candidate, fallback, min, max) => {
+            const parsed = Number(candidate);
+            return Number.isFinite(parsed) ? Math.max(min, Math.min(max, parsed)) : fallback;
+        };
+        const color = (candidate, fallback) => this._validHexColor(candidate) || fallback;
+        const fallbackFill = color(object?.fill, this._validHexColor(this.state.textColor) || '#ffffff');
+        const fallbackDecorationColor = color(object?.textDecorationColor, this._validHexColor(this.state.textDecorationColor) || '#ffffff');
+        return {
+            fontFamily:this._safeText(value('text-font', object?.fontFamily || this.state.textFont || 'Arial'), 120) || 'Arial',
+            fontSize:number(value('text-size', object?.fontSize || this.state.textSize || 24), 24, 1, 2000),
+            fill:color(value('text-color', fallbackFill), fallbackFill),
+            fontWeight:checked('text-bold', this.state.textBold) ? 'bold' : 'normal',
+            fontStyle:checked('text-italic', this.state.textItalic) ? 'italic' : 'normal',
+            underline:checked('text-underline', this.state.textUnderline),
+            overline:checked('text-overline', this.state.textOverline),
+            linethrough:checked('text-linethrough', this.state.textLinethrough),
+            textDecorationColor:color(value('text-decoration-color', fallbackDecorationColor), fallbackDecorationColor),
+            textDecorationThickness:number(value('text-decoration-thickness', object?.textDecorationThickness || this.state.textDecorationThickness || 100), 100, 10, 500)
+        };
+    },
+    _textRangeStyleLocation(object, index) {
+        if (typeof object?.get2DCursorLocation === 'function') {
+            try {
+                const location = object.get2DCursorLocation(index);
+                if (Number.isFinite(location?.lineIndex) && Number.isFinite(location?.charIndex)) {
+                    return { lineIndex:Number(location.lineIndex), charIndex:Number(location.charIndex) };
+                }
+            } catch (_) { /* the line/character fallback below is deterministic */ }
+        }
+        const lines = String(object?.text ?? '').slice(0, index).split('\n');
+        return { lineIndex:Math.max(0, lines.length - 1), charIndex:lines.at(-1)?.length || 0 };
+    },
+    _setTextRangeStylesFallback(object, style, start, end) {
+        const styles = this._normalizeTextRangeStyles(object.styles);
+        const text = String(object.text ?? '');
+        for (let index = start; index < end; index += 1) {
+            if (text[index] === '\n') continue;
+            const { lineIndex, charIndex } = this._textRangeStyleLocation(object, index);
+            const line = styles[String(lineIndex)] || (styles[String(lineIndex)] = {});
+            line[String(charIndex)] = { ...(line[String(charIndex)] || {}), ...style };
+        }
+        object.styles = this._normalizeTextRangeStyles(styles);
+    },
+    _clearTextRangeStyles(object, start, end) {
+        const styles = this._normalizeTextRangeStyles(object.styles);
+        const text = String(object.text ?? '');
+        for (let index = start; index < end; index += 1) {
+            if (text[index] === '\n') continue;
+            const { lineIndex, charIndex } = this._textRangeStyleLocation(object, index);
+            const line = styles[String(lineIndex)];
+            if (!line) continue;
+            delete line[String(charIndex)];
+            if (!Object.keys(line).length) delete styles[String(lineIndex)];
+        }
+        object.styles = this._normalizeTextRangeStyles(styles);
+    },
+    _hasTextRangeFormatting(object) {
+        if (!this._isTextObject(object)) return false;
+        const styles = this._normalizeTextRangeStyles(object.styles);
+        if (Array.isArray(styles)) return styles.length > 0;
+        return Object.values(styles).some(line => Object.keys(line).length > 0);
+    },
+    applySelectedTextRange({ clear = false } = {}) {
+        const active = this.canvas?.getActiveObject?.();
+        if (!this._isTextObject(active)) {
+            this.toast('Select a text object first', 'info');
+            return false;
+        }
+        const range = this._textSelectionRange(active);
+        if (!range) {
+            this.toast('Select text characters first', 'info');
+            return false;
+        }
+        if (!this._guardObjectEdit(active)) return false;
+        if (clear) {
+            this._clearTextRangeStyles(active, range.start, range.end);
+        } else {
+            const style = this._textRangeStyleFromControls(active);
+            if (typeof active.setSelectionStyles === 'function') {
+                active.setSelectionStyles(style, range.start, range.end);
+                active.styles = this._normalizeTextRangeStyles(active.styles);
+            } else {
+                this._setTextRangeStylesFallback(active, style, range.start, range.end);
+            }
+        }
+        active.initDimensions?.();
+        active.setCoords?.();
+        this.canvas?.requestRenderAll?.();
+        this.canvas?.renderAll?.();
+        this.saveHistory(clear ? 'Clear Text Range' : 'Format Text Range');
+        this.updateLayersPanel?.();
+        this._syncTextRangeControls();
+        this.toast(clear ? 'Text range formatting cleared' : 'Text range formatted', 'success');
+        return true;
+    },
+    _syncTextRangeControls() {
+        const status = document.getElementById('text-range-status');
+        const apply = document.getElementById('apply-text-range');
+        const clear = document.getElementById('clear-text-range');
+        if (!status && !apply && !clear) return;
+        const active = this.canvas?.getActiveObject?.();
+        const range = this._textSelectionRange(active);
+        if (status) status.textContent = !this._isTextObject(active)
+            ? 'Select a text object'
+            : range ? `Characters ${range.start + 1}–${range.end} of ${range.length}` : 'Select characters to format';
+        [apply, clear].filter(Boolean).forEach(button => {
+            button.disabled = !range;
+            button.setAttribute('aria-disabled', String(!range));
+        });
     },
     _applyTextDirection(direction, targets = this._activeTextObjects()) {
         const normalized = this._normalizeTextDirection(direction);

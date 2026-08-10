@@ -49,10 +49,10 @@ describe('redistributable compatibility corpus', () => {
     const v1 = readJSON('openshop-schema-v1.json');
     const migrated = OS._normalizeDocumentState(v1);
     expect(OS._lastDocumentMigrationReport).toMatchObject({
-      format:'openshop', direction:'import', sourceVersion:1, targetVersion:2,
-      steps:['schema-1-to-2'], accepted:true
+      format:'openshop', direction:'import', sourceVersion:1, targetVersion:3,
+      steps:['schema-1-to-2', 'schema-2-to-3'], accepted:true
     });
-    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.schemaVersion).toBe(3);
     expect(migrated.canvas).toMatchObject({ width:64, height:48 });
     expect(migrated.layers.map(layer => layer.name)).toEqual(['Background', 'Artwork group', 'Detail']);
     expect(migrated.layers.filter(layer => layer.kind === 'group').map(layer => layer.name)).toEqual(['Artwork group']);
@@ -77,7 +77,7 @@ describe('redistributable compatibility corpus', () => {
     });
 
     const reopened = OS._normalizeDocumentState(JSON.parse(JSON.stringify(normalized)));
-    expect(reopened.schemaVersion).toBe(2);
+    expect(reopened.schemaVersion).toBe(3);
     expect(reopened.layers.map(layer => layer.name)).toEqual(normalized.layers.map(layer => layer.name));
     expect(reopened.animation.delays).toEqual([40, 120, 240]);
     expect(reopened.canvas.fabric.objects.find(object => object._openShopObjectId === 'object-photo')._openShopLayerMask.mask.data)

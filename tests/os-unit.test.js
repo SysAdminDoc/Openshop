@@ -2246,7 +2246,7 @@ describe('OpenShop core object', () => {
 
     const state = OS._captureDocumentState();
     expect(state.kind).toBe('openshop-document');
-    expect(state.schemaVersion).toBe(2);
+    expect(state.schemaVersion).toBe(3);
     expect(state.canvas.width).toBe(800);
     expect(state.canvas.height).toBe(600);
     expect(state.layers).toHaveLength(1);
@@ -2359,6 +2359,87 @@ describe('OpenShop core object', () => {
     expect(OS._normalizeTextOnPath({
       text:'Hello', pathObjectId:'path-1', features, style:{ fontSize:48, opacity:2 }
     })).toMatchObject({ version:1, text:'Hello', pathObjectId:'path-1', features, style:{ fontSize:48, opacity:1 } });
+  });
+
+  it('formats and clears a selected text range with sanitized character styles', () => {
+    const OS = loadOpenShop();
+    const controls = [
+      ['text-font', 'select', 'Georgia'],
+      ['text-size', 'number', '48'],
+      ['text-color', 'color', '#ff3355'],
+      ['text-decoration-color', 'color', '#22cc88'],
+      ['text-decoration-thickness', 'number', '180']
+    ];
+    controls.forEach(([id, type, value]) => {
+      const control = document.createElement(type === 'select' ? 'select' : 'input');
+      control.id = id;
+      if (type !== 'select') control.type = type;
+      if (type === 'select') control.appendChild(new Option(value, value));
+      control.value = value;
+      document.body.appendChild(control);
+    });
+    [['text-bold', true], ['text-italic', true], ['text-underline', true], ['text-overline', false], ['text-linethrough', false]].forEach(([id, checked]) => {
+      const control = document.createElement('input');
+      control.id = id; control.type = 'checkbox'; control.checked = checked;
+      document.body.appendChild(control);
+    });
+    const status = document.createElement('span'); status.id = 'text-range-status'; document.body.appendChild(status);
+    const apply = document.createElement('button'); apply.id = 'apply-text-range'; document.body.appendChild(apply);
+    const clear = document.createElement('button'); clear.id = 'clear-text-range'; document.body.appendChild(clear);
+    const text = {
+      type:'i-text', text:'Hello world', fill:'#ffffff', fontFamily:'DM Sans', fontSize:24,
+      selectionStart:1, selectionEnd:5, styles:{}, set:vi.fn(function(value, next) {
+        if (typeof value === 'string') this[value] = next;
+        else Object.assign(this, value);
+        return this;
+      }), initDimensions:vi.fn(), setCoords:vi.fn()
+    };
+    OS.canvas = createCanvasMock([text]);
+    OS.canvas.setActiveObject(text);
+    OS.layers = [{ id:'layer-1', kind:'pixel', visible:true, locked:false, objects:[text] }];
+    OS.activeLayerIdx = 0;
+    OS._layerOwnership = null;
+    OS.saveHistory = vi.fn();
+    OS.updateLayersPanel = vi.fn();
+    OS.toast = vi.fn();
+
+    expect(OS.applySelectedTextRange()).toBe(true);
+    expect(text.styles['0']['1']).toMatchObject({
+      fontFamily:'Georgia', fontSize:48, fill:'#ff3355', fontWeight:'bold', fontStyle:'italic',
+      underline:true, textDecorationColor:'#22cc88', textDecorationThickness:180
+    });
+    expect(text.styles['0']['0']).toBeUndefined();
+    expect(OS.saveHistory).toHaveBeenCalledWith('Format Text Range');
+    OS._syncTextRangeControls();
+    expect(status.textContent).toBe('Characters 2–5 of 11');
+    expect(apply.disabled).toBe(false);
+
+    expect(OS.applySelectedTextRange({ clear:true })).toBe(true);
+    expect(text.styles).toEqual({});
+    expect(OS.saveHistory).toHaveBeenCalledWith('Clear Text Range');
+    expect(clear.disabled).toBe(false);
+  });
+
+  it('migrates schema-2 text styles into the versioned range-style shape', () => {
+    const OS = loadOpenShop();
+    const project = {
+      kind:'openshop-document', schemaVersion:2,
+      canvas:{ width:100, height:80, fabric:{ objects:[{
+        type:'i-text', text:'Hello', styles:{ '0':{ '0':{ fill:'#ff3355', fontSize:42, evil:'drop' } }, '__proto__':{ polluted:true } }
+      }] } },
+      layers:[{ id:'layer-1', name:'Text', kind:'pixel', visible:true, locked:false, opacity:100, blend:'source-over', objectIds:[] }]
+    };
+    const migrated = OS._migrateDocumentSchema(project);
+    expect(migrated.state.schemaVersion).toBe(3);
+    expect(migrated.report.steps).toEqual(['schema-2-to-3']);
+    expect(migrated.state.canvas.fabric.objects[0].styles).toEqual({
+      '0':{ '0':{ fill:'#ff3355', fontSize:42 } }
+    });
+    expect(OS._normalizeTextRangeStyles([
+      { start:0, end:3, style:{ fill:'#22cc88', fontWeight:'bold', unsafe:'drop' } }
+    ])).toEqual([
+      { start:0, end:3, style:{ fill:'#22cc88', fontWeight:'bold' } }
+    ]);
   });
 
   it('registers one installed-app launch consumer and routes supported files', async () => {
