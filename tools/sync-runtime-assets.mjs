@@ -9,10 +9,13 @@ import {
   OPENSHOP_REQUIRED_BOOT_KEYS,
   OPENSHOP_RUNTIME_ASSETS,
   OPENSHOP_RUNTIME_ORIGINS,
-  assetsForKeys
+  assetsForKeys,
+  validateRuntimeProvenance
 } from './runtime-assets.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+validateRuntimeProvenance();
 
 function quote(value) {
   return JSON.stringify(value);

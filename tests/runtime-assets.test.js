@@ -12,6 +12,7 @@ import {
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const html = readFileSync(join(root, 'index.html'), 'utf8');
+const readme = readFileSync(join(root, 'README.md'), 'utf8');
 const serviceWorker = readFileSync(join(root, 'sw.js'), 'utf8');
 
 describe('canonical runtime asset manifest', () => {
@@ -49,6 +50,36 @@ describe('canonical runtime asset manifest', () => {
     const report = licenseReport();
     expect(report).toHaveLength(26);
     expect(report.every(asset => asset.packageName && asset.version && asset.url && asset.license)).toBe(true);
+    expect(report.every(asset => !/not declared|unknown/i.test(asset.license))).toBe(true);
+    expect(report.filter(asset => asset.packageName === 'modern-gif').every(asset => asset.license === 'MIT')).toBe(true);
+    expect(report.filter(asset => asset.packageName === 'libraw-wasm').every(asset => asset.license === 'ISC')).toBe(true);
+  });
+
+  test('fails closed for unresolved and non-SPDX license values', () => {
+    const asset = OPENSHOP_RUNTIME_ASSETS.find(value => value.key === 'gifCodec');
+    expect(() => validateRuntimeProvenance([{ ...asset, license: null }])).toThrow(/no SPDX license identifier/);
+    expect(() => validateRuntimeProvenance([{ ...asset, license: 'not declared in manifest' }]))
+      .toThrow(/not a valid SPDX identifier/);
+  });
+
+  test('keeps the README runtime inventory synchronized with the canonical manifest', () => {
+    const inventory = new Map();
+    for (const asset of licenseReport()) {
+      const prior = inventory.get(asset.packageName);
+      if (prior) {
+        expect(asset.version).toBe(prior.version);
+        expect(asset.license).toBe(prior.license);
+      } else {
+        inventory.set(asset.packageName, asset);
+      }
+    }
+    const rows = readme.split(/\r?\n/).filter(line => line.startsWith('|'));
+    for (const [packageName, asset] of inventory) {
+      const row = rows.find(line => line.includes(`\`${packageName}\``));
+      expect(row, `README is missing ${packageName}`).toBeDefined();
+      expect(row).toContain(asset.version);
+      expect(row).toContain(`(${asset.license})`);
+    }
   });
 
   test('keeps embedded dependency findings tied to the exact pinned bundle', () => {

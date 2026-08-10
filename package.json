@@ -30,6 +30,7 @@
     "axe-core": "^4.13.0",
     "css-tree": "^3.2.1",
     "jsdom": "^30.0.1",
+    "spdx-license-ids": "^3.0.23",
     "vitest": "^4.0.15",
     "vitest-canvas-mock": "^0.3.3"
   }

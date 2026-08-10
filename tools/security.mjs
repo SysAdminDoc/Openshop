@@ -10,7 +10,8 @@ import {
   OPENSHOP_REQUIRED_BOOT_KEYS,
   OPENSHOP_RUNTIME_ASSETS,
   OPENSHOP_RUNTIME_ORIGINS,
-  assetsForKeys
+  assetsForKeys,
+  validateRuntimeProvenance
 } from './runtime-assets.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -175,6 +176,11 @@ export function checkServiceWorker(source) {
 
 export function check(html) {
   const failures = [];
+  try {
+    validateRuntimeProvenance();
+  } catch (error) {
+    failures.push(error.message);
+  }
   const policy = contentSecurityPolicy(html).value;
   const directives = policyDirectives(policy);
   const directiveNames = directives.map(directive => directive.name);

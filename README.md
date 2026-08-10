@@ -220,18 +220,24 @@ Preferences.
 
 | Library | Purpose |
 |---------|---------|
-| [Fabric.js 7.4.0](https://fabricjs.com/) | Canvas rendering, object manipulation, serialization |
-| [Fabric.js 7.4.0 extensions](https://github.com/fabricjs/fabric.js/tree/master/extensions) | On-canvas linear gradient stop handles (loaded on demand) |
-| [imagetracerjs 1.2.6](https://github.com/jankovicsandras/imagetracerjs) (Unlicense) | Raster-to-vector tracing (loaded on demand) |
-| [svg2pdf.js 2.7.0](https://github.com/yWorks/svg2pdf.js) (MIT) | Vector PDF pages for all-vector documents (loaded on demand) |
-| [ag-psd 31.0.2](https://github.com/Agamnentzar/ag-psd) | Photoshop PSD file import and export |
-| [jsPDF 4.2.1](https://github.com/parallax/jsPDF) | PDF document generation |
-| [Transformers.js 4.2](https://huggingface.co/docs/transformers.js) | Client-side AI inference via WebGPU/WASM (loaded on demand) |
-| [Photon 0.3.3](https://github.com/silvia-odwyer/photon) | Optional WASM acceleration for supported pixel filters (loaded on demand) |
-| [jSquash AVIF 2.1.1](https://github.com/jamsinclair/jSquash) (Apache-2.0) | Deterministic AVIF encode/decode via libavif WASM (loaded on demand) |
+| [Fabric.js](https://fabricjs.com/) — `fabric` 7.4.0 (MIT) | Canvas rendering, object manipulation, serialization |
+| [Fabric.js extensions](https://github.com/fabricjs/fabric.js/tree/master/extensions) — `fabric` 7.4.0 (MIT) | On-canvas linear gradient stop handles (loaded on demand) |
+| [ImageTracer](https://github.com/jankovicsandras/imagetracerjs) — `imagetracerjs` 1.2.6 (Unlicense) | Raster-to-vector tracing (loaded on demand) |
+| [svg2pdf.js](https://github.com/yWorks/svg2pdf.js) — `svg2pdf.js` 2.7.0 (MIT) | Vector PDF pages for all-vector documents (loaded on demand) |
+| [ag-psd](https://github.com/Agamnentzar/ag-psd) — `ag-psd` 31.0.2 (MIT) | Photoshop PSD file import and export |
+| [jsPDF](https://github.com/parallax/jsPDF) — `jspdf` 4.2.1 (MIT) | PDF document generation |
+| [modern-gif](https://github.com/qq15725/modern-gif) — `modern-gif` 2.1.0 (MIT) | Animated GIF import and export (loaded on demand) |
+| [PDF.js](https://github.com/mozilla/pdf.js) — `pdfjs-dist` 6.2.108 (Apache-2.0) | PDF import and vector page generation (loaded on demand) |
+| [LibRaw-Wasm](https://github.com/ybouane/LibRaw-Wasm) — `libraw-wasm` 1.6.0 (ISC) | RAW camera image decoding (loaded on demand) |
+| [Transformers.js](https://huggingface.co/docs/transformers.js) — `@huggingface/transformers` 4.2.0 (Apache-2.0) | Client-side AI inference via WebGPU/WASM (loaded on demand) |
+| [Photon](https://github.com/silvia-odwyer/photon) — `@silvia-odwyer/photon` 0.3.3 (Apache-2.0) | Optional WASM acceleration for supported pixel filters (loaded on demand) |
+| [jSquash AVIF](https://github.com/jamsinclair/jSquash) — `@jsquash/avif` 2.1.1 (Apache-2.0) | Deterministic AVIF encode/decode via libavif WASM (loaded on demand) |
+| [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) — `onnxruntime-web` 1.26.0-dev.20260416-b7804b056c (MIT) | WebAssembly inference runtime for AI features (loaded on demand) |
 | System font stacks | UI and monospace text without a third-party font request |
 
-The canonical runtime manifest also records embedded-dependency provenance per
+Package names, exact versions, and SPDX identifiers in this table are checked
+against the canonical runtime manifest by `tests/runtime-assets.test.js`. The
+manifest also records embedded-dependency provenance per
 asset. The pinned jsPDF 4.2.1 UMD contains optional DOMPurify loader hooks but
 does not bundle DOMPurify, and OpenShop never calls jsPDF's `.html()` path, so
 that optional dependency is not reachable. `tests/runtime-assets.test.js` ties

@@ -1,3 +1,5 @@
+import spdxLicenseIds from 'spdx-license-ids/index.json' with { type: 'json' };
+
 const freezeRecords = records => Object.freeze(records.map(record => Object.freeze({ ...record })));
 const makeProvenance = ({ verifiedFor, verifiedUrl, embeddedDependencies = [], dependencyFindings = [] }) => Object.freeze({
   verifiedFor,
@@ -101,7 +103,8 @@ export const OPENSHOP_RUNTIME_ASSETS = Object.freeze([
     '2.1.0',
     'https://cdn.jsdelivr.net/npm/modern-gif@2.1.0/dist/index.js',
     'sha384-yCVLlNDdLotEs4WM1HtMcWyV942aZDf0ylFBfb3DWJ2kPNBIpDA5SJa3CJgMUzUv',
-    'application/javascript'
+    'application/javascript',
+    'MIT'
   ),
   asset(
     'gifWorker',
@@ -110,7 +113,8 @@ export const OPENSHOP_RUNTIME_ASSETS = Object.freeze([
     '2.1.0',
     'https://cdn.jsdelivr.net/npm/modern-gif@2.1.0/dist/worker.js',
     'sha384-/AE2XoJ6rgtq/wlcIHqFn5/zSGrXTfrwuH5NQ2BjgflUjtjIJAz9/C0JSldf8Hr+',
-    'application/javascript'
+    'application/javascript',
+    'MIT'
   ),
   asset(
     'pdfModule',
@@ -139,7 +143,8 @@ export const OPENSHOP_RUNTIME_ASSETS = Object.freeze([
     '1.6.0',
     'https://cdn.jsdelivr.net/npm/libraw-wasm@1.6.0/dist/index.js',
     'sha384-IPc84Xt0caNODxmuJ0QRTalkSnpgUi4vcKJKA0qQZ3XTYl1q30DZgEtq2iHXFZcL',
-    'text/javascript'
+    'text/javascript',
+    'ISC'
   ),
   asset(
     'rawWorker',
@@ -148,7 +153,8 @@ export const OPENSHOP_RUNTIME_ASSETS = Object.freeze([
     '1.6.0',
     'https://cdn.jsdelivr.net/npm/libraw-wasm@1.6.0/dist/worker.js',
     'sha384-7JQfQ2BWV1nukA5F91bEBWv2NWw8SEqG8F6i3GTZyi++2KR2V7FhpXt+dviu21xy',
-    'text/javascript'
+    'text/javascript',
+    'ISC'
   ),
   asset(
     'rawLib',
@@ -157,7 +163,8 @@ export const OPENSHOP_RUNTIME_ASSETS = Object.freeze([
     '1.6.0',
     'https://cdn.jsdelivr.net/npm/libraw-wasm@1.6.0/dist/libraw.js',
     'sha384-T8EoHnvoSgGVvZD4H9LA9IZqIWyac+pSzS22Q768TIC7l1e6Y4ZDL4RrSZzPi21D',
-    'text/javascript'
+    'text/javascript',
+    'ISC'
   ),
   asset(
     'rawWasm',
@@ -166,7 +173,8 @@ export const OPENSHOP_RUNTIME_ASSETS = Object.freeze([
     '1.6.0',
     'https://cdn.jsdelivr.net/npm/libraw-wasm@1.6.0/dist/libraw.wasm',
     'sha384-Bb2q2WPqAGNUd9bIiwHDZ8jTKdC5ESZvSkG+3fQLEvGHXV8pYBxY3okzxmDnaWW4',
-    'application/wasm'
+    'application/wasm',
+    'ISC'
   ),
   asset(
     'avifEncoderModule',
@@ -318,6 +326,7 @@ export const OPENSHOP_CACHEABLE_RUNTIME_ASSETS = Object.freeze([
   ...OPENSHOP_BOOT_ASSETS,
   ...OPENSHOP_RUNTIME_ASSETS
 ]);
+const SPDX_LICENSE_IDS = new Set(spdxLicenseIds);
 
 export function assetsForKeys(keys) {
   return keys.map(key => {
@@ -335,14 +344,32 @@ export function licenseReport() {
     packageName:value.packageName,
     version:value.version,
     url:value.url,
-    license:value.license || 'not declared in manifest; verify package metadata',
+    license:value.license,
     provenance:value.provenance || makeProvenance({ verifiedFor:value.version, verifiedUrl:value.url })
   }));
 }
 
-export function validateRuntimeProvenance() {
+export function validateRuntimeProvenance(assets = OPENSHOP_CACHEABLE_RUNTIME_ASSETS) {
   const failures = [];
-  OPENSHOP_CACHEABLE_RUNTIME_ASSETS.forEach(value => {
+  assets.forEach(value => {
+    if (!value.key || !value.name || !value.packageName) {
+      failures.push(`${value.key || 'unknown asset'} is missing a canonical identity`);
+    }
+    if (!value.version || /[\s^~*<>=|]/.test(value.version)) {
+      failures.push(`${value.key || 'unknown asset'} does not record an exact version`);
+    }
+    const expectedUrl = `https://cdn.jsdelivr.net/npm/${value.packageName}@${value.version}`;
+    if (!value.url || (value.url !== expectedUrl && !value.url.startsWith(`${expectedUrl}/`))) {
+      failures.push(`${value.key || 'unknown asset'} source URL is not pinned to its exact package/version`);
+    }
+    if (!/^sha384-[A-Za-z0-9+/=]+$/.test(value.integrity || '')) {
+      failures.push(`${value.key || 'unknown asset'} is missing a SHA-384 integrity hash`);
+    }
+    if (!value.license) {
+      failures.push(`${value.key || 'unknown asset'} has no SPDX license identifier`);
+    } else if (!SPDX_LICENSE_IDS.has(value.license)) {
+      failures.push(`${value.key || 'unknown asset'} license is not a valid SPDX identifier: ${value.license}`);
+    }
     if (!value.provenance) return;
     if (value.provenance.verifiedFor !== value.version) {
       failures.push(`${value.key} provenance is verified for ${value.provenance.verifiedFor}, not ${value.version}`);
