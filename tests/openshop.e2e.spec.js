@@ -474,6 +474,30 @@ test('navigates Layers and History listboxes without a pointer @cross-browser', 
   await expect(history.locator('[aria-selected="true"]')).toHaveCount(1);
 });
 
+test('navigates colour grids and applies foreground or background swatches by keyboard @cross-browser', async ({ page }) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).click();
+  await page.getByRole('tab', { name: 'Swatches', exact: true }).click();
+
+  const palette = page.locator('#palette-default');
+  const cells = palette.locator('[role="gridcell"]');
+  await expect(palette).toHaveAttribute('role', 'grid');
+  await expect(cells).toHaveCount(24);
+  expect(await cells.first().evaluate(cell => {
+    const rect = cell.getBoundingClientRect();
+    return { width:rect.width, height:rect.height };
+  })).toEqual({ width:24, height:24 });
+
+  await cells.first().focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(cells.nth(1)).toBeFocused();
+  await page.keyboard.press('Enter');
+  expect(await page.evaluate(() => OS.state.fgColor)).toBe('#000000');
+  await page.keyboard.press('Shift+F10');
+  expect(await page.evaluate(() => OS.state.bgColor)).toBe('#000000');
+  await expect(cells.nth(1)).toHaveAttribute('aria-selected', 'true');
+});
+
 test('requires collaboration consent and exposes peer identity status', async ({ page }) => {
   await openApp(page);
   const result = await page.evaluate(() => {

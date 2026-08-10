@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-EsBThOv+E45WeHUF8tVe61KOQwdd5ODk3Ww7uycKWj8=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-FEMecnQjR4SDOHmS6hCbdDWcKmbOHryeEol4U1PIFB0=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -574,8 +574,10 @@ html.os-native-popovers #context-menu[popover]{position-area:block-end span-inli
 
 /* Color */
 
-.color-swatches{display:flex;gap:3px;flex-wrap:wrap}
-.color-swatch{width:19px;height:19px;border-radius:4px;cursor:pointer;border:1px solid rgba(255,255,255,.08);transition:var(--transition-chrome)}
+/* 24px cells meet the WCAG 2.2 pointer-target minimum; the 4px gap keeps
+   adjacent colours visually and physically distinct without enlarging them. */
+.color-swatches{display:flex;gap:4px;flex-wrap:wrap}
+.color-swatch{width:24px;height:24px;border-radius:4px;cursor:pointer;border:1px solid rgba(255,255,255,.08);transition:var(--transition-chrome)}
 /* Its twin .palette-swatch:hover already carried z-index:2; without it the
    scaled swatch tucks under the swatches after it. */
 .color-swatch:hover{transform:scale(1.2);position:relative;z-index:2;box-shadow:0 2px 8px rgba(0,0,0,.3);border-color:rgba(255,255,255,.2)}
@@ -968,8 +970,8 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 .shortcut-grid dd{font-size:11px;color:var(--text-secondary);padding:2px 0}
 
 /* === PALETTE PANEL === */
-.palette-row{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:8px}
-.palette-swatch{width:19px;height:19px;border-radius:4px;border:1px solid rgba(255,255,255,.08);cursor:pointer;transition:var(--transition-chrome)}
+.palette-row{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
+.palette-swatch{width:24px;height:24px;border-radius:4px;border:1px solid rgba(255,255,255,.08);cursor:pointer;transition:var(--transition-chrome)}
 .palette-swatch:hover{transform:scale(1.2);position:relative;z-index:2;box-shadow:0 2px 8px rgba(0,0,0,.3)}
 .palette-name{font-size:10px;color:var(--text-muted);margin-bottom:4px;font-weight:500}
 .palette-actions{display:flex;gap:4px;margin-top:6px}
@@ -3797,15 +3799,15 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
                         <div id="fg-oklch" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-muted);margin-top:1px"></div>
                     </div>
                 </div>
-                <div class="color-swatches" id="color-swatches"></div>
+                <div class="color-swatches" id="color-swatches" role="grid" aria-label="Foreground color swatches"></div>
             </div>
         </div>
         <div class="panel-tab-content" id="ptg2-palettes" data-group="ptg2">
             <div class="ptc-inner">
                 <div class="palette-name">Default</div>
-                <div class="palette-row" id="palette-default"></div>
+                <div class="palette-row" id="palette-default" role="grid" aria-label="Default palette"></div>
                 <div class="palette-name">Saved</div>
-                <div class="palette-row" id="palette-saved"></div>
+                <div class="palette-row" id="palette-saved" role="grid" aria-label="Saved palette"></div>
                 <div class="palette-actions">
                     <button class="btn" data-os-click="click-181" style="padding:2px 8px;font-size:10px">+ Add FG</button>
                     <button class="btn" data-os-click="click-182" style="padding:2px 8px;font-size:10px">Clear</button>
@@ -15263,14 +15265,159 @@ self.onmessage = function(event) {
         this.state.fgColor=hex; document.getElementById('fg-color').style.background=hex;
         document.getElementById('fg-picker').value=hex; document.getElementById('fg-hex').textContent=hex.toUpperCase();
         this._updateOklchDisplay(hex);
+        this._syncSwatchGridSelection?.(hex);
         if(this.canvas.freeDrawingBrush&&this.state.tool!=='eraser'){this.canvas.freeDrawingBrush.color=this.state.brushOpacity<100?this._hexToRgba(hex,this.state.brushOpacity):hex;}
     },
     setBgColor(hex) { this.state.bgColor=hex; document.getElementById('bg-color').style.background=hex; document.getElementById('bg-picker').value=hex; document.getElementById('bg-hex').textContent=hex.toUpperCase(); },
     swapColors() { const fg=this.state.fgColor,bg=this.state.bgColor; this.setFgColor(bg); this.setBgColor(fg); },
+    _initSwatchGrid(grid, label) {
+        if (!grid) return;
+        grid.setAttribute('role', 'grid');
+        if (label) grid.setAttribute('aria-label', label);
+        grid.setAttribute('aria-multiselectable', 'false');
+        grid.tabIndex = -1;
+        if (grid.dataset.swatchGridReady !== 'true') {
+            grid.addEventListener('keydown', event => this._onSwatchGridKeydown(event));
+            grid.dataset.swatchGridReady = 'true';
+        }
+    },
+    _swatchGridRows(grid, cells = [...(grid?.querySelectorAll?.(':scope > [role="gridcell"]') || [])]) {
+        if (!grid || !cells.length) return [];
+        const measured = cells.map(cell => ({
+            cell,
+            rect: cell.getBoundingClientRect?.() || { top:0, left:0, width:0, height:0 }
+        }));
+        const hasLayout = measured.some(({ rect }) => rect.width || rect.height || rect.top || rect.left);
+        if (!hasLayout) {
+            const width = Number(grid.clientWidth) || 0;
+            const cellWidth = Number(cells[0].offsetWidth) || 24;
+            const gap = parseFloat(getComputedStyle(grid).columnGap || getComputedStyle(grid).gap) || 4;
+            const columns = width
+                ? Math.max(1, Math.floor((width + gap) / (cellWidth + gap)))
+                : Math.max(1, Number(grid.dataset.swatchColumns) || 8);
+            const rows = [];
+            for (let index = 0; index < cells.length; index += columns) rows.push(cells.slice(index, index + columns));
+            return rows;
+        }
+        const rows = [];
+        measured.forEach(({ cell, rect }) => {
+            let row = rows.find(candidate => Math.abs(candidate.top - rect.top) <= 2);
+            if (!row) { row = { top:rect.top, cells:[] }; rows.push(row); }
+            row.cells.push({ cell, left:rect.left });
+        });
+        return rows
+            .sort((a, b) => a.top - b.top)
+            .map(row => row.cells.sort((a, b) => a.left - b.left).map(entry => entry.cell));
+    },
+    _syncSwatchGridSemantics(grid) {
+        if (!grid) return;
+        const cells = [...grid.querySelectorAll(':scope > [role="gridcell"]')];
+        const rows = this._swatchGridRows(grid, cells);
+        grid.setAttribute('aria-rowcount', String(rows.length));
+        grid.setAttribute('aria-colcount', String(Math.max(0, ...rows.map(row => row.length))));
+        rows.forEach((row, rowIndex) => row.forEach((cell, columnIndex) => {
+            cell.setAttribute('aria-rowindex', String(rowIndex + 1));
+            cell.setAttribute('aria-colindex', String(columnIndex + 1));
+        }));
+    },
+    _syncSwatchGridRoving(grid, preferred = null) {
+        if (!grid) return;
+        const cells = [...grid.querySelectorAll(':scope > [role="gridcell"]')];
+        if (!cells.length) {
+            this._syncSwatchGridSemantics(grid);
+            return;
+        }
+        const active = preferred && cells.includes(preferred)
+            ? preferred
+            : cells.find(cell => cell.tabIndex === 0) || cells[0];
+        cells.forEach(cell => { cell.tabIndex = cell === active ? 0 : -1; });
+        this._syncSwatchGridSemantics(grid);
+    },
+    _syncSwatchGridSelection(color = this.state.fgColor) {
+        const safeColor = this._validHexColor(color);
+        if (!safeColor) return;
+        document.querySelectorAll('[role="gridcell"][data-os-swatch-color]').forEach(cell => {
+            cell.setAttribute('aria-selected', cell.dataset.osSwatchColor === safeColor ? 'true' : 'false');
+        });
+    },
+    _createSwatchControl(color, className, label) {
+        const safeColor = this._validHexColor(color);
+        if (!safeColor) return null;
+        const swatch = document.createElement('div');
+        swatch.className = className;
+        swatch.dataset.osSwatchColor = safeColor;
+        swatch.style.backgroundColor = safeColor;
+        swatch.title = safeColor;
+        swatch.setAttribute('role', 'gridcell');
+        swatch.setAttribute('aria-label', label || `Color ${safeColor}`);
+        swatch.setAttribute('aria-selected', safeColor === this._validHexColor(this.state.fgColor) ? 'true' : 'false');
+        swatch.tabIndex = -1;
+        swatch.addEventListener('click', () => this._activateSwatch(swatch));
+        swatch.addEventListener('contextmenu', event => {
+            event.preventDefault();
+            this._activateSwatch(swatch, { background:true });
+        });
+        return swatch;
+    },
+    _activateSwatch(swatch, { background = false, announce = false } = {}) {
+        const color = this._validHexColor(swatch?.dataset?.osSwatchColor);
+        if (!color) return false;
+        swatch.focus?.({ preventScroll:true });
+        if (background) {
+            this.setBgColor(color);
+            if (announce) this._announceAccessibility?.(`Background color ${color}`);
+        } else {
+            this.setFgColor(color);
+            if (announce) this._announceAccessibility?.(`Foreground color ${color}`);
+        }
+        return true;
+    },
+    _onSwatchGridKeydown(event) {
+        const grid = event.currentTarget;
+        const swatch = event.target?.closest?.('[role="gridcell"]');
+        if (!grid || !swatch || swatch.parentElement !== grid) return;
+        const key = event.key;
+        if (key === 'ContextMenu' || (key === 'F10' && event.shiftKey)) {
+            event.preventDefault();
+            event.stopPropagation();
+            this._activateSwatch(swatch, { background:true, announce:true });
+            return;
+        }
+        if (key === 'Enter' || key === ' ') {
+            event.preventDefault();
+            event.stopPropagation();
+            this._activateSwatch(swatch, { announce:true });
+            return;
+        }
+        const rows = this._swatchGridRows(grid);
+        const rowIndex = rows.findIndex(row => row.includes(swatch));
+        if (rowIndex < 0) return;
+        const columnIndex = rows[rowIndex].indexOf(swatch);
+        let target = swatch;
+        if (key === 'ArrowLeft') target = rows[rowIndex][Math.max(0, columnIndex - 1)];
+        else if (key === 'ArrowRight') target = rows[rowIndex][Math.min(rows[rowIndex].length - 1, columnIndex + 1)];
+        else if (key === 'ArrowUp') target = rows[Math.max(0, rowIndex - 1)]?.[Math.min(columnIndex, rows[Math.max(0, rowIndex - 1)].length - 1)];
+        else if (key === 'ArrowDown') target = rows[Math.min(rows.length - 1, rowIndex + 1)]?.[Math.min(columnIndex, rows[Math.min(rows.length - 1, rowIndex + 1)].length - 1)];
+        else if (key === 'Home') target = rows[rowIndex][0];
+        else if (key === 'End') target = rows[rowIndex].at(-1);
+        else return;
+        if (!target || target === swatch) return;
+        event.preventDefault();
+        event.stopPropagation();
+        this._syncSwatchGridRoving(grid, target);
+        target.focus({ preventScroll:true });
+    },
     initSwatches() {
         const colors=['#000000','#333333','#666666','#999999','#cccccc','#ffffff','#ff0000','#ff6600','#ffcc00','#33cc33','#0099ff','#6633ff','#ff3399','#cc0000','#cc6600','#999900','#009933','#006699','#330099','#cc0066','#ff9999','#ffcc99','#ffff99','#99ff99','#99ccff','#cc99ff','#ff99cc','#6c8cff'];
         const el=document.getElementById('color-swatches');
-        colors.forEach(c=>{ const d=document.createElement('div'); d.className='color-swatch'; d.style.background=c; d.addEventListener('click',()=>this.setFgColor(c)); d.addEventListener('contextmenu',e=>{e.preventDefault();this.setBgColor(c);}); el.appendChild(d); });
+        if (!el) return;
+        this._initSwatchGrid(el, 'Foreground color swatches');
+        this._clearNode(el);
+        colors.forEach(color => {
+            const swatch = this._createSwatchControl(color, 'color-swatch', `Foreground color ${color}`);
+            if (swatch) el.appendChild(swatch);
+        });
+        this._syncSwatchGridRoving(el);
     },
 
     // ====================== PDF EXPORT ======================
@@ -22632,12 +22779,7 @@ self.onmessage = async function(e) {
     _createPaletteSwatch(color) {
         const safeColor = this._validHexColor(color);
         if (!safeColor) return null;
-        const swatch = document.createElement('div');
-        swatch.className = 'palette-swatch';
-        swatch.style.backgroundColor = safeColor;
-        swatch.title = safeColor;
-        swatch.addEventListener('click', () => this.setFgColor(safeColor));
-        return swatch;
+        return this._createSwatchControl(safeColor, 'palette-swatch', `Palette color ${safeColor}`);
     },
     initDefaultPalette() {
         const defaults = ['#ffffff','#000000','#ff0000','#00ff00','#0000ff','#ffff00','#ff00ff','#00ffff',
@@ -22645,11 +22787,13 @@ self.onmessage = async function(e) {
             '#e53e3e','#dd6b20','#2f855a','#2b6cb0','#6b46c1','#d53f8c','#434190','#285e61'];
         const row = document.getElementById('palette-default');
         if (!row) return;
+        this._initSwatchGrid(row, 'Default palette');
         this._clearNode(row);
         defaults.forEach(c => {
             const swatch = this._createPaletteSwatch(c);
             if (swatch) row.appendChild(swatch);
         });
+        this._syncSwatchGridRoving(row);
     },
     loadSavedPalette() {
         try {
@@ -22661,11 +22805,13 @@ self.onmessage = async function(e) {
     _renderSavedPalette() {
         const row = document.getElementById('palette-saved');
         if (!row) return;
+        this._initSwatchGrid(row, 'Saved palette');
         this._clearNode(row);
         this._savedPalette.forEach(c => {
             const swatch = this._createPaletteSwatch(c);
             if (swatch) row.appendChild(swatch);
         });
+        this._syncSwatchGridRoving(row);
     },
     savePaletteColor() {
         const color = this.state.fgColor;

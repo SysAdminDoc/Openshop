@@ -51,6 +51,8 @@ All notable changes to Openshop will be documented in this file.
   fullscreen now expose their current state visually and through `aria-checked`.
 
 ### Fixed
+- Color and palette swatches now expose grid semantics, roving keyboard focus,
+  foreground/background keyboard actions, and 24px pointer targets.
 - Menu commands now project their document prerequisites into accessible dropdown
   rows, keeping blank-workspace actions available while blocking pointer and
   keyboard activation of document-scoped items until a canvas is open.

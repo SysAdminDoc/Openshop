@@ -2859,6 +2859,8 @@ describe('component treatment', () => {
     // A scaled swatch tucks under the swatches after it without this.
     expect(hover('\\.color-swatch')[0]).toMatch(/z-index:2/);
     expect(hover('\\.palette-swatch')[0]).toMatch(/z-index:2/);
+    expect(css).toMatch(/\.color-swatch\{width:24px;height:24px/);
+    expect(css).toMatch(/\.palette-swatch\{width:24px;height:24px/);
     // The active frame is marked with a ring rather than a scale that
     // overlapped its flex siblings.
     expect(css).toMatch(/\.frame-thumb\.active\{[^}]*\}/);
