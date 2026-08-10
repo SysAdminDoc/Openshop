@@ -5,6 +5,7 @@ All notable changes to Openshop will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Enforced the `openshop-loader` Trusted Types policy for every verified JavaScript blob used by scripts, modules, and workers, with release checks for duplicate policies and bare executable Blob URLs.
 - Added a cached browser canvas-ceiling probe that applies measured per-side
   and total-pixel limits to new documents and every raster import path, with
   explicit refusal messages and diagnostics when a document is too large.

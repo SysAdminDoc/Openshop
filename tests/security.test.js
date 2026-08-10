@@ -84,6 +84,34 @@ describe('release security contract', () => {
     }
   );
 
+  test.each([
+    ["require-trusted-types-for 'script'; ", /require-trusted-types-for 'script' directive is missing/],
+    ['trusted-types openshop-loader; ', /trusted-types directive is missing/]
+  ])('requires the Trusted Types CSP directives', (directive, error) => {
+    expect(() => check(html.replace(directive, ''))).toThrow(error);
+  });
+
+  test('allows only the named loader policy', () => {
+    expect(() => check(html.replace('trusted-types openshop-loader;', 'trusted-types other-policy;')))
+      .toThrow(/trusted-types must allow only openshop-loader/);
+  });
+
+  test('rejects a second Trusted Types policy declaration', () => {
+    const changed = html.replace(
+      'const bootDigest =',
+      "globalThis.trustedTypes.createPolicy('other-policy', {});\nconst bootDigest ="
+    );
+    expect(() => check(changed)).toThrow(/exactly one Trusted Types policy declaration/);
+  });
+
+  test('rejects a bare JavaScript Blob URL', () => {
+    const changed = html.replace(
+      '</body>',
+      "<script>URL.createObjectURL(new Blob(['unverified'], { type:'application/javascript' }));</script></body>"
+    );
+    expect(() => check(changed)).toThrow(/JavaScript Blob URL is created without the Trusted Types loader/);
+  });
+
   test('rejects header-only directives when they appear in meta delivery', () => {
     const changed = html.replace("object-src 'none';", "object-src 'none'; frame-ancestors https://host.example; ");
     expect(() => check(changed)).toThrow(/frame-ancestors is header-only/);

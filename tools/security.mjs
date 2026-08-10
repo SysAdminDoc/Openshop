@@ -18,6 +18,7 @@ const indexPath = join(root, 'index.html');
 const serviceWorkerPath = join(root, 'sw.js');
 const write = process.argv.includes('--write');
 const EXPECTED_INLINE_SCRIPTS = 2;
+const TRUSTED_TYPES_POLICY_NAME = 'openshop-loader';
 const VERIFIED_ASSET_ORIGINS = new Set(OPENSHOP_RUNTIME_ORIGINS);
 const SCRIPT_SOURCE_TOKENS = new Set(["'self'", "'wasm-unsafe-eval'", 'blob:']);
 const REQUIRED_POLICY_DIRECTIVES = new Map([
@@ -210,6 +211,55 @@ export function check(html) {
     failures.push(`script-src contains an unauthorized source: ${source}`);
   }
 
+  const requireTrustedTypes = byName.get('require-trusted-types-for');
+  if (!requireTrustedTypes) {
+    failures.push("require-trusted-types-for 'script' directive is missing");
+  } else if (requireTrustedTypes.sources.length !== 1 || requireTrustedTypes.sources[0] !== "'script'") {
+    failures.push("require-trusted-types-for must be exactly 'script'");
+  }
+  const trustedTypes = byName.get('trusted-types');
+  if (!trustedTypes) {
+    failures.push('trusted-types directive is missing');
+  } else if (trustedTypes.sources.length !== 1 || trustedTypes.sources[0] !== TRUSTED_TYPES_POLICY_NAME) {
+    failures.push(`trusted-types must allow only ${TRUSTED_TYPES_POLICY_NAME}`);
+  }
+  const policyDeclarations = [...html.matchAll(
+    /\btrustedTypes\s*\.\s*createPolicy\s*\(\s*['"]([^'"]+)['"]/g
+  )].map(([, name]) => name);
+  if (policyDeclarations.length !== 1) {
+    failures.push(`expected exactly one Trusted Types policy declaration, found ${policyDeclarations.length}`);
+  } else if (policyDeclarations[0] !== TRUSTED_TYPES_POLICY_NAME) {
+    failures.push(`Trusted Types policy must be named ${TRUSTED_TYPES_POLICY_NAME}`);
+  }
+
+  // These are the executable URL sinks in the editor. Every one must receive
+  // the value returned by the one policy above; image, download, and iframe
+  // URLs are deliberately outside this list.
+  const executableSinkChecks = [
+    [/\b(?:element|s)\.src\s*=\s*([^;\n]+)/g, 'script src'],
+    [/\bnew\s+Worker\(([^;\n]+)\)/g, 'Worker URL'],
+    [/\bimport\(([^;\n]+)\)/g, 'dynamic import URL'],
+    [/\bworkerSrc\s*=\s*([^;\n]+)/g, 'workerSrc URL']
+  ];
+  for (const [pattern, label] of executableSinkChecks) {
+    for (const match of html.matchAll(pattern)) {
+      if (!match[1].trim().startsWith('OPENSHOP_TRUSTED_SCRIPT_URL(')) {
+        failures.push(`${label} bypasses the Trusted Types loader`);
+      }
+    }
+  }
+  const sourceLines = html.split(/\r?\n/);
+  for (let index = 0; index < sourceLines.length; index++) {
+    const line = sourceLines[index];
+    if (!line.includes('URL.createObjectURL') || line.includes('createOpenShopScriptBlobUrl')) continue;
+    const context = sourceLines.slice(index, index + 8).join('\n');
+    if (/\bwasmUrl\s*=/.test(line) && /\bwasmAsset\b/.test(line)) continue;
+    if (/type\s*:\s*['"][^'"]*(?:javascript|ecmascript)/i.test(context)
+        || /\b(?:factory|module|worker|lib|index)Asset\.asset\.type\b/.test(context)) {
+      failures.push('a JavaScript Blob URL is created without the Trusted Types loader');
+    }
+  }
+
   for (const [name, requiredSources] of REQUIRED_POLICY_DIRECTIVES) {
     const directive = byName.get(name);
     if (!directive) {
@@ -286,6 +336,7 @@ export function check(html) {
   }
   return {
     inlineScripts: inlineHashes.length,
+    trustedTypesPolicy: TRUSTED_TYPES_POLICY_NAME,
     actions: declaredActions.length,
     registryEntries: registryIds.size,
     lazyAssets: OPENSHOP_RUNTIME_ASSETS.length,

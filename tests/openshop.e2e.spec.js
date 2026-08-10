@@ -881,7 +881,7 @@ test('keeps hostile Fabric object ids and gradient colors inert in SVG export', 
     canvas.add(rect);
 
     const cleanSvg = OS._sanitizeSVG(canvas.toSVG());
-    const parsed = new DOMParser().parseFromString(cleanSvg, 'image/svg+xml');
+    const parsed = new DOMParser().parseFromString(OS._trustedHTML(cleanSvg), 'image/svg+xml');
     const elements = [...parsed.querySelectorAll('*')];
     const eventAttributes = elements.flatMap((element) =>
       [...element.attributes].filter((attribute) => attribute.name.toLowerCase().startsWith('on'))
@@ -7470,6 +7470,10 @@ test('boots its libraries from verified blobs with no CDN in script-src @cross-b
     const scriptSrc = policy.split(';').map(part => part.trim()).find(part => part.startsWith('script-src '));
     return {
       scriptSrc,
+      trustedTypesRequired: policy.includes("require-trusted-types-for 'script'"),
+      trustedTypesPolicy: policy.match(/trusted-types\s+([^;]+)/)?.[1]?.trim() || null,
+      trustedTypesSupported: typeof globalThis.trustedTypes?.createPolicy === 'function',
+      trustedHTMLType: typeof OS._trustedHTML('<span>probe</span>'),
       // Every remaining script element is either inline or a spent blob: URL.
       remoteScriptTags: [...document.querySelectorAll('script[src]')]
         .map(el => el.getAttribute('src'))
@@ -7485,6 +7489,9 @@ test('boots its libraries from verified blobs with no CDN in script-src @cross-b
   // because CSP does not require SRI on scripts it permits by host.
   expect(report.scriptSrc).not.toMatch(/https?:\/\//);
   expect(report.scriptSrc).toContain('blob:');
+  expect(report.trustedTypesRequired).toBe(true);
+  expect(report.trustedTypesPolicy).toBe('openshop-loader');
+  expect(report.trustedHTMLType).toBe(report.trustedTypesSupported ? 'object' : 'string');
   expect(report.remoteScriptTags).toEqual([]);
   // ...and the libraries still arrive.
   expect(report.fabricVersion).toBe('7.4.0');

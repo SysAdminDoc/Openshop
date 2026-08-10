@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-QZpjfE+dsWCPfTMEOaIEzuA8DW7ID7CWndreaQ+noco=' 'sha256-ca1hDqtCiHWZfts4/q5uZT52ek6KDsmvDvD9jO/vqmY=' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-ZKD7DnFLWeRjJRokxmntdNCnZqzhJJ0f0ZFg3OOepjQ=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -249,6 +249,64 @@ const bootDigest = async bytes => {
     return 'sha384-' + btoa(String.fromCharCode(...new Uint8Array(digest)));
 };
 
+// Trusted Types is optional in Firefox/WebKit builds that do not expose it,
+// but Chromium must never receive a raw blob URL at an executable sink. Only
+// URLs minted for verified OpenShop bytes enter this set; the single policy is
+// the sole place that can turn one of those strings into a script URL.
+const OPENSHOP_SCRIPT_URLS = new Set();
+let OPENSHOP_SCRIPT_POLICY = null;
+try {
+    if (globalThis.trustedTypes?.createPolicy) {
+        OPENSHOP_SCRIPT_POLICY = globalThis.trustedTypes.createPolicy('openshop-loader', {
+            createScriptURL: value => {
+                const raw = String(value);
+                if (!OPENSHOP_SCRIPT_URLS.has(raw)) throw new TypeError('OpenShop script URL was not minted from verified bytes');
+                return raw;
+            },
+            // The CSP directive also covers HTML injection sinks. These
+            // templates are existing application-owned markup; keeping the
+            // conversion in this named policy makes the enforcement explicit
+            // without adding a second policy that could mint script URLs.
+            createHTML: value => String(value)
+        });
+    }
+} catch (error) {
+    console.warn('Trusted Types is unavailable; verified loader fallback is active:', error.message);
+}
+const createOpenShopScriptBlobUrl = blob => {
+    const raw = URL.createObjectURL(blob);
+    OPENSHOP_SCRIPT_URLS.add(raw);
+    return raw;
+};
+const OPENSHOP_TRUSTED_SCRIPT_URL = value => {
+    const raw = String(value);
+    if (!OPENSHOP_SCRIPT_URLS.has(raw)) throw new TypeError('OpenShop script URL was not minted from verified bytes');
+    return OPENSHOP_SCRIPT_POLICY ? OPENSHOP_SCRIPT_POLICY.createScriptURL(raw) : raw;
+};
+const OPENSHOP_TRUSTED_HTML = (strings, ...values) => {
+    const value = Array.isArray(strings)
+        ? strings.reduce((result, part, index) => result + part + (index < values.length ? values[index] : ''), '')
+        : String(strings);
+    return OPENSHOP_SCRIPT_POLICY ? OPENSHOP_SCRIPT_POLICY.createHTML(value) : value;
+};
+globalThis.__openshopTrustedHTML = OPENSHOP_TRUSTED_HTML;
+const revokeOpenShopScriptBlobUrl = value => {
+    const raw = String(value);
+    OPENSHOP_SCRIPT_URLS.delete(raw);
+    URL.revokeObjectURL(raw);
+};
+// Verified third-party modules can construct their own workers after they
+// receive a URL through a library option. Keep that boundary inside the same
+// policy instead of asking each dependency to know about OpenShop's registry.
+if (typeof globalThis.Worker === 'function') {
+    const OpenShopNativeWorker = globalThis.Worker;
+    globalThis.Worker = class OpenShopTrustedWorker extends OpenShopNativeWorker {
+        constructor(scriptURL, options) {
+            super(OPENSHOP_TRUSTED_SCRIPT_URL(scriptURL), options);
+        }
+    };
+}
+
 const fetchVerifiedBootAsset = async asset => {
     const load = async cache => {
         const response = await fetch(asset.url, { cache, credentials:'omit', mode:'cors' });
@@ -270,11 +328,11 @@ const fetchVerifiedBootAsset = async asset => {
 };
 
 const runVerifiedBootScript = (bytes, name) => new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(new Blob([bytes], { type:'application/javascript' }));
+    const url = createOpenShopScriptBlobUrl(new Blob([bytes], { type:'application/javascript' }));
     const element = document.createElement('script');
-    element.src = url;
-    element.onload = () => { URL.revokeObjectURL(url); resolve(true); };
-    element.onerror = () => { URL.revokeObjectURL(url); reject(new Error(`${name} failed to execute`)); };
+    element.src = OPENSHOP_TRUSTED_SCRIPT_URL(url);
+    element.onload = () => { revokeOpenShopScriptBlobUrl(url); resolve(true); };
+    element.onerror = () => { revokeOpenShopScriptBlobUrl(url); reject(new Error(`${name} failed to execute`)); };
     (document.head || document.documentElement).appendChild(element);
 });
 
@@ -4263,6 +4321,14 @@ registerDeclarativeEvents();
 
 const OS = {
     _esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
+    _trustedHTML(strings, ...values) {
+        const converter = globalThis.__openshopTrustedHTML;
+        if (converter) return converter(strings, ...values);
+        const value = Array.isArray(strings)
+            ? strings.reduce((result, part, index) => result + part + (index < values.length ? values[index] : ''), '')
+            : String(strings);
+        return value;
+    },
     /* OPENSHOP_RUNTIME_MANIFEST:LAZY:BEGIN */
     _runtimeAssets: Object.freeze({
         psdDecoder: Object.freeze({
@@ -4437,7 +4503,7 @@ const OS = {
     async _verifiedRuntimeBlobUrl(name) {
         if (!this._runtimeBlobPromises.has(name)) {
             const pending = this._fetchVerifiedRuntimeAsset(name)
-                .then(({asset, bytes}) => URL.createObjectURL(new Blob([bytes], {type:asset.type})))
+                .then(({asset, bytes}) => createOpenShopScriptBlobUrl(new Blob([bytes], {type:asset.type})))
                 .catch(error => {
                     this._runtimeBlobPromises.delete(name);
                     throw error;
@@ -4458,7 +4524,7 @@ const OS = {
                 const url = await this._verifiedRuntimeBlobUrl(name);
                 await new Promise((resolve, reject) => {
                     const element = document.createElement('script');
-                    element.src = url;
+                    element.src = OPENSHOP_TRUSTED_SCRIPT_URL(url);
                     element.onload = () => resolve(true);
                     element.onerror = () => reject(new Error(`${name} failed to execute`));
                     (document.head || document.documentElement).appendChild(element);
@@ -4493,36 +4559,36 @@ const OS = {
                 ]);
                 const decoder = new TextDecoder();
                 const wasmUrl = URL.createObjectURL(new Blob([wasmAsset.bytes], { type:wasmAsset.asset.type }));
-                const libUrl = URL.createObjectURL(new Blob([
+                const libUrl = createOpenShopScriptBlobUrl(new Blob([
                     decoder.decode(libAsset.bytes).replace(
                         /new URL\(\s*["']libraw\.wasm["']\s*,\s*import\.meta\.url\)\.href/g,
                         JSON.stringify(wasmUrl)
                     )
                 ], { type:libAsset.asset.type }));
-                const workerUrl = URL.createObjectURL(new Blob([
+                const workerUrl = createOpenShopScriptBlobUrl(new Blob([
                     decoder.decode(workerAsset.bytes).replace(
                         /new URL\(\s*["'](?:\.\/)?libraw\.js["']\s*,\s*import\.meta\.url\)/g,
                         JSON.stringify(libUrl)
                     )
                 ], { type:workerAsset.asset.type }));
-                const indexUrl = URL.createObjectURL(new Blob([
+                const indexUrl = createOpenShopScriptBlobUrl(new Blob([
                     decoder.decode(indexAsset.bytes).replace(
                         /new URL\(\s*["']\.\/worker\.js["']\s*,\s*import\.meta\.url\)/g,
                         JSON.stringify(workerUrl)
                     )
                 ], { type:indexAsset.asset.type }));
                 try {
-                    const module = await import(indexUrl);
+                    const module = await import(OPENSHOP_TRUSTED_SCRIPT_URL(indexUrl));
                     if (typeof module?.default !== 'function') throw new Error('Verified LibRaw did not expose its decoder');
                     this._libRawBlobUrls = { wasmUrl, libUrl, workerUrl };
                     return module.default;
                 } catch (error) {
-                    URL.revokeObjectURL(workerUrl);
-                    URL.revokeObjectURL(libUrl);
+                    revokeOpenShopScriptBlobUrl(workerUrl);
+                    revokeOpenShopScriptBlobUrl(libUrl);
                     URL.revokeObjectURL(wasmUrl);
                     throw error;
                 } finally {
-                    URL.revokeObjectURL(indexUrl);
+                    revokeOpenShopScriptBlobUrl(indexUrl);
                 }
             })().catch(error => {
                 this._libRawPromise = null;
@@ -4538,21 +4604,24 @@ const OS = {
                     this._fetchVerifiedRuntimeAsset('pdfModule'),
                     this._fetchVerifiedRuntimeAsset('pdfWorker')
                 ]);
-                const moduleUrl = URL.createObjectURL(new Blob([moduleAsset.bytes], { type:moduleAsset.asset.type }));
-                const workerUrl = URL.createObjectURL(new Blob([workerAsset.bytes], { type:workerAsset.asset.type }));
+                const moduleUrl = createOpenShopScriptBlobUrl(new Blob([moduleAsset.bytes], { type:moduleAsset.asset.type }));
+                const workerUrl = createOpenShopScriptBlobUrl(new Blob([workerAsset.bytes], { type:workerAsset.asset.type }));
                 try {
-                    const pdfjs = await import(moduleUrl);
+                    const pdfjs = await import(OPENSHOP_TRUSTED_SCRIPT_URL(moduleUrl));
                     if (typeof pdfjs?.getDocument !== 'function' || !pdfjs.GlobalWorkerOptions) {
                         throw new Error('Verified PDF.js did not expose its parser');
                     }
                     this._pdfWorkerBlobUrl = workerUrl;
-                    pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+                    // PDF.js validates this option as a string before it
+                    // reaches its internal Worker constructor; the global
+                    // worker boundary above applies the TrustedScriptURL.
+                    pdfjs.GlobalWorkerOptions.workerSrc = OPENSHOP_TRUSTED_SCRIPT_URL(workerUrl).toString();
                     return pdfjs;
                 } catch (error) {
-                    URL.revokeObjectURL(workerUrl);
+                    revokeOpenShopScriptBlobUrl(workerUrl);
                     throw error;
                 } finally {
-                    URL.revokeObjectURL(moduleUrl);
+                    revokeOpenShopScriptBlobUrl(moduleUrl);
                 }
             })().catch(error => {
                 this._pdfJsPromise = null;
@@ -4569,9 +4638,9 @@ const OS = {
                     this._fetchVerifiedRuntimeAsset('avifEncoderModule'),
                     this._fetchVerifiedRuntimeAsset('avifEncoderWasm')
                 ]);
-                const moduleUrl = URL.createObjectURL(new Blob([moduleAsset.bytes], { type:moduleAsset.asset.type }));
+                const moduleUrl = createOpenShopScriptBlobUrl(new Blob([moduleAsset.bytes], { type:moduleAsset.asset.type }));
                 try {
-                    const codec = await import(moduleUrl);
+                    const codec = await import(OPENSHOP_TRUSTED_SCRIPT_URL(moduleUrl));
                     if (typeof codec.default !== 'function') throw new Error('Verified AVIF module has an unexpected interface');
                     // Supplying the verified bytes prevents Emscripten from
                     // resolving or fetching its own sibling WASM file.
@@ -4586,7 +4655,7 @@ const OS = {
                     if (typeof instance?.encode !== 'function') throw new Error('Verified AVIF encoder did not initialize');
                     return instance;
                 } finally {
-                    URL.revokeObjectURL(moduleUrl);
+                    revokeOpenShopScriptBlobUrl(moduleUrl);
                 }
             })().catch(error => {
                 this._avifEncoderPromise = null;
@@ -4632,9 +4701,9 @@ const OS = {
                     this._fetchVerifiedRuntimeAsset('avifDecoderModule'),
                     this._fetchVerifiedRuntimeAsset('avifDecoderWasm')
                 ]);
-                const moduleUrl = URL.createObjectURL(new Blob([moduleAsset.bytes], { type:moduleAsset.asset.type }));
+                const moduleUrl = createOpenShopScriptBlobUrl(new Blob([moduleAsset.bytes], { type:moduleAsset.asset.type }));
                 try {
-                    const codec = await import(moduleUrl);
+                    const codec = await import(OPENSHOP_TRUSTED_SCRIPT_URL(moduleUrl));
                     if (typeof codec.default !== 'function') throw new Error('Verified AVIF decoder has an unexpected interface');
                     const instance = await codec.default({
                         noInitialRun:true,
@@ -4647,7 +4716,7 @@ const OS = {
                     if (typeof instance?.decode !== 'function') throw new Error('Verified AVIF decoder did not initialize');
                     return instance;
                 } finally {
-                    URL.revokeObjectURL(moduleUrl);
+                    revokeOpenShopScriptBlobUrl(moduleUrl);
                 }
             })().catch(error => {
                 this._avifDecoderPromise = null;
@@ -6329,7 +6398,7 @@ const OS = {
     },
     newImage() {
         const o = document.createElement('div'); o.className = 'modal-overlay';
-        o.innerHTML = `<div class="modal"><h3>New Image</h3>
+        o.innerHTML = this._trustedHTML`<div class="modal"><h3>New Image</h3>
             <div class="preset-grid">
                 <button type="button" class="preset-btn" data-pw="1920" data-ph="1080">1920x1080</button>
                 <button type="button" class="preset-btn" data-pw="1280" data-ph="720">1280x720</button>
@@ -7858,7 +7927,8 @@ const OS = {
                 throw new Error(`SVG is larger than the ${Math.round(this._importLimits.maxJsonBytes / 1024 / 1024)} MB import limit`);
             }
             const markup = this._sanitizeSVG(await file.text());
-            const parsed = await fabric.loadSVGFromString(markup);
+            const parsedDocument = new DOMParser().parseFromString(this._trustedHTML(markup), 'text/xml');
+            const parsed = await fabric.parseSVGDocument(parsedDocument);
             const shapes = (parsed?.objects || []).filter(Boolean);
             if (!shapes.length) throw new Error('That SVG contains no drawable shapes');
             if (shapes.length > this._importLimits.maxProjectObjects) {
@@ -8061,7 +8131,7 @@ const OS = {
                 throw new Error('GIF exceeds the decoded size budget for animation import');
             }
             this.toast(`Importing ${count} GIF frames...`, 'info');
-            const frames = await codec.decodeFrames(buffer, { workerUrl });
+            const frames = await codec.decodeFrames(buffer, { workerUrl:OPENSHOP_TRUSTED_SCRIPT_URL(workerUrl).toString() });
             if (frames.length !== count) throw new Error('GIF decoder returned an incomplete frame set');
             const decodedFrames = frames.map(frame => {
                 if (frame.width !== frameW || frame.height !== frameH || frame.data.length !== frameW * frameH * 4) {
@@ -8355,7 +8425,7 @@ const OS = {
     },
     _sanitizeSVG(svg) {
         const parser = new DOMParser();
-        const doc = parser.parseFromString(svg, 'image/svg+xml');
+        const doc = parser.parseFromString(this._trustedHTML(svg), 'image/svg+xml');
         doc.querySelectorAll('script').forEach(el => el.remove());
         const allEls = doc.querySelectorAll('*');
         allEls.forEach(el => {
@@ -8409,7 +8479,7 @@ const OS = {
     },
     batchExport() {
         const o = document.createElement('div'); o.className = 'modal-overlay';
-        o.innerHTML = `<div class="modal"><h3>Batch Processor</h3>
+        o.innerHTML = this._trustedHTML`<div class="modal"><h3>Batch Processor</h3>
             <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">Drop a folder of images, apply a saved action recipe, and download one ZIP.</p>
             <div class="modal-row"><label style="width:110px">Images</label><input id="batch-files" type="file" accept="image/*" multiple></div>
             <div class="modal-row"><label style="width:110px">Action recipe</label><input id="batch-recipe" type="file" accept=".json,application/json"></div>
@@ -8456,7 +8526,7 @@ const OS = {
         o?.remove();
         const fmts = ['png','jpeg','webp','avif','svg','pdf'];
         const overlay = document.createElement('div'); overlay.className = 'modal-overlay';
-        overlay.innerHTML = `<div class="modal"><h3>Export Current Canvas</h3>
+        overlay.innerHTML = this._trustedHTML`<div class="modal"><h3>Export Current Canvas</h3>
             <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">Export the current canvas to multiple formats at once.</p>
             ${fmts.map(f => `<div class="modal-row"><label style="width:60px">${f.toUpperCase()}</label><label><input type="checkbox" id="batch-${f}" checked> Export</label></div>`).join('')}
             <div class="modal-btns"><button class="btn" data-modal-close>Cancel</button>
@@ -8468,7 +8538,7 @@ const OS = {
     _showBatchProgress() {
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay';
-        overlay.innerHTML = `<div class="modal" role="dialog" aria-labelledby="batch-progress-title" aria-describedby="batch-progress-status">
+        overlay.innerHTML = this._trustedHTML`<div class="modal" role="dialog" aria-labelledby="batch-progress-title" aria-describedby="batch-progress-status">
             <h3 id="batch-progress-title">Processing batch</h3>
             <p id="batch-progress-status" role="status" aria-live="polite" style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">Preparing files…</p>
             <progress id="batch-progress-bar" max="1" value="0" style="width:100%;height:8px"></progress>
@@ -9114,7 +9184,7 @@ const OS = {
         let overlay = document.getElementById('collab-overlay');
         if (overlay) { overlay.classList.add('show'); return overlay; }
         overlay = document.createElement('div'); overlay.id = 'collab-overlay'; overlay.className = 'modal-overlay';
-        overlay.innerHTML = `<div class="modal" style="max-width:680px"><h3>Collaborative Session</h3>
+        overlay.innerHTML = this._trustedHTML`<div class="modal" style="max-width:680px"><h3>Collaborative Session</h3>
             <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">Peer-to-peer WebRTC session with manual offer/answer exchange. No server or document relay is used; only the selected peer receives document state.</p>
             <label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--text-secondary);margin-bottom:8px"><input id="collab-consent" type="checkbox"> I consent to share this document with the peer identified by the exchanged signaling text.</label>
             <div class="modal-row"><button class="btn btn-primary" data-collab-offer>Create offer</button><button class="btn" data-collab-join>Join with offer</button><button class="btn" data-collab-copy>Copy local</button></div>
@@ -9826,17 +9896,17 @@ self.onmessage = function(event) {
         self.postMessage({ id: id, type: 'error', error: error && error.message ? error.message : String(error) });
     }
 };`;
-        const url = URL.createObjectURL(new Blob([decoder.bytes, '\n', code], { type:'application/javascript' }));
+        const url = createOpenShopScriptBlobUrl(new Blob([decoder.bytes, '\n', code], { type:'application/javascript' }));
         return new Promise((resolve, reject) => {
             if (job.cancelled) {
-                URL.revokeObjectURL(url);
+                revokeOpenShopScriptBlobUrl(url);
                 const error = new Error('PSD import cancelled');
                 error.name = 'AbortError';
                 reject(error);
                 return;
             }
-            const worker = new Worker(url);
-            URL.revokeObjectURL(url);
+            const worker = new Worker(OPENSHOP_TRUSTED_SCRIPT_URL(url));
+            revokeOpenShopScriptBlobUrl(url);
             job.worker = worker;
             job.reject = reject;
             const finish = () => {
@@ -11158,7 +11228,7 @@ self.onmessage = function(event) {
             const layerType = l.kind === 'adjustment'
                 ? `${this._adjustmentLayerName(l.adjustment?.type)} adjustment`
                 : `${l.objects.filter(o=>o.name!=='__boundary__').length} obj${hasMask?' &middot; M':''}${hasSmartObject?' &middot; SO':''}${hasTextOnPath?' &middot; Text Path':''}`;
-            d.innerHTML = `<div class="layer-drag-handle" title="Drag to reorder">&#9776;</div>
+            d.innerHTML = this._trustedHTML`<div class="layer-drag-handle" title="Drag to reorder">&#9776;</div>
                 <button class="layer-vis ${l.visible?'':'hidden'}" title="${l.visible?'Hide layer':'Show layer'}" aria-label="${l.visible?'Hide layer':'Show layer'}" aria-pressed="${l.visible?'false':'true'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">${eyeSvg}</svg></button>
                 <button class="layer-lock ${l.locked?'locked':''}" title="${l.locked?'Unlock layer':'Lock layer'}" aria-label="${l.locked?'Unlock layer':'Lock layer'}">${lockSvg}</button>
                 <div class="layer-thumb"><div class="${thumbStyle}" style="width:32px;height:32px;${isBg?'':'background:var(--bg-depth-4);'}border-radius:2px"></div></div>
@@ -12573,7 +12643,7 @@ self.onmessage = function(event) {
         }
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay';
-        overlay.innerHTML = `<div class="modal"><h3>Save Selection</h3>
+        overlay.innerHTML = this._trustedHTML`<div class="modal"><h3>Save Selection</h3>
             <div class="modal-row"><label>Name</label><input id="selection-save-name" value="Selection" maxlength="80"></div>
             <div class="modal-btns"><button class="btn" data-modal-close>Cancel</button>
             <button class="btn btn-primary" data-modal-action>Save</button></div></div>`;
@@ -12655,7 +12725,7 @@ self.onmessage = function(event) {
         if (!bounds) { this.toast('Create a selection before transforming it', 'info'); return null; }
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay';
-        overlay.innerHTML = `<div class="modal"><h3>Transform Selection</h3>
+        overlay.innerHTML = this._trustedHTML`<div class="modal"><h3>Transform Selection</h3>
             <div class="modal-row"><label>X</label><input id="selection-transform-x" type="number" min="0" max="${Math.max(0, this.canvasW - 1)}" value="${Math.round(bounds.x)}"></div>
             <div class="modal-row"><label>Y</label><input id="selection-transform-y" type="number" min="0" max="${Math.max(0, this.canvasH - 1)}" value="${Math.round(bounds.y)}"></div>
             <div class="modal-row"><label>Width</label><input id="selection-transform-w" type="number" min="1" max="${this.canvasW}" value="${Math.round(bounds.w)}"></div>
@@ -12684,7 +12754,7 @@ self.onmessage = function(event) {
         const labels = { expand: 'Expand', contract: 'Contract', feather: 'Feather', border: 'Border' };
         const defaults = { expand: 2, contract: 2, feather: 3, border: 2 };
         const o = document.createElement('div'); o.className = 'modal-overlay';
-        o.innerHTML = `<div class="modal"><h3>${labels[type]} Selection</h3>
+        o.innerHTML = this._trustedHTML`<div class="modal"><h3>${labels[type]} Selection</h3>
             <div class="modal-row"><label>Pixels</label><input id="mod-sel-px" type="number" value="${defaults[type]}" min="1" max="100"></div>
             <div class="modal-btns"><button class="btn" data-modal-close>Cancel</button>
             <button class="btn btn-primary" data-modal-action>OK</button></div></div>`;
@@ -12854,7 +12924,7 @@ self.onmessage = function(event) {
         this._crInvert = false;
 
         const o = document.createElement('div'); o.className = 'modal-overlay'; o.id = 'cr-overlay';
-        o.innerHTML = `<div class="modal" style="min-width:auto;max-width:600px;padding:16px">
+        o.innerHTML = this._trustedHTML`<div class="modal" style="min-width:auto;max-width:600px;padding:16px">
             <h3 style="margin-bottom:12px">Color Range</h3>
             <div class="cr-dialog">
                 <div class="cr-left">
@@ -13199,7 +13269,7 @@ self.onmessage = function(event) {
         const container = document.getElementById('crop-container');
         const area = document.getElementById('canvas-area');
         container.style.display = 'block';
-        container.innerHTML = `
+        container.innerHTML = this._trustedHTML`
             <div class="crop-dim" id="cdim-l"></div>
             <div class="crop-dim" id="cdim-r"></div>
             <div class="crop-dim" id="cdim-t"></div>
@@ -13531,7 +13601,7 @@ self.onmessage = function(event) {
         const panel = document.createElement('div');
         panel.className = 'filter-panel';
         panel.id = id;
-        panel.innerHTML = `<div class="filter-panel-header"><h3>${title}</h3><button class="fp-close" title="Cancel">&times;</button></div>
+        panel.innerHTML = this._trustedHTML`<div class="filter-panel-header"><h3>${title}</h3><button class="fp-close" title="Cancel">&times;</button></div>
             <div class="filter-panel-body">${bodyHTML}</div>
             <div class="filter-panel-footer"><button class="btn" data-fp-cancel>Cancel</button><button class="btn btn-primary" data-fp-apply>Apply</button></div>`;
         document.body.appendChild(panel);
@@ -14850,7 +14920,7 @@ self.onmessage = function(event) {
     promptNameCurrentState() {
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay';
-        overlay.innerHTML = `<div class="modal"><h3>Name This State</h3>
+        overlay.innerHTML = this._trustedHTML`<div class="modal"><h3>Name This State</h3>
             <p class="offline-manager-intro">Snapshots are kept for this session and are not limited by the undo step count.</p>
             <div class="modal-row"><label>Name</label><input id="snap-name" type="text" maxlength="80" value="${this._safeText(this._lastAction || 'Snapshot', 60)}"></div>
             <div class="modal-btns"><button class="btn" data-modal-close>Cancel</button>
@@ -15077,7 +15147,7 @@ self.onmessage = function(event) {
     },
     showResize() {
         const o=document.createElement('div'); o.className='modal-overlay';
-        o.innerHTML=`<div class="modal"><h3>Resize Canvas</h3><div class="modal-row"><label>Width</label><input id="rs-w" type="number" value="${this.canvasW}" min="1" max="8000"></div><div class="modal-row"><label>Height</label><input id="rs-h" type="number" value="${this.canvasH}" min="1" max="8000"></div><div class="modal-btns"><button class="btn" data-modal-close>Cancel</button><button class="btn btn-primary" data-modal-action>Apply</button></div></div>`;
+        o.innerHTML=this._trustedHTML`<div class="modal"><h3>Resize Canvas</h3><div class="modal-row"><label>Width</label><input id="rs-w" type="number" value="${this.canvasW}" min="1" max="8000"></div><div class="modal-row"><label>Height</label><input id="rs-h" type="number" value="${this.canvasH}" min="1" max="8000"></div><div class="modal-btns"><button class="btn" data-modal-close>Cancel</button><button class="btn btn-primary" data-modal-action>Apply</button></div></div>`;
         o.querySelector('[data-modal-action]').addEventListener('click', () => this.doResize(o));
         document.body.appendChild(o); requestAnimationFrame(()=>o.classList.add('show'));
     },
@@ -15173,7 +15243,7 @@ self.onmessage = function(event) {
         // document — off-screen rather than display:none, which has no boxes.
         holder.setAttribute('aria-hidden', 'true');
         holder.style.cssText = 'position:fixed;left:-10000px;top:0;width:1px;height:1px;overflow:hidden';
-        holder.innerHTML = markup;
+        holder.innerHTML = this._trustedHTML(markup);
         const node = holder.querySelector('svg');
         if (!node) return false;
         document.body.appendChild(holder);
@@ -17750,9 +17820,9 @@ self.onmessage = async function(event) {
     }
 };`;
         const blob = new Blob([code], {type:'application/javascript'});
-        const url = URL.createObjectURL(blob);
-        this._autoSaveWorker = new Worker(url);
-        URL.revokeObjectURL(url);
+        const url = createOpenShopScriptBlobUrl(blob);
+        this._autoSaveWorker = new Worker(OPENSHOP_TRUSTED_SCRIPT_URL(url));
+        revokeOpenShopScriptBlobUrl(url);
         this._autoSaveWorker.addEventListener('message', event => {
             const pending = this._autoSaveRequests.get(event.data?.id);
             if (!pending) return;
@@ -18101,7 +18171,7 @@ self.onmessage = async function(event) {
             const midX = (from.sx + to.sx) / 2, midY = (from.sy + to.sy) / 2;
             const screenDist = Math.sqrt((to.sx - from.sx) ** 2 + (to.sy - from.sy) ** 2);
             const screenAngle = Math.atan2(to.sy - from.sy, to.sx - from.sx);
-            overlay.innerHTML = `<div class="ml-line" style="position:absolute;left:${from.sx}px;top:${from.sy}px;width:${screenDist}px;height:2px;background:var(--warning);transform:rotate(${screenAngle}rad);transform-origin:0 50%"></div>
+        overlay.innerHTML = this._trustedHTML`<div class="ml-line" style="position:absolute;left:${from.sx}px;top:${from.sy}px;width:${screenDist}px;height:2px;background:var(--warning);transform:rotate(${screenAngle}rad);transform-origin:0 50%"></div>
                 <div class="measure-label" style="left:${midX}px;top:${midY - 18}px">${dist.toFixed(1)}px &middot; ${angle.toFixed(1)}&deg;</div>
                 <div style="position:absolute;left:${from.sx-3}px;top:${from.sy-3}px;width:6px;height:6px;border-radius:50%;background:var(--warning)"></div>
                 <div style="position:absolute;left:${to.sx-3}px;top:${to.sy-3}px;width:6px;height:6px;border-radius:50%;background:var(--warning)"></div>`;
@@ -18691,7 +18761,7 @@ self.onmessage = async function(event) {
         const active = this.canvas.getActiveObject();
         if (!active) { this.toast('Select an object first', 'info'); return; }
         const o = document.createElement('div'); o.className = 'modal-overlay';
-        o.innerHTML = `<div class="modal"><h3>Free Transform</h3>
+        o.innerHTML = this._trustedHTML`<div class="modal"><h3>Free Transform</h3>
             <div class="modal-row"><label>Scale X</label><input id="ft-sx" type="range" min="10" max="300" value="${Math.round((active.scaleX||1)*100)}" data-suffix="%"><span class="opt-val">${Math.round((active.scaleX||1)*100)}%</span></div>
             <div class="modal-row"><label>Scale Y</label><input id="ft-sy" type="range" min="10" max="300" value="${Math.round((active.scaleY||1)*100)}" data-suffix="%"><span class="opt-val">${Math.round((active.scaleY||1)*100)}%</span></div>
             <div class="modal-row"><label>Rotation</label><input id="ft-rot" type="range" min="-180" max="180" value="${Math.round(active.angle||0)}" data-suffix="°"><span class="opt-val">${Math.round(active.angle||0)}°</span></div>
@@ -18718,7 +18788,7 @@ self.onmessage = async function(event) {
         const active = this.canvas.getActiveObject();
         if (!active) { this.toast('Select an object first', 'info'); return; }
         const o = document.createElement('div'); o.className = 'modal-overlay';
-        o.innerHTML = `<div class="modal"><h3>Skew</h3>
+        o.innerHTML = this._trustedHTML`<div class="modal"><h3>Skew</h3>
             <div class="modal-row"><label>Skew X</label><input id="sk-x" type="range" min="-60" max="60" value="${Math.round(active.skewX||0)}" data-suffix="°"><span class="opt-val">${Math.round(active.skewX||0)}°</span></div>
             <div class="modal-row"><label>Skew Y</label><input id="sk-y" type="range" min="-60" max="60" value="${Math.round(active.skewY||0)}" data-suffix="°"><span class="opt-val">${Math.round(active.skewY||0)}°</span></div>
             <div class="modal-btns"><button class="btn" data-modal-close>Cancel</button>
@@ -19496,7 +19566,7 @@ self.onmessage = async function(event) {
     // ====================== WATERMARK ======================
     addWatermark() {
         const o = document.createElement('div'); o.className = 'modal-overlay';
-        o.innerHTML = `<div class="modal"><h3>Add Watermark</h3>
+        o.innerHTML = this._trustedHTML`<div class="modal"><h3>Add Watermark</h3>
             <div class="modal-row"><label>Text</label><input id="wm-text" type="text" value="WATERMARK" style="flex:1;background:var(--bg-depth-3);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:4px 8px;font-size:12px"></div>
             <div class="modal-row"><label>Size</label><input id="wm-size" type="range" min="12" max="200" value="48" data-suffix="px"><span class="opt-val">48px</span></div>
             <div class="modal-row"><label>Opacity</label><input id="wm-opacity" type="range" min="5" max="100" value="30" data-suffix="%"><span class="opt-val">30%</span></div>
@@ -19547,7 +19617,7 @@ self.onmessage = async function(event) {
         const imgObjs = objs.filter(o => o.type === 'image');
         const textObjs = objs.filter(o => o.type === 'i-text' || o.type === 'text' || o.type === 'textbox');
         const o = document.createElement('div'); o.className = 'modal-overlay';
-        o.innerHTML = `<div class="modal"><h3>Image Information</h3>
+        o.innerHTML = this._trustedHTML`<div class="modal"><h3>Image Information</h3>
             <dl class="info-grid" style="font-size:12px">
                 <dt>Canvas Size</dt><dd>${this.canvasW} x ${this.canvasH} px</dd>
                 <dt>Layers</dt><dd>${this.layers.length}</dd>
@@ -19667,7 +19737,7 @@ self.onmessage = async function(event) {
     showPreferences() {
         const o = document.createElement('div'); o.className = 'modal-overlay';
         o.dataset.modalStackHost = 'true';
-        o.innerHTML = `<div class="modal" style="min-width:380px"><h3>Preferences</h3>
+        o.innerHTML = this._trustedHTML`<div class="modal" style="min-width:380px"><h3>Preferences</h3>
             <div class="pref-section">
                 <h4>Canvas</h4>
                 <div class="pref-row"><label>Default Width</label><input id="pref-dw" type="number" value="${this._prefs.defaultW}" min="1" max="10000"></div>
@@ -20498,9 +20568,9 @@ self.onmessage = async function(e) {
 };`;
         const parts = photon ? [this._prepareClassicPhotonSource(runtime.moduleBytes), '\n', code] : [code];
         const blob = new Blob(parts, {type:'application/javascript'});
-        const url = URL.createObjectURL(blob);
-        this[workerKey] = new Worker(url);
-        URL.revokeObjectURL(url);
+        const url = createOpenShopScriptBlobUrl(blob);
+        this[workerKey] = new Worker(OPENSHOP_TRUSTED_SCRIPT_URL(url));
+        revokeOpenShopScriptBlobUrl(url);
         if (photon) this._filterWorkerPhotonReady = false;
         return this[workerKey];
     },
@@ -20937,7 +21007,7 @@ self.onmessage = async function(e) {
     // ====================== EXPORT SETTINGS ======================
     showExportSettings(initialFormat = 'png') {
         const o = document.createElement('div'); o.className = 'modal-overlay';
-        o.innerHTML = `<div class="modal" style="min-width:380px"><h3>Export Settings</h3>
+        o.innerHTML = this._trustedHTML`<div class="modal" style="min-width:380px"><h3>Export Settings</h3>
             <div class="export-format-row">
                 <button class="btn" id="es-png" data-fmt="png">PNG</button>
                 <button class="btn" id="es-jpeg" data-fmt="jpeg">JPEG</button>
@@ -23052,7 +23122,7 @@ self.onmessage = async function(e) {
             '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
         }[character]));
         const o = document.createElement('div'); o.className = 'modal-overlay';
-        o.innerHTML = `<div class="modal" style="min-width:400px"><h3>Keyboard Shortcuts</h3>
+        o.innerHTML = this._trustedHTML`<div class="modal" style="min-width:400px"><h3>Keyboard Shortcuts</h3>
             <dl class="shortcut-grid">${shortcuts.map(([k,v]) => `<dt data-os-shortcut="${escape(k)}">${escape(this._displayShortcut(k))}</dt><dd>${escape(v)}</dd>`).join('')}</dl>
             <div class="modal-btns"><button class="btn" data-modal-close>Close</button></div></div>`;
         document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('show'));
@@ -24026,7 +24096,7 @@ self.onmessage = async function(e) {
     // ====================== CURVED TEXT ======================
     showCurvedText() {
         const o = document.createElement('div'); o.className = 'modal-overlay';
-        o.innerHTML = `<div class="modal"><h3>Curved Text</h3>
+        o.innerHTML = this._trustedHTML`<div class="modal"><h3>Curved Text</h3>
             <div class="curved-text-preview"><canvas id="ct-preview" width="280" height="120"></canvas></div>
             <div class="modal-row"><label>Text</label><input id="ct-text" type="text" value="Curved Text" style="flex:1;background:var(--bg-depth-3);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);padding:4px 8px"></div>
             <div class="modal-row"><label>Radius</label><input id="ct-radius" type="range" min="50" max="500" value="150" data-suffix="px"><span class="opt-val">150px</span></div>
@@ -24328,7 +24398,7 @@ self.onmessage = async function(e) {
         const sourceUrl = await this._verifiedRuntimeBlobUrl('gifCodec');
         return new Promise((resolve, reject) => {
             const s = document.createElement('script');
-            s.src = sourceUrl;
+            s.src = OPENSHOP_TRUSTED_SCRIPT_URL(sourceUrl);
             s.addEventListener('load', () => {
                 s.remove();
                 if (window.modernGif?.encode && window.modernGif?.decodeFrames) resolve(window.modernGif);
@@ -24354,7 +24424,7 @@ self.onmessage = async function(e) {
         canvas.width = width;
         canvas.height = height;
         const context = canvas.getContext('2d', { willReadFrequently:true });
-        const encoder = new codec.Encoder({ workerUrl, width, height, maxColors:255 });
+        const encoder = new codec.Encoder({ workerUrl:OPENSHOP_TRUSTED_SCRIPT_URL(workerUrl).toString(), width, height, maxColors:255 });
         for (let index = 0; index < frameSources.length; index++) {
             const image = index === 0 ? first : await this._loadImage(frameSources[index]);
             context.clearRect(0, 0, width, height);
@@ -24715,7 +24785,7 @@ self.onmessage = async function(e) {
                 this._fetchVerifiedRuntimeAsset(backendNames.factory)
             ]);
             const [moduleUrl, wasm, factory] = job ? await this._raceComputeJob(loading, job) : await loading;
-            const importing = import(moduleUrl);
+            const importing = import(OPENSHOP_TRUSTED_SCRIPT_URL(moduleUrl));
             const lib = job ? await this._raceComputeJob(importing, job) : await importing;
             if (lib.env?.version !== '4.2.0') throw new Error('Unexpected Transformers.js runtime version');
             const wasmConfig = lib.env?.backends?.onnx?.wasm;
@@ -24729,8 +24799,8 @@ self.onmessage = async function(e) {
                 wasmConfig.wasmPaths = { wasm:wasm.asset.url, mjs:factory.asset.url };
                 wasmConfig.wasmBinary = undefined;
             } else {
-                this._aiWasmFactoryUrl ||= URL.createObjectURL(new Blob([factory.bytes], { type:factory.asset.type }));
-                wasmConfig.wasmPaths = { mjs:this._aiWasmFactoryUrl };
+                this._aiWasmFactoryUrl ||= createOpenShopScriptBlobUrl(new Blob([factory.bytes], { type:factory.asset.type }));
+                wasmConfig.wasmPaths = { mjs:OPENSHOP_TRUSTED_SCRIPT_URL(this._aiWasmFactoryUrl).toString() };
                 wasmConfig.wasmBinary = new Uint8Array(wasm.bytes);
             }
             wasmConfig.numThreads = 1;
@@ -25576,7 +25646,8 @@ self.onmessage = async function(e) {
             });
             this._updateAIProgress(70, 'Building editable paths…', job);
             await this._yieldComputeJob(job);
-            const parsed = await this._raceComputeJob(fabric.loadSVGFromString(svg), job);
+            const parsedDocument = new DOMParser().parseFromString(this._trustedHTML(svg), 'text/xml');
+            const parsed = await this._raceComputeJob(fabric.parseSVGDocument(parsedDocument), job);
             const shapes = (parsed?.objects || []).filter(Boolean);
             if (!shapes.length) { this.toast('Tracing produced no paths — try more colors', 'info'); return false; }
             if (shapes.length > this._traceMaxPaths) {
@@ -25625,7 +25696,7 @@ self.onmessage = async function(e) {
     showTraceDialog() {
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay';
-        overlay.innerHTML = `<div class="modal"><h3>Trace to Vector</h3>
+        overlay.innerHTML = this._trustedHTML`<div class="modal"><h3>Trace to Vector</h3>
             <p class="offline-manager-intro">Converts the selected raster layer into editable paths. SVG and PDF export then carry real vectors instead of an embedded bitmap.</p>
             <div class="modal-row"><label>Colors</label><input id="tr-colors" type="range" min="2" max="64" value="${this._traceDefaults.colors}" data-suffix=""><span class="opt-val">${this._traceDefaults.colors}</span></div>
             <div class="modal-row"><label>Smoothing</label><input id="tr-smoothing" type="range" min="0" max="5" value="${this._traceDefaults.smoothing}" data-suffix=""><span class="opt-val">${this._traceDefaults.smoothing}</span></div>
