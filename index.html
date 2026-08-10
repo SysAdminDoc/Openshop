@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10" id="theme-color-meta">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-5Xys7KB9Jtdsiqs5vqpI3JpkPXQktYoeMgjrfUG5FUA=' 'sha256-cLdUdFVY2glfeoeYoVs179Ew1pNsvbZ6bAmJqC/UxHQ=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-5Xys7KB9Jtdsiqs5vqpI3JpkPXQktYoeMgjrfUG5FUA=' 'sha256-DxBDKZi4Wc36rDye51bFw28oUQtyJbfIfPXKtNtLfZ4=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // OpenShop-specific Fabric configuration. The editor uses Fabric 7's native
@@ -802,6 +802,23 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 .pref-row label{flex:1;font-size:12px;color:var(--text-primary)}
 .pref-row input[type="number"]{width:60px;height:26px;background:var(--bg-depth-3);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);text-align:center;font-family:'JetBrains Mono',monospace;font-size:11px;outline:none}
 .pref-row select{height:26px;background:var(--bg-depth-3);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:11px;padding:0 6px;outline:none;cursor:pointer}
+.plugin-access-intro{font-size:11px;line-height:1.45;color:var(--text-secondary);margin:0 0 8px}
+.plugin-access-list{display:grid;gap:8px}
+.plugin-access-card{border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-depth-1);padding:9px}
+.plugin-access-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.plugin-access-heading h5{font-size:12px;font-weight:600;color:var(--text-primary);margin:0;overflow-wrap:anywhere}
+.plugin-access-id{font:10px 'JetBrains Mono',monospace;color:var(--text-muted);margin:3px 0 8px;overflow-wrap:anywhere}
+.plugin-access-status{flex:none;border:1px solid var(--border);border-radius:999px;padding:2px 6px;color:var(--text-secondary);font-size:10px;white-space:nowrap}
+.plugin-access-status[data-status="ready"]{color:var(--success);border-color:color-mix(in srgb,var(--success) 50%,var(--border))}
+.plugin-access-status[data-status="failed"]{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 50%,var(--border))}
+.plugin-access-status[data-status="pending"]{color:var(--warning);border-color:color-mix(in srgb,var(--warning) 50%,var(--border))}
+.plugin-access-facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:3px 8px;margin:0 0 7px;font-size:10px}
+.plugin-access-facts dt{color:var(--text-muted)}
+.plugin-access-facts dd{margin:0;color:var(--text-secondary);overflow-wrap:anywhere}
+.plugin-access-capabilities,.plugin-access-failure{font-size:10px;line-height:1.4;color:var(--text-secondary);margin:5px 0 0;overflow-wrap:anywhere}
+.plugin-access-failure{color:var(--danger)}
+.plugin-access-actions{display:flex;justify-content:flex-end;margin-top:8px}
+.plugin-access-empty{font-size:11px;line-height:1.45;color:var(--text-muted);margin:0}
 
 /* === IMAGE INFO === */
 .info-grid{display:grid;grid-template-columns:auto 1fr;gap:2px 8px}
@@ -5519,6 +5536,7 @@ const OS = {
     _cropRegion: null,
     plugins: [],
     _pluginRecords: new Map(),
+    _pluginPreferenceViews: new Set(),
     _pluginConsents: null,
     _pluginConsentStorageKey: 'openshop.plugin-consents.v1',
     _pluginProtocolVersion: 1,
@@ -24590,6 +24608,12 @@ self.onmessage = async function(event) {
                 <div class="pref-row"><label>Snap zoom to integer ratios</label><input id="pref-pixel-zoom" type="checkbox" ${this._pixelZoomSnap ? 'checked' : ''}></div>
                 <div class="pref-row"><label>Language</label><select id="pref-lang"><option value="en" ${this._lang === 'en' ? 'selected' : ''}>English</option><option value="zh" ${this._lang === 'zh' ? 'selected' : ''}>简体中文</option></select></div>
             </div>
+            <div class="pref-section" data-plugin-access>
+                <h4>Plugin access</h4>
+                <p class="plugin-access-intro">Review sandbox grants and source provenance. Revoking access removes saved approval and unloads the plugin immediately.</p>
+                <div data-plugin-access-list role="list" aria-label="Plugin access grants"></div>
+                <p class="plugin-access-empty" data-plugin-access-empty role="status">No plugin grants have been saved.</p>
+            </div>
             <div class="pref-actions" style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px">
                 <button class="btn" type="button" data-pref-export>Export Settings</button>
                 <button class="btn" type="button" data-pref-import>Import Settings</button>
@@ -24606,7 +24630,9 @@ self.onmessage = async function(event) {
         o.querySelector('[data-pref-export]').addEventListener('click', () => this.exportSettings());
         o.querySelector('[data-pref-import]').addEventListener('click', () => this.importSettings());
         o.querySelector('[data-pref-reset]').addEventListener('click', () => this.resetPreferences(o));
-        document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('show'));
+        document.body.appendChild(o);
+        this._attachPluginPreferenceView(o.querySelector('[data-plugin-access]'));
+        requestAnimationFrame(() => o.classList.add('show'));
     },
     _applyPreferences(overlay) {
         const limit = this._importLimits.maxImageDimension;
@@ -31568,6 +31594,152 @@ self.onmessage = async function(e) {
         console.error('Plugin:', message);
         return undefined;
     },
+    _pluginFailureSnapshot(error) {
+        return {
+            message:this._safeText(error?.message || error || 'Plugin failed', 240),
+            at:new Date().toISOString()
+        };
+    },
+    _pluginRememberFailure(record, error) {
+        if (!record) return null;
+        const failure = this._pluginFailureSnapshot(error);
+        record.lastFailure = failure;
+        const consent = this._pluginLoadConsents().get(record.id);
+        if (consent) {
+            consent.lastFailure = failure;
+            this._pluginPersistConsents();
+        }
+        this._refreshPluginPreferenceViews();
+        return failure;
+    },
+    _pluginPreferenceEntries() {
+        const entries = new Map();
+        this.listPluginConsents().forEach(consent => {
+            entries.set(consent.id, {
+                id:consent.id,
+                name:consent.name || consent.id,
+                version:consent.version,
+                sourceHash:consent.sourceHash,
+                capabilities:[...consent.capabilities],
+                allowedAt:consent.allowedAt || null,
+                state:'consented',
+                lastFailure:consent.lastFailure || null
+            });
+        });
+        this.listPlugins().forEach(plugin => {
+            const previous = entries.get(plugin.id) || {};
+            entries.set(plugin.id, {
+                ...previous,
+                id:plugin.id,
+                name:plugin.name || previous.name || plugin.id,
+                version:plugin.manifest?.version || previous.version || 'unknown',
+                sourceHash:plugin.sourceHash || previous.sourceHash || '',
+                capabilities:[...(plugin.capabilities || previous.capabilities || [])],
+                allowedAt:plugin.allowedAt || previous.allowedAt || null,
+                state:plugin.state || 'unknown',
+                lastFailure:plugin.lastFailure || previous.lastFailure || null
+            });
+        });
+        return [...entries.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    },
+    _pluginStatusLabel(state) {
+        return ({
+            consented:'Granted · not loaded',
+            pending:'Loading',
+            ready:'Ready',
+            failed:'Failed',
+            disposed:'Disposed'
+        })[state] || 'Unknown';
+    },
+    _renderPluginPreferenceView(root) {
+        const list = root?.querySelector('[data-plugin-access-list]');
+        const empty = root?.querySelector('[data-plugin-access-empty]');
+        if (!list) return;
+        const entries = this._pluginPreferenceEntries();
+        list.replaceChildren();
+        if (empty) empty.hidden = entries.length > 0;
+        entries.forEach(entry => {
+            const card = document.createElement('article');
+            card.className = 'plugin-access-card';
+            card.dataset.pluginAccessId = entry.id;
+            card.setAttribute('role', 'listitem');
+
+            const heading = document.createElement('div');
+            heading.className = 'plugin-access-heading';
+            const name = document.createElement('h5');
+            name.textContent = entry.name;
+            const status = document.createElement('span');
+            status.className = 'plugin-access-status';
+            status.dataset.status = entry.state;
+            status.textContent = this._pluginStatusLabel(entry.state);
+            heading.append(name, status);
+
+            const id = document.createElement('p');
+            id.className = 'plugin-access-id';
+            id.textContent = entry.id;
+
+            const facts = document.createElement('dl');
+            facts.className = 'plugin-access-facts';
+            const addFact = (label, value) => {
+                const term = document.createElement('dt');
+                term.textContent = label;
+                const description = document.createElement('dd');
+                description.textContent = value || '—';
+                facts.append(term, description);
+            };
+            addFact('Version', entry.version);
+            addFact('Source digest', entry.sourceHash);
+            addFact('Granted at', entry.allowedAt);
+
+            const capabilities = document.createElement('p');
+            capabilities.className = 'plugin-access-capabilities';
+            capabilities.textContent = `Granted capabilities: ${entry.capabilities.length ? entry.capabilities.join(', ') : 'none'}`;
+
+            const content = [heading, id, facts, capabilities];
+            if (entry.lastFailure?.message) {
+                const failure = document.createElement('p');
+                failure.className = 'plugin-access-failure';
+                failure.setAttribute('role', 'status');
+                failure.textContent = `Last failure: ${entry.lastFailure.message}${entry.lastFailure.at ? ` (${entry.lastFailure.at})` : ''}`;
+                content.push(failure);
+            }
+
+            const actions = document.createElement('div');
+            actions.className = 'plugin-access-actions';
+            const revoke = document.createElement('button');
+            revoke.type = 'button';
+            revoke.className = 'btn btn-danger';
+            revoke.dataset.pluginRevoke = entry.id;
+            revoke.setAttribute('aria-label', `Revoke access for ${entry.name}`);
+            revoke.textContent = 'Revoke access';
+            revoke.addEventListener('click', () => {
+                revoke.disabled = true;
+                const removed = this.removePluginConsent(entry.id);
+                if (removed) {
+                    this.toast(`Plugin access revoked: ${entry.name}`, 'success');
+                    this._announceAccessibility(`Plugin access revoked for ${entry.name}`);
+                } else {
+                    revoke.disabled = false;
+                    this.toast('Plugin access could not be revoked', 'error');
+                }
+            });
+            actions.append(revoke);
+            content.push(actions);
+            card.append(...content);
+            list.append(card);
+        });
+    },
+    _attachPluginPreferenceView(root) {
+        if (!root) return;
+        this._pluginPreferenceViews.add(root);
+        this._renderPluginPreferenceView(root);
+    },
+    _refreshPluginPreferenceViews() {
+        this._pluginPreferenceViews.forEach(root => {
+            if (!root?.isConnected) this._pluginPreferenceViews.delete(root);
+            else this._renderPluginPreferenceView(root);
+        });
+    },
     _pluginCapabilitiesFor(input) {
         if (input === undefined) return [];
         if (!Array.isArray(input)) throw new Error('Plugin capabilities must be an array');
@@ -31620,7 +31792,13 @@ self.onmessage = async function(e) {
                             name:this._safeText(value.name, 80),
                             sourceHash:this._safeText(value.sourceHash, 80).toLowerCase(),
                             capabilities:Array.isArray(value.capabilities) ? value.capabilities.slice(0, this._pluginCapabilities.length) : [],
-                            allowedAt:this._safeText(value.allowedAt, 40)
+                            allowedAt:this._safeText(value.allowedAt, 40),
+                            lastFailure:value.lastFailure && typeof value.lastFailure === 'object'
+                                ? {
+                                    message:this._safeText(value.lastFailure.message, 240),
+                                    at:this._safeText(value.lastFailure.at, 40)
+                                }
+                                : null
                         });
                     }
                 });
@@ -31649,7 +31827,8 @@ self.onmessage = async function(e) {
             name:manifest.name,
             sourceHash:manifest.sourceHash,
             capabilities:[...manifest.capabilities],
-            allowedAt:new Date().toISOString()
+            allowedAt:new Date().toISOString(),
+            lastFailure:null
         });
         if (this._pluginPersistConsents()) return true;
         if (previous) consents.set(manifest.id, previous);
@@ -31657,7 +31836,11 @@ self.onmessage = async function(e) {
         return false;
     },
     listPluginConsents() {
-        return [...this._pluginLoadConsents().values()].map(value => ({ ...value, capabilities:[...value.capabilities] }));
+        return [...this._pluginLoadConsents().values()].map(value => ({
+            ...value,
+            capabilities:[...value.capabilities],
+            lastFailure:value.lastFailure ? { ...value.lastFailure } : null
+        }));
     },
     removePluginConsent(pluginOrId) {
         const id = typeof pluginOrId === 'string' ? pluginOrId : pluginOrId?.manifest?.id || pluginOrId?.id;
@@ -31665,12 +31848,20 @@ self.onmessage = async function(e) {
         const consents = this._pluginLoadConsents();
         const previous = consents.get(id);
         const removed = consents.delete(id);
-        [...this._pluginRecords.values()].filter(record => record.manifest.id === id).forEach(record => this.disposePlugin(record.id));
-        if (removed && !this._pluginPersistConsents()) {
-            consents.set(id, previous);
+        const records = [...this._pluginRecords.values()].filter(record => record.manifest.id === id);
+        if (!removed) {
+            records.forEach(record => this.disposePlugin(record.id));
+            this._refreshPluginPreferenceViews();
             return false;
         }
-        return removed;
+        if (!this._pluginPersistConsents()) {
+            consents.set(id, previous);
+            this._refreshPluginPreferenceViews();
+            return false;
+        }
+        records.forEach(record => this.disposePlugin(record.id));
+        this._refreshPluginPreferenceViews();
+        return true;
     },
     async _pluginVerifySource(record) {
         const actual = await this._pluginSourceHash(record.source);
@@ -31695,8 +31886,15 @@ self.onmessage = async function(e) {
     _pluginResolveReady(record, value) {
         if (record.state !== 'pending' || record.disposed) return false;
         record.state = 'ready';
+        record.lastFailure = null;
+        const consent = this._pluginLoadConsents().get(record.id);
+        if (consent?.lastFailure) {
+            consent.lastFailure = null;
+            this._pluginPersistConsents();
+        }
         clearTimeout(record.readyTimeout);
         record.readyResolve(value);
+        this._refreshPluginPreferenceViews();
         return true;
     },
     _pluginRejectReady(record, error) {
@@ -31705,6 +31903,7 @@ self.onmessage = async function(e) {
         record.state = 'failed';
         record.readyError = reason;
         clearTimeout(record.readyTimeout);
+        this._pluginRememberFailure(record, reason);
         record.readyReject(reason);
         this._pluginTearDown(record, reason, { keepRecord:true });
         return true;
@@ -31727,6 +31926,7 @@ self.onmessage = async function(e) {
         record.iframe?.remove();
         this.plugins = this.plugins.filter(handle => handle.id !== record.id);
         if (!keepRecord) this._pluginRecords.delete(record.id);
+        this._refreshPluginPreferenceViews();
         return true;
     },
     _pluginDocumentSummary() {
@@ -31773,7 +31973,11 @@ self.onmessage = async function(e) {
             if (!pending) return;
             record.pending.delete(requestId);
             clearTimeout(pending.timeout);
-            if (data.ok === false) pending.reject(new Error(this._safeText(data.error || 'Plugin command failed', 200)));
+            if (data.ok === false) {
+                const reason = new Error(this._safeText(data.error || 'Plugin command failed', 200));
+                this._pluginRememberFailure(record, reason);
+                pending.reject(reason);
+            }
             else pending.resolve(data.result);
             return;
         }
@@ -31842,7 +32046,9 @@ self.onmessage = async function(e) {
         return new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
                 record.pending.delete(requestId);
-                reject(new Error('Plugin command timed out'));
+                const reason = new Error('Plugin command timed out');
+                this._pluginRememberFailure(record, reason);
+                reject(reason);
             }, 10000);
             record.pending.set(requestId, { resolve, reject, timeout });
             if (!this._pluginPost(record, { type:'openshop:command-invoked', commandId, requestId })) {
@@ -31938,6 +32144,7 @@ self.onmessage = async function(e) {
             pending:new Map(),
             disposed:false,
             state:'pending',
+            lastFailure:null,
             readyError:null,
             readyResolve:null,
             readyReject:null,
@@ -31970,6 +32177,7 @@ self.onmessage = async function(e) {
         record.handle = handle;
         this._pluginRecords.set(record.id, record);
         this.plugins.push(handle);
+        this._refreshPluginPreferenceViews();
         iframe.addEventListener('load', () => this._pluginVerifyAndStart(record), { once:true });
         iframe.addEventListener('error', () => this._pluginRejectReady(record, new Error('Plugin sandbox failed to load')), { once:true });
         iframe.src = record.helperUrl;
@@ -31986,7 +32194,9 @@ self.onmessage = async function(e) {
             capabilities:[...record.capabilities],
             protocolVersion:this._pluginProtocolVersion,
             state:record.state,
-            ready:record.state === 'ready' && !record.disposed
+            ready:record.state === 'ready' && !record.disposed,
+            allowedAt:this._pluginLoadConsents().get(record.id)?.allowedAt || null,
+            lastFailure:record.lastFailure ? { ...record.lastFailure } : null
         }));
     },
     disposePlugin(pluginOrId) {

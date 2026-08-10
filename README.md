@@ -156,9 +156,12 @@ plugin.dispose();
 
 The host validates the protocol version, opaque frame source, token, capability for every
 request, source hash, and bounded labels/commands. Network, file, DOM, and document-write
-capabilities are not available. `listPluginConsents()` and `removePluginConsent(id)` expose
-the persisted allow list; `dispose()` removes the frame, listener, commands, and pending
-requests without revoking consent.
+capabilities are not available. **Edit → Preferences → Plugin access** lists each saved grant
+with its version, source digest, lifecycle status, granted capabilities, and most recent
+failure; **Revoke access** removes the persisted approval, unloads the frame, and rejects
+pending requests. `listPluginConsents()` and `removePluginConsent(id)` expose the same allow
+list programmatically. `dispose()` removes the frame, listener, commands, and pending requests
+without revoking consent.
 
 ## Keyboard Shortcuts
 

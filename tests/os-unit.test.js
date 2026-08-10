@@ -693,7 +693,16 @@ describe('OpenShop core object', () => {
     expect(record.state).toBe('failed');
     expect(record.disposed).toBe(true);
     expect(record.iframe.isConnected).toBe(false);
-    expect(OS.listPlugins()).toEqual([expect.objectContaining({ id:record.id, state:'failed', ready:false })]);
+    expect(OS.listPlugins()).toEqual([expect.objectContaining({
+      id:record.id,
+      state:'failed',
+      ready:false,
+      lastFailure:expect.objectContaining({ message:'plugin boot failed' })
+    })]);
+    expect(OS.listPluginConsents()).toEqual([expect.objectContaining({
+      id:record.id,
+      lastFailure:expect.objectContaining({ message:'plugin boot failed' })
+    })]);
     expect(() => OS._handlePluginRequest(record, { method:'get-document', args:{} })).toThrow('plugin boot failed');
     await expect(OS._invokePluginCommand(record, 'late-command')).rejects.toThrow('plugin boot failed');
 
@@ -726,12 +735,54 @@ describe('OpenShop core object', () => {
       expect(error).toMatchObject({ message:'Plugin handshake timed out' });
       expect(record.state).toBe('failed');
       expect(record.disposed).toBe(true);
-      expect(OS.listPlugins()).toEqual([expect.objectContaining({ id:record.id, state:'failed', ready:false })]);
+      expect(OS.listPlugins()).toEqual([expect.objectContaining({
+        id:record.id,
+        state:'failed',
+        ready:false,
+        lastFailure:expect.objectContaining({ message:'Plugin handshake timed out' })
+      })]);
       await expect(OS._invokePluginCommand(record, 'late-command')).rejects.toThrow('Plugin handshake timed out');
       expect(handle.dispose()).toBe(true);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('audits plugin grants in Preferences and revokes them without reloading', async () => {
+    const OS = loadOpenShop();
+    quietUiMethods(OS);
+    const view = document.createElement('section');
+    view.innerHTML = '<div data-plugin-access-list role="list"></div><p data-plugin-access-empty></p>';
+    document.body.append(view);
+    OS._attachPluginPreferenceView(view);
+
+    const source = 'window.addEventListener("message", () => {});';
+    const manifest = {
+      id:'com.example.preference-audit', version:'1.2.3', name:'Preference Audit',
+      sourceHash:await OS._pluginSourceHash(source), capabilities:['commands', 'ui:toast'], minApiVersion:1
+    };
+    const handle = OS.registerPlugin({ manifest, source }, { consent:true });
+    const record = OS._pluginRecords.get(handle.id);
+    OS._pluginResolveReady(record, handle);
+
+    const card = view.querySelector('[data-plugin-access-id="com.example.preference-audit"]');
+    expect(card).not.toBeNull();
+    expect(card.textContent).toContain('Preference Audit');
+    expect(card.textContent).toContain('1.2.3');
+    expect(card.textContent).toContain(manifest.sourceHash);
+    expect(card.textContent).toContain('commands, ui:toast');
+    expect(card.querySelector('.plugin-access-status').textContent).toBe('Ready');
+
+    const rejected = vi.fn();
+    record.pending.set('queued-call', { resolve:vi.fn(), reject:rejected, timeout:setTimeout(() => {}, 10000) });
+    card.querySelector('[data-plugin-revoke]').click();
+
+    expect(OS.listPluginConsents()).toEqual([]);
+    expect(OS.listPlugins()).toEqual([]);
+    expect(record.disposed).toBe(true);
+    expect(rejected).toHaveBeenCalledWith(expect.objectContaining({ message:'Plugin disposed' }));
+    expect(view.querySelector('[data-plugin-access-empty]').hidden).toBe(false);
+    expect(OS.registerPlugin({ manifest, source })).toBeUndefined();
   });
 
   it('keeps overlapping embed export deliveries request-scoped', async () => {

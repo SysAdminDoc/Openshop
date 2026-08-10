@@ -8730,6 +8730,49 @@ test('registers a sandbox plugin and lets it contribute a command', async ({ pag
   expect(result.commandRemoved).toBe(true);
 });
 
+test('audits plugin provenance and revokes the grant from Preferences', async ({ page }) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).click();
+
+  const manifest = await page.evaluate(async () => {
+    const source = 'window.addEventListener("message", () => {});';
+    const manifest = {
+      id:'com.example.preferences-plugin', version:'2.4.1', name:'Preferences Plugin',
+      sourceHash:await OS._pluginSourceHash(source), capabilities:['commands', 'document:read'], minApiVersion:1
+    };
+    const handle = OS.registerPlugin({ manifest, source }, { consent:true });
+    await handle.ready;
+    OS.showPreferences();
+    return manifest;
+  });
+
+  const preferences = page.locator('.modal-overlay').filter({ has: page.getByRole('heading', { name:'Preferences' }) }).last();
+  const card = preferences.locator(`[data-plugin-access-id="${manifest.id}"]`);
+  await expect(card).toContainText('Preferences Plugin');
+  await expect(card).toContainText('2.4.1');
+  await expect(card).toContainText(manifest.sourceHash);
+  await expect(card).toContainText('commands, document:read');
+  await expect(card.locator('.plugin-access-status')).toHaveText('Ready');
+  await expect(card.getByRole('button', { name:'Revoke access for Preferences Plugin' })).toBeVisible();
+
+  await card.getByRole('button', { name:'Revoke access for Preferences Plugin' }).click();
+  await expect(card).toHaveCount(0);
+  await expect(preferences.locator('[data-plugin-access-empty]')).toBeVisible();
+  await expect(preferences.getByRole('button', { name:'Revoke access for Preferences Plugin' })).toHaveCount(0);
+
+  const state = await page.evaluate(manifest => {
+    const source = 'window.addEventListener("message", () => {});';
+    return {
+      consents:OS.listPluginConsents(),
+      plugins:OS.listPlugins(),
+      reRegister:OS.registerPlugin({ manifest, source })
+    };
+  }, manifest);
+  expect(state.consents).toEqual([]);
+  expect(state.plugins).toEqual([]);
+  expect(state.reRegister).toBeUndefined();
+});
+
 test('only runs Photon for operations that match the JavaScript worker exactly', async ({ page }) => {
   test.setTimeout(120000);
   await openApp(page);
