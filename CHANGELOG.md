@@ -5,6 +5,7 @@ All notable changes to Openshop will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Pinned the release workflow's GitHub Actions to immutable commit SHAs with release tags, explicit read-only job permissions, weekly Dependabot coverage, and a regression test for the supply-chain contract.
 - Added a checkout identity endpoint and Playwright content-token gate for hosted/offline runs, with immutable local source identity, fresh CI servers, and a tagged Chromium/Firefox/WebKit offline subset.
 - Added a machine-readable compatibility corpus with synthetic OpenShop schema/mask/animation boundaries, PSD/PDF loss vectors, and provenance-linked upstream PSD, GIF, and EXIF fixtures; Vitest now round-trips dimensions, layer hierarchy, masks, frame timing, metadata, and malformed-input reports.
 - Added a keyboard-accessible Plugin access section in Preferences with per-plugin version, source digest, lifecycle status, granted capabilities, failure details, and immediate revocation that removes persisted consent and unloads the sandbox.
