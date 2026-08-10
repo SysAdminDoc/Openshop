@@ -51,6 +51,9 @@ All notable changes to Openshop will be documented in this file.
   fullscreen now expose their current state visually and through `aria-checked`.
 
 ### Fixed
+- Offline shell promotion now copies into a verified candidate cache, persists
+  a resume marker before the copy, flips the active-cache pointer only after
+  verification, and retains the previous shell until the new one is active.
 - Silent recovery, editor-stroke, inspector, embed, offline, and AI runtime
   failures now enter the diagnostics ring and show an accessible error toast;
   recovery discovery, AI model loading, and verified runtime assets expose a

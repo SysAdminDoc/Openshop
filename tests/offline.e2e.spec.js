@@ -375,4 +375,71 @@ test.describe('hosted offline contract', () => {
     await expect(page.locator('#editor-canvas')).toBeVisible();
     await context.setOffline(false);
   });
+
+  test('resumes an interrupted promotion without replacing the verified shell', async ({ page, request }) => {
+    test.setTimeout(120000);
+    await page.goto(`${origin}/`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => document.documentElement.dataset.osBoot === 'ready', null, { timeout: 60000 });
+    await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
+    const before = await page.evaluate(() => OS._requestOfflineWorker('OPENSHOP_GET_STATUS'));
+    expect(before.shellReady).toBe(true);
+
+    // A test-only service-worker URL aborts after the first candidate write.
+    // The old worker remains active, so the page can still ask it for status.
+    await setServerState(request, { revision:'test-v2-promotion' });
+    const interrupted = await page.evaluate(async () => {
+      const registration = await navigator.serviceWorker.register(
+        './sw.js?openshop-test-abort-promotion=1',
+        { scope:'./', updateViaCache:'none' }
+      );
+      const installing = registration.installing || await new Promise(resolve => {
+        registration.addEventListener('updatefound', () => resolve(registration.installing), { once:true });
+      });
+      await new Promise(resolve => {
+        if (installing.state === 'redundant') return resolve();
+        installing.addEventListener('statechange', () => {
+          if (installing.state === 'redundant') resolve();
+        });
+      });
+      const status = await OS._requestOfflineWorker('OPENSHOP_GET_STATUS');
+      return { installState:installing.state, status };
+    });
+    expect(interrupted.installState).toBe('redundant');
+    expect(interrupted.status.activeRevision).toBe(before.activeRevision);
+    expect(interrupted.status.shellReady).toBe(true);
+
+    // Removing the interruption flag lets a fresh worker consume the retained
+    // staging cache and candidate, proving the marker is resumable as well as
+    // keeping the old shell alive during the failed attempt.
+    const resumed = await page.evaluate(async () => {
+      const registration = await navigator.serviceWorker.register(
+        './sw.js?openshop-test-abort-promotion=0',
+        { scope:'./', updateViaCache:'none' }
+      );
+      const installing = registration.installing || await new Promise(resolve => {
+        registration.addEventListener('updatefound', () => resolve(registration.installing), { once:true });
+      });
+      await new Promise((resolve, reject) => {
+        if (installing.state === 'installed') return resolve();
+        if (installing.state === 'redundant') return reject(new Error('Resumed promotion became redundant'));
+        installing.addEventListener('statechange', () => {
+          if (installing.state === 'installed') resolve();
+          if (installing.state === 'redundant') reject(new Error('Resumed promotion became redundant'));
+        });
+      });
+      const waiting = registration.waiting;
+      await new Promise((resolve, reject) => {
+        const channel = new MessageChannel();
+        channel.port1.onmessage = event => event.data?.ok ? resolve() : reject(new Error(event.data?.error));
+        waiting.postMessage({ type:'OPENSHOP_APPLY_UPDATE' }, [channel.port2]);
+      });
+      await new Promise(resolve => {
+        if (navigator.serviceWorker.controller?.scriptURL.includes('openshop-test-abort-promotion=0')) return resolve();
+        navigator.serviceWorker.addEventListener('controllerchange', resolve, { once:true });
+      });
+      return OS._requestOfflineWorker('OPENSHOP_GET_STATUS');
+    });
+    expect(resumed.activeRevision).toBe('test-v2-promotion');
+    expect(resumed.shellReady).toBe(true);
+  });
 });

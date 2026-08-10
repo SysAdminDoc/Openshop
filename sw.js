@@ -22,6 +22,18 @@ const SHELL_CACHE_PREFIX = 'openshop-shell-';
 const SHELL_CACHE = `${SHELL_CACHE_PREFIX}${SHELL_REVISION}`;
 // Scratch space so a failed stage cannot destroy a working offline install.
 const STAGING_CACHE = `${SHELL_CACHE}-staging`;
+// Promotion writes into a separate, verified cache. The state pointer flips
+// only after that cache is complete, so a worker terminated during copying
+// leaves the active shell untouched and can resume from the staging cache.
+const PROMOTION_CACHE = `${SHELL_CACHE}-candidate`;
+const PROMOTION_RETRY_CACHE = `${PROMOTION_CACHE}-retry`;
+const PROMOTION_ABORT_AFTER = (() => {
+    try {
+        return Number(new URL(self.location.href).searchParams.get('openshop-test-abort-promotion')) || 0;
+    } catch {
+        return 0;
+    }
+})();
 // Versioned with the shell: an unversioned runtime cache meant a fix to any
 // non-enumerated asset never reached a client that had already cached it.
 const RUNTIME_CACHE_PREFIX = 'openshop-runtime-';
@@ -87,6 +99,25 @@ function shellCacheName(revision) {
     return `${SHELL_CACHE_PREFIX}${revision}`;
 }
 
+function trustedCacheName(value, revision) {
+    if (typeof value !== 'string' || !revision) return null;
+    if (value === shellCacheName(revision)) return value;
+    if (value === `${shellCacheName(revision)}-candidate`
+        || value === `${shellCacheName(revision)}-candidate-retry`) return value;
+    return null;
+}
+
+function isPromotionCacheName(value, revision = SHELL_REVISION) {
+    return value === `${shellCacheName(revision)}-candidate`
+        || value === `${shellCacheName(revision)}-candidate-retry`;
+}
+
+function cacheNameForState(state, revision) {
+    if (revision === state.activeRevision && state.activeCache) return state.activeCache;
+    if (revision === state.previousRevision && state.previousCache) return state.previousCache;
+    return shellCacheName(revision);
+}
+
 function resolveAsset(asset) {
     return new URL(asset, SCOPE_URL).href;
 }
@@ -98,6 +129,10 @@ function defaultState() {
         activeRevision: null,
         previousRevision: null,
         stagedRevision: null,
+        activeCache: null,
+        previousCache: null,
+        stagedCache: null,
+        promotion: null,
         confirmed: false,
         trialStarted: false,
         trialAttempts: 0,
@@ -114,6 +149,20 @@ function trustedRevision(value) {
 function sanitizeState(state) {
     const activeRevision = trustedRevision(state.activeRevision);
     const previousRevision = trustedRevision(state.previousRevision);
+    const activeCache = activeRevision
+        ? trustedCacheName(state.activeCache, activeRevision) || shellCacheName(activeRevision)
+        : null;
+    const previousCache = previousRevision
+        ? trustedCacheName(state.previousCache, previousRevision) || shellCacheName(previousRevision)
+        : null;
+    const stagedRevision = state.stagedRevision === SHELL_REVISION ? SHELL_REVISION : null;
+    const stagedCache = stagedRevision
+        ? trustedCacheName(state.stagedCache, stagedRevision) || shellCacheName(stagedRevision)
+        : null;
+    const promotion = state.promotion?.revision === SHELL_REVISION
+        && isPromotionCacheName(state.promotion.cache)
+        ? { revision:SHELL_REVISION, cache:state.promotion.cache }
+        : null;
     const reports = Object.fromEntries(
         Object.entries(state.reports || {}).filter(([revision]) => TRUSTED_SHELL_REVISIONS.has(revision))
     );
@@ -121,7 +170,11 @@ function sanitizeState(state) {
         ...state,
         activeRevision,
         previousRevision: previousRevision === activeRevision ? null : previousRevision,
-        stagedRevision: state.stagedRevision === SHELL_REVISION ? SHELL_REVISION : null,
+        activeCache,
+        previousCache: previousRevision === activeRevision ? null : previousCache,
+        stagedRevision,
+        stagedCache,
+        promotion,
         reports
     };
 }
@@ -171,35 +224,56 @@ async function fetchAndCache(cache, asset) {
     await cache.put(href, response.clone());
 }
 
-// Staging used to fetch straight into the live shell cache, after deleting it.
-// Since restageShell() runs against the *active* revision, a re-stage on a bad
-// connection wiped the working offline install and then failed — and after a
-// rollback, re-staging is the only recovery path, so the app was left serving
-// "not ready offline" until the network came back. Fetch into a scratch cache
-// and swap only once every required asset is in hand.
-async function promoteStagedShell() {
+async function cacheContainsAssets(cacheName, assets) {
+    const names = await caches.keys();
+    if (!names.includes(cacheName)) return false;
+    const cache = await caches.open(cacheName);
+    const matches = await Promise.all(assets.map(asset => cache.match(resolveAsset(asset))));
+    return matches.every(Boolean);
+}
+
+// The candidate cache is never the cache selected by the current state
+// pointer. Copying can therefore be resumed after a worker is terminated;
+// activation only flips the pointer after every staged entry is verified.
+async function promoteStagedShell(targetName = PROMOTION_CACHE) {
+    if (!isPromotionCacheName(targetName)) throw new Error('OpenShop shell promotion target is not trusted');
     const staging = await caches.open(STAGING_CACHE);
     const staged = await staging.keys();
     if (!staged.length) throw new Error('OpenShop shell staging produced no entries');
-    const pairs = [];
+    const candidate = await caches.open(targetName);
+    let copied = 0;
     for (const request of staged) {
         const response = await staging.match(request);
         if (!response) throw new Error(`OpenShop shell staging lost ${request.url}`);
-        pairs.push([request, response]);
+        await candidate.put(request, response.clone());
+        copied++;
+        if (PROMOTION_ABORT_AFTER && copied >= PROMOTION_ABORT_AFTER) {
+            throw new Error('OpenShop test promotion interruption');
+        }
     }
-    // Everything is in memory before the live cache is touched, so the only
-    // window where it is incomplete is a local copy that cannot fail on I/O.
-    await caches.delete(SHELL_CACHE);
-    const live = await caches.open(SHELL_CACHE);
-    for (const [request, response] of pairs) await live.put(request, response);
-    await caches.delete(STAGING_CACHE);
+    const missing = (await candidate.keys()).length < staged.length
+        || !(await Promise.all(staged.map(request => candidate.match(request)))).every(Boolean);
+    if (missing) throw new Error('OpenShop shell promotion verification failed');
+    return targetName;
 }
 
 async function stageShell() {
-    await caches.delete(STAGING_CACHE);
-    const cache = await caches.open(STAGING_CACHE);
+    let state = await readState();
+    const promotionCache = state.promotion?.cache
+        || (state.activeRevision === SHELL_REVISION && state.activeCache === PROMOTION_CACHE
+            ? PROMOTION_RETRY_CACHE
+            : PROMOTION_CACHE);
+    let cache = await caches.open(STAGING_CACHE);
+    if (!(await cacheContainsAssets(STAGING_CACHE, REQUIRED_ASSETS))) {
+        await caches.delete(STAGING_CACHE);
+        cache = await caches.open(STAGING_CACHE);
+        if (state.promotion) {
+            state = await writeState({ ...state, promotion:null });
+        }
+    }
     const requiredMissing = [];
     for (const asset of REQUIRED_ASSETS) {
+        if (await cache.match(resolveAsset(asset))) continue;
         try {
             await fetchAndCache(cache, asset);
         } catch (error) {
@@ -207,14 +281,15 @@ async function stageShell() {
         }
     }
     if (requiredMissing.length) {
-        // The live shell was never touched, so an offline-ready client stays
-        // offline-ready.
+        // The active cache and any previous verified shell were never touched.
         await caches.delete(STAGING_CACHE);
+        if (state.promotion) await writeState({ ...state, promotion:null });
         throw new Error(`OpenShop shell staging failed: ${requiredMissing.map(item => item.asset).join(', ')}`);
     }
 
     const optionalMissing = [];
     for (const asset of OPTIONAL_ASSETS) {
+        if (await cache.match(resolveAsset(asset))) continue;
         try {
             await fetchAndCache(cache, asset);
         } catch (error) {
@@ -222,9 +297,6 @@ async function stageShell() {
         }
     }
 
-    await promoteStagedShell();
-
-    const state = await readState();
     const reports = {
         ...state.reports,
         [SHELL_REVISION]: {
@@ -241,16 +313,28 @@ async function stageShell() {
     };
     const revisions = Object.keys(reports);
     while (revisions.length > 4) delete reports[revisions.shift()];
-    await writeState({
+    // Persist a resume marker before touching the candidate. If the worker is
+    // killed during promotion, the next install/activation can finish this
+    // exact staged copy without refetching or risking the active shell.
+    state = await writeState({
         ...state,
-        stagedRevision: SHELL_REVISION,
+        promotion:{ revision:SHELL_REVISION, cache:promotionCache },
         reports
     });
+    await promoteStagedShell(promotionCache);
+    await writeState({
+        ...state,
+        stagedRevision:SHELL_REVISION,
+        stagedCache:promotionCache,
+        promotion:null,
+        reports
+    });
+    await caches.delete(STAGING_CACHE);
 }
 
-async function trimShellCaches(keepRevisions) {
+async function trimShellCaches(keepRevisions, keepCaches = []) {
     const revisions = [...keepRevisions].filter(Boolean);
-    const keep = new Set(revisions.map(shellCacheName));
+    const keep = new Set([...keepCaches, ...revisions.map(shellCacheName)].filter(Boolean));
     // A trim landing mid-stage must not delete the scratch cache under it.
     keep.add(STAGING_CACHE);
     const keepRuntime = new Set(revisions.map(revision => `${RUNTIME_CACHE_PREFIX}${revision}`));
@@ -307,12 +391,43 @@ function responseAllowsRuntimeCaching(response) {
 
 async function activateShell() {
     let state = await readState();
-    if (state.stagedRevision === SHELL_REVISION && state.activeRevision !== SHELL_REVISION) {
+    if (state.promotion?.revision === SHELL_REVISION) {
+        // An install may have been terminated after the resume marker was
+        // written but before the candidate copy completed. Activation is the
+        // next durable opportunity to finish it.
+        await promoteStagedShell(state.promotion.cache);
         state = await writeState({
             ...state,
-            previousRevision: state.activeRevision,
+            stagedRevision:SHELL_REVISION,
+            stagedCache:state.promotion.cache,
+            promotion:null
+        });
+    }
+    if (state.stagedRevision === SHELL_REVISION) {
+        const candidate = state.stagedCache || shellCacheName(SHELL_REVISION);
+        const report = state.reports?.[SHELL_REVISION] || {};
+        const requiredAssets = Array.isArray(report.requiredAssets) && report.requiredAssets.length
+            ? report.requiredAssets
+            : REQUIRED_ASSETS;
+        if (!(await cacheContainsAssets(candidate, requiredAssets))) {
+            await self.clients.claim();
+            return;
+        }
+        const oldRevision = state.activeRevision;
+        const oldCache = oldRevision ? cacheNameForState(state, oldRevision) : null;
+        const replacingSameRevision = oldRevision === SHELL_REVISION;
+        const previousRevision = replacingSameRevision ? state.previousRevision : oldRevision;
+        const previousCache = replacingSameRevision
+            ? state.previousCache
+            : oldCache;
+        state = await writeState({
+            ...state,
+            previousRevision,
+            previousCache,
             activeRevision: SHELL_REVISION,
+            activeCache:candidate,
             stagedRevision: null,
+            stagedCache:null,
             confirmed: !state.activeRevision,
             trialStarted: false,
             rolledBackFrom: null,
@@ -323,12 +438,14 @@ async function activateShell() {
         state = await writeState({
             ...state,
             activeRevision: SHELL_REVISION,
+            activeCache:SHELL_CACHE,
             stagedRevision: null,
+            stagedCache:null,
             confirmed: true,
             activatedAt: new Date().toISOString()
         });
     }
-    await trimShellCaches([state.activeRevision, state.previousRevision, SHELL_REVISION]);
+    await trimShellCaches([state.previousRevision], [state.activeCache, state.previousCache]);
     await self.clients.claim();
 }
 
@@ -342,10 +459,13 @@ async function revisionForNavigation() {
         if (attempts > MAX_TRIAL_NAVIGATIONS) {
             const failedRevision = state.activeRevision;
             const fallbackRevision = state.previousRevision;
+            const fallbackCache = cacheNameForState(state, fallbackRevision);
             state = await writeState({
                 ...state,
                 activeRevision: fallbackRevision,
+                activeCache:fallbackCache,
                 previousRevision: null,
+                previousCache:null,
                 confirmed: true,
                 trialStarted: false,
                 trialAttempts: 0,
@@ -355,7 +475,7 @@ async function revisionForNavigation() {
             });
             // The failed shell cache is kept so a re-stage can recover without
             // waiting for a new SHELL_REVISION to ship.
-            return state.activeRevision;
+            return { revision:state.activeRevision, cacheName:state.activeCache };
         }
         state = await writeState({
             ...state,
@@ -364,7 +484,8 @@ async function revisionForNavigation() {
             trialStartedAt: state.trialStartedAt || new Date().toISOString()
         });
     }
-    return state.activeRevision || SHELL_REVISION;
+    const revision = state.activeRevision || SHELL_REVISION;
+    return { revision, cacheName:cacheNameForState(state, revision) };
 }
 
 async function activeRevision() {
@@ -372,8 +493,8 @@ async function activeRevision() {
     return state.activeRevision || SHELL_REVISION;
 }
 
-async function cachedShellResponse(request, revision, navigation = false) {
-    const cache = await caches.open(shellCacheName(revision));
+async function cachedShellResponse(request, revision, navigation = false, cacheName = shellCacheName(revision)) {
+    const cache = await caches.open(cacheName);
     if (navigation) {
         return await cache.match(resolveAsset('./index.html'))
             || await cache.match(resolveAsset('./'));
@@ -382,8 +503,8 @@ async function cachedShellResponse(request, revision, navigation = false) {
 }
 
 async function handleNavigation(request) {
-    const revision = await revisionForNavigation();
-    const cached = await cachedShellResponse(request, revision, true);
+    const target = await revisionForNavigation();
+    const cached = await cachedShellResponse(request, target.revision, true, target.cacheName);
     if (cached) return cached;
     try {
         return await fetch(request);
@@ -396,8 +517,9 @@ async function handleNavigation(request) {
 }
 
 async function handleAsset(request) {
-    const revision = await activeRevision();
-    const shellResponse = await cachedShellResponse(request, revision, false);
+    const state = await readState();
+    const revision = state.activeRevision || SHELL_REVISION;
+    const shellResponse = await cachedShellResponse(request, revision, false, cacheNameForState(state, revision));
     if (shellResponse) return shellResponse;
 
     if (!isCacheableRuntimeRequest(request)) return fetchRuntimeAsset(request);
@@ -415,7 +537,7 @@ async function handleAsset(request) {
 async function statusPayload() {
     const state = await readState();
     const revision = state.activeRevision || SHELL_REVISION;
-    const cacheName = shellCacheName(revision);
+    const cacheName = cacheNameForState(state, revision);
     const cacheNames = await caches.keys();
     const report = state.reports?.[revision] || {};
     // An older revision was cached from its own manifest; checking it against
@@ -438,7 +560,8 @@ async function statusPayload() {
         optionalTotal: OPTIONAL_ASSETS.length,
         optionalCached: Number(report.optionalCached || 0),
         shellReady: requiredCached === requiredAssets.length,
-        rollbackAvailable: Boolean(state.previousRevision && cacheNames.includes(shellCacheName(state.previousRevision)))
+        rollbackAvailable: Boolean(state.previousRevision
+            && cacheNames.includes(cacheNameForState(state, state.previousRevision)))
     };
 }
 
@@ -457,7 +580,7 @@ async function confirmBoot(expectedRevision) {
         trialAttempts: 0,
         confirmedAt: new Date().toISOString()
     });
-    await trimShellCaches([confirmed.activeRevision, confirmed.previousRevision]);
+    await trimShellCaches([confirmed.previousRevision], [confirmed.activeCache, confirmed.previousCache]);
     return statusPayload();
 }
 
@@ -465,18 +588,22 @@ async function rollbackShell() {
     const state = await readState();
     if (!state.previousRevision) throw new Error('No previous verified shell is available');
     const failedRevision = state.activeRevision;
+    const failedCache = cacheNameForState(state, failedRevision);
+    const fallbackCache = cacheNameForState(state, state.previousRevision);
     const rolledBack = await writeState({
         ...state,
         activeRevision: state.previousRevision,
+        activeCache:fallbackCache,
         previousRevision: null,
+        previousCache:null,
         confirmed: true,
         trialStarted: false,
         rolledBackFrom: failedRevision,
         failedRevision,
         rollbackAt: new Date().toISOString()
     });
-    await caches.delete(shellCacheName(failedRevision));
-    await trimShellCaches([rolledBack.activeRevision]);
+    if (failedCache !== fallbackCache) await caches.delete(failedCache);
+    await trimShellCaches([], [rolledBack.activeCache]);
     return statusPayload();
 }
 
@@ -493,7 +620,8 @@ async function restageShell() {
         trialAttempts: 0,
         restagedAt: new Date().toISOString()
     });
-    if (restaged.stagedRevision === SHELL_REVISION && restaged.activeRevision !== SHELL_REVISION) {
+    if (restaged.stagedRevision === SHELL_REVISION
+        && (restaged.activeRevision !== SHELL_REVISION || restaged.activeCache !== restaged.stagedCache)) {
         await activateShell();
     }
     return statusPayload();
