@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10" id="theme-color-meta">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-6lzH46X+/hTrZozIawA7KVrXrggTy1EkOvn6jZ3l40Y=' 'sha256-DwL/oUCXz9NJVKQJcji+SLlRWt4UFEChgaOEZn8HXwQ=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-6lzH46X+/hTrZozIawA7KVrXrggTy1EkOvn6jZ3l40Y=' 'sha256-bAmqp1CrnDdJ237I7d/Bj+SSy+sxiiEqt9KZbH9Ml2o=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -5521,6 +5521,8 @@ const OS = {
     _lastORAImportReport: null,
     _lastORAExportReport: null,
     _lastImportRaw: null,
+    _lastImportExif: null,
+    _imageMetadata: { version:1, sourceFormat:null, exif:null, xmp:null, exifSegment:null, xmpSegment:null },
     _lastImportColorProfile: null,
     _lastRasterExportReport: null,
     _workingColorSpace: 'srgb',
@@ -5642,6 +5644,7 @@ const OS = {
         maxPdfPages: 512,
         maxDecodedPdfBytes: 512 * 1024 * 1024,
         maxColorProfileBytes: 4 * 1024 * 1024,
+        maxMetadataBytes: 1024 * 1024,
         maxAIMasks: 32,
         maxLayerMaskBytes: 8 * 1024 * 1024,
         maxSmartObjectBytes: 8 * 1024 * 1024,
@@ -6134,6 +6137,8 @@ const OS = {
         this._lastORAImportReport = null;
         this._lastORAExportReport = null;
         this._lastImportRaw = null;
+        this._lastImportExif = null;
+        this._imageMetadata = this._emptyImageMetadata();
         this._lastImportColorProfile = null;
         this._lastRasterExportReport = null;
         this._workingColorSpace = 'srgb';
@@ -6670,6 +6675,8 @@ const OS = {
         this._lastORAImportReport = null;
         this._lastORAExportReport = null;
         this._lastPSDExportReport = null;
+        this._lastImportExif = null;
+        this._imageMetadata = this._emptyImageMetadata();
         this._lastImportColorProfile = null;
         this._lastRasterExportReport = null;
         this._workingColorSpace = 'srgb';
@@ -7283,6 +7290,62 @@ const OS = {
             valid:Boolean(parsed || !iccData)
         };
     },
+    _emptyImageMetadata() {
+        return { version:1, sourceFormat:null, exif:null, xmp:null, exifSegment:null, xmpSegment:null };
+    },
+    _normalizeImageMetadata(metadata) {
+        const value = metadata && typeof metadata === 'object' ? metadata : {};
+        const exifValue = value.exif && typeof value.exif === 'object' ? value.exif : null;
+        const xmpValue = value.xmp && typeof value.xmp === 'object' ? value.xmp : null;
+        const bounded = (input, max = 240) => this._safeText(input || '', max) || null;
+        const exif = exifValue ? {
+            orientation:Math.max(1, Math.min(8, Math.round(Number(exifValue.orientation) || 1))),
+            make:bounded(exifValue.make), model:bounded(exifValue.model),
+            dateTime:bounded(exifValue.dateTime), software:bounded(exifValue.software),
+            artist:bounded(exifValue.artist), description:bounded(exifValue.description),
+            lensModel:bounded(exifValue.lensModel), hasGps:Boolean(exifValue.hasGps),
+            gps:exifValue.gps && typeof exifValue.gps === 'object' ? {
+                latitude:Number.isFinite(Number(exifValue.gps.latitude)) ? Number(exifValue.gps.latitude) : null,
+                longitude:Number.isFinite(Number(exifValue.gps.longitude)) ? Number(exifValue.gps.longitude) : null,
+                altitude:Number.isFinite(Number(exifValue.gps.altitude)) ? Number(exifValue.gps.altitude) : null
+            } : null
+        } : null;
+        const xmp = xmpValue ? {
+            title:bounded(xmpValue.title), description:bounded(xmpValue.description, 500),
+            creator:bounded(xmpValue.creator), createDate:bounded(xmpValue.createDate),
+            modifyDate:bounded(xmpValue.modifyDate), hasLocation:Boolean(xmpValue.hasLocation)
+        } : null;
+        const decode = (input, prefix) => {
+            if (typeof input !== 'string' || !input.startsWith(prefix)) return null;
+            const bytes = this._decodeProjectBytes(input, prefix);
+            return bytes && bytes.byteLength <= this._importLimits.maxMetadataBytes ? input : null;
+        };
+        return {
+            version:1,
+            sourceFormat:['jpeg','png','webp','avif'].includes(String(value.sourceFormat || '').toLowerCase()) ? String(value.sourceFormat).toLowerCase() : null,
+            exif,
+            xmp,
+            exifSegment:decode(value.exifSegment, 'data:application/vnd.openshop.exif;base64,'),
+            xmpSegment:decode(value.xmpSegment, 'data:application/vnd.openshop.xmp;base64,')
+        };
+    },
+    _imageMetadataSummary(metadata = this._imageMetadata) {
+        const value = this._normalizeImageMetadata(metadata);
+        if (!value.exif && !value.xmp) return 'None detected';
+        const labels = [];
+        if (value.exif) {
+            const camera = [value.exif.make, value.exif.model].filter(Boolean).join(' ');
+            if (camera) labels.push(camera);
+            if (value.exif.dateTime) labels.push(value.exif.dateTime);
+            if (value.exif.hasGps) labels.push('GPS location present');
+        }
+        if (value.xmp) {
+            if (value.xmp.title) labels.push(`XMP title: ${value.xmp.title}`);
+            else labels.push('XMP');
+            if (value.xmp.hasLocation && !labels.includes('GPS location present')) labels.push('XMP location present');
+        }
+        return labels.join(' · ') || 'Metadata present';
+    },
     _normalizeAIMask(entry, { validate = false } = {}) {
         if (!entry || typeof entry !== 'object' || !entry.mask) return null;
         const mask = validate ? this._encodeSelectionMask(this._decodeSelectionMask(entry.mask)) : entry.mask;
@@ -7637,6 +7700,7 @@ const OS = {
             },
             metadata: {
                 colorProfile: this._normalizeColorProfile(this._colorProfile),
+                image: this._normalizeImageMetadata(this._imageMetadata),
                 aiMasks: this._normalizeAIMasks(this._aiMasks)
             },
             interchange: {
@@ -7998,6 +8062,8 @@ const OS = {
         this._restoreGuidesState(state.guides);
         this._restoreSelectionState(state.selection);
         this._colorProfile = this._normalizeColorProfile(state.metadata?.colorProfile);
+        this._imageMetadata = this._normalizeImageMetadata(state.metadata?.image);
+        this._lastImportExif = this._imageMetadata.exif;
         const requestedWorkingSpace = this._colorProfile.workingSpace === 'display-p3' ? 'display-p3' : 'srgb';
         this._workingColorSpace = requestedWorkingSpace === 'display-p3' && this._displayP3CanvasSupported() ? 'display-p3' : 'srgb';
         if (requestedWorkingSpace !== this._workingColorSpace && this._colorProfile.colorSpace === 'display-p3' && this._colorProfile.conversion === 'identity') {
@@ -8136,7 +8202,7 @@ const OS = {
             requestAnimationFrame(() => { o.classList.add('show'); cancel.focus(); });
         });
     },
-    async _addDecodedImageToCanvas(img, { name, mode, openAction = 'Opening an image', colorProfile = null, workingColorSpace = 'srgb', colorConversion = 'identity' }) {
+    async _addDecodedImageToCanvas(img, { name, mode, openAction = 'Opening an image', colorProfile = null, imageMetadata = null, workingColorSpace = 'srgb', colorConversion = 'identity' }) {
         const { width } = this._validateDecodedImage(img);
         if (mode === 'open') {
             // Returns false when the user keeps their work, so callers that do
@@ -8152,6 +8218,8 @@ const OS = {
                 workingSpace:targetSpace,
                 conversion:colorConversion || normalizedProfile.conversion
             });
+            this._imageMetadata = this._normalizeImageMetadata(imageMetadata);
+            this._lastImportExif = this._imageMetadata.exif;
             this._lastImportColorProfile = colorProfile ? normalizedProfile : null;
             this._setPersistenceState('dirty');
             img.set({ left:0, top:0, selectable:true, name:this._safeText(name, 120) });
@@ -8193,7 +8261,9 @@ const OS = {
     // A minimal APP1/TIFF walk is enough for orientation plus the few tags the
     // Info panel shows; no dependency for ~60 lines.
     _readExif(buffer) {
-        const view = new DataView(buffer);
+        const source = this._iccBytes(buffer);
+        if (!source) return null;
+        const view = new DataView(source.buffer, source.byteOffset, source.byteLength);
         if (view.byteLength < 4 || view.getUint16(0) !== 0xFFD8) return null;
         let offset = 2;
         while (offset + 4 <= view.byteLength) {
@@ -8202,15 +8272,155 @@ const OS = {
             const size = view.getUint16(offset + 2);
             if (marker === 0xE1) {
                 const start = offset + 4;
-                // The six-byte Exif header: E x i f NUL NUL
-                if (start + 6 > view.byteLength || view.getUint32(start) !== 0x45786966) return null;
-                return this._readTiff(view, start + 6);
+                // The six-byte Exif header: E x i f NUL NUL. Other APP1
+                // payloads (notably XMP) are allowed before it.
+                if (start + 6 <= view.byteLength && view.getUint32(start) === 0x45786966) {
+                    return this._readTiff(view, start + 6);
+                }
             }
             // Start of scan: pixel data from here, no more headers.
-            if (marker === 0xDA) break;
+            if (marker === 0xDA || size < 2 || offset + 2 + size > view.byteLength) break;
             offset += 2 + size;
         }
         return null;
+    },
+    _jpegApp1Segments(buffer) {
+        const source = this._iccBytes(buffer);
+        if (!source || source.length < 4 || source[0] !== 0xFF || source[1] !== 0xD8) return [];
+        const segments = [];
+        let offset = 2;
+        while (offset + 4 <= source.length) {
+            if (source[offset] !== 0xFF) break;
+            const marker = source[offset + 1];
+            if (marker === 0xDA || marker === 0xD9) break;
+            if (marker === 0x01 || marker >= 0xD0 && marker <= 0xD7) { offset += 2; continue; }
+            const size = (source[offset + 2] << 8) | source[offset + 3];
+            const end = offset + 2 + size;
+            if (size < 2 || end > source.length) break;
+            if (marker === 0xE1) segments.push({ marker, payload:source.slice(offset + 4, end) });
+            offset = end;
+        }
+        return segments;
+    },
+    _xmpIdentifierBytes() {
+        return new TextEncoder().encode('http://ns.adobe.com/xap/1.0/\0');
+    },
+    _startsWithBytes(source, prefix) {
+        return source.length >= prefix.length && prefix.every((value, index) => source[index] === value);
+    },
+    _parseXMPMetadata(payload) {
+        const source = this._iccBytes(payload);
+        const identifier = this._xmpIdentifierBytes();
+        if (!source || !this._startsWithBytes(source, identifier)) return null;
+        const xml = new TextDecoder('utf-8', { fatal:false }).decode(source.slice(identifier.length));
+        const unescape = value => String(value || '').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&apos;/gi, "'").replace(/&amp;/gi, '&').trim();
+        const read = names => {
+            const pattern = names.join('|');
+            const element = new RegExp(`<[^>]*?(?:${pattern})\\b[^>]*>([\\s\\S]*?)<\\/[^>]*?(?:${pattern})\\s*>`, 'i').exec(xml);
+            return element ? unescape(element[1]).slice(0, 500) : null;
+        };
+        const hasLocation = /(?:gps|latitude|longitude|altitude|location|city|state|country|address)/i.test(xml);
+        return {
+            title:read(['dc:title','title']),
+            description:read(['dc:description','description']),
+            creator:read(['dc:creator','creator','Author']),
+            createDate:read(['xmp:CreateDate','CreateDate','createDate']),
+            modifyDate:read(['xmp:ModifyDate','ModifyDate','modifyDate']),
+            hasLocation
+        };
+    },
+    _normalizeExifOrientationSegment(payload) {
+        const source = this._iccBytes(payload);
+        if (!source) return null;
+        const output = new Uint8Array(source);
+        if (output.length < 14 || !this._startsWithBytes(output, [69,120,105,102,0,0])) return output;
+        const view = new DataView(output.buffer, output.byteOffset, output.byteLength);
+        const tiff = 6, endian = view.getUint16(tiff, false);
+        if (endian !== 0x4949 && endian !== 0x4D4D) return output;
+        const little = endian === 0x4949, first = view.getUint32(tiff + 4, little);
+        const directory = tiff + first;
+        if (directory + 2 > view.byteLength) return output;
+        const count = view.getUint16(directory, little);
+        for (let index = 0; index < count; index++) {
+            const entry = directory + 2 + index * 12;
+            if (entry + 12 > view.byteLength) return output;
+            if (view.getUint16(entry, little) === 0x0112) { view.setUint16(entry + 8, 1, little); break; }
+        }
+        return output;
+    },
+    _readJPEGImageMetadata(buffer, mime = 'image/jpeg') {
+        const source = this._iccBytes(buffer);
+        if (!source || !/jpe?g/i.test(String(mime))) return this._emptyImageMetadata();
+        const identifier = this._xmpIdentifierBytes();
+        let exifSegment = null, xmpSegment = null;
+        for (const segment of this._jpegApp1Segments(source)) {
+            if (!exifSegment && this._startsWithBytes(segment.payload, [69,120,105,102,0,0])) exifSegment = this._normalizeExifOrientationSegment(segment.payload);
+            if (!xmpSegment && this._startsWithBytes(segment.payload, identifier)) xmpSegment = segment.payload;
+        }
+        const exif = this._readExif(source);
+        const xmp = xmpSegment ? this._parseXMPMetadata(xmpSegment) : null;
+        if (!exif && !xmp) return this._emptyImageMetadata();
+        return this._normalizeImageMetadata({
+            sourceFormat:'jpeg', exif, xmp,
+            exifSegment:exifSegment ? this._encodeProjectBytes(exifSegment, 'application/vnd.openshop.exif') : null,
+            xmpSegment:xmpSegment ? this._encodeProjectBytes(xmpSegment, 'application/vnd.openshop.xmp') : null
+        });
+    },
+    _readImageMetadata(buffer, mime = '') {
+        const source = this._iccBytes(buffer);
+        const type = String(mime || '').toLowerCase();
+        if (!source) return this._emptyImageMetadata();
+        if (/jpe?g|\.jpe?g$/.test(type)) return this._readJPEGImageMetadata(source, type);
+        const identifier = this._xmpIdentifierBytes();
+        let exifPayload = null, xmpPayload = null, format = null;
+        if (/png|\.png$/.test(type) && source.length >= 8 && this._startsWithBytes(source, [137,80,78,71,13,10,26,10])) {
+            format = 'png';
+            const view = new DataView(source.buffer, source.byteOffset, source.byteLength);
+            for (let offset = 8; offset + 12 <= source.length;) {
+                const length = view.getUint32(offset, false), start = offset + 8, end = start + length;
+                if (end + 4 > source.length || length > this._importLimits.maxMetadataBytes) break;
+                const kind = String.fromCharCode(...source.slice(offset + 4, offset + 8));
+                if (kind === 'eXIf') exifPayload = this._concatByteArrays([new Uint8Array([69,120,105,102,0,0]), source.slice(start, end)]);
+                if (kind === 'iTXt') {
+                    const data = source.slice(start, end), keywordEnd = data.indexOf(0);
+                    if (keywordEnd >= 0 && new TextDecoder().decode(data.slice(0, keywordEnd)) === 'XML:com.adobe.xmp') {
+                        let cursor = keywordEnd + 1;
+                        if (cursor + 2 <= data.length && data[cursor] === 0) {
+                            cursor += 2;
+                            const languageEnd = data.indexOf(0, cursor); if (languageEnd < 0) break;
+                            cursor = languageEnd + 1;
+                            const translatedEnd = data.indexOf(0, cursor); if (translatedEnd < 0) break;
+                            xmpPayload = this._concatByteArrays([identifier, data.slice(translatedEnd + 1)]);
+                        }
+                    }
+                }
+                offset = end + 4;
+                if (kind === 'IEND') break;
+            }
+        } else if (/webp|\.webp$/.test(type) && source.length >= 12 && String.fromCharCode(...source.slice(0, 4)) === 'RIFF' && String.fromCharCode(...source.slice(8, 12)) === 'WEBP') {
+            format = 'webp';
+            const view = new DataView(source.buffer, source.byteOffset, source.byteLength);
+            for (let offset = 12; offset + 8 <= source.length;) {
+                const length = view.getUint32(offset + 4, true), start = offset + 8, end = start + length;
+                if (end > source.length || length > this._importLimits.maxMetadataBytes) break;
+                const kind = String.fromCharCode(...source.slice(offset, offset + 4));
+                if (kind === 'EXIF') exifPayload = this._concatByteArrays([new Uint8Array([69,120,105,102,0,0]), source.slice(start, end)]);
+                if (kind === 'XMP ') xmpPayload = this._concatByteArrays([identifier, source.slice(start, end)]);
+                offset = end + (length & 1);
+            }
+        }
+        if (!exifPayload && !xmpPayload) return this._emptyImageMetadata();
+        let exif = null;
+        if (exifPayload) {
+            try { exif = this._readTiff(new DataView(exifPayload.buffer, exifPayload.byteOffset, exifPayload.byteLength), 6); } catch (_) { exif = null; }
+        }
+        const xmp = xmpPayload ? this._parseXMPMetadata(xmpPayload) : null;
+        return this._normalizeImageMetadata({
+            sourceFormat:format,
+            exif, xmp,
+            exifSegment:exifPayload ? this._encodeProjectBytes(exifPayload, 'application/vnd.openshop.exif') : null,
+            xmpSegment:xmpPayload ? this._encodeProjectBytes(xmpPayload, 'application/vnd.openshop.xmp') : null
+        });
     },
     _readJPEGICCProfile(bytes) {
         const source = this._iccBytes(bytes);
@@ -8396,10 +8606,50 @@ const OS = {
         const little = endian === 0x4949;
         const first = view.getUint32(tiff + 4, little);
         const out = {};
-        const names = { 0x0112:'orientation', 0x010F:'make', 0x0110:'model', 0x0132:'dateTime', 0x8825:'gpsIfd' };
+        const names = {
+            0x0112:'orientation', 0x010F:'make', 0x0110:'model', 0x0132:'dateTime',
+            0x9003:'dateTime', 0x0131:'software', 0x013B:'artist', 0x010E:'description',
+            0xA434:'lensModel', 0x8298:'copyright', 0x8825:'gpsIfd'
+        };
+        const typeBytes = { 1:1, 2:1, 3:2, 4:4, 5:8, 7:1 };
+        const entryValue = (entry, type, length) => {
+            const size = (typeBytes[type] || 0) * length;
+            const at = size > 4 ? tiff + view.getUint32(entry + 8, little) : entry + 8;
+            if (!size || at < 0 || at + Math.min(size, this._importLimits.maxMetadataBytes) > view.byteLength) return null;
+            return at;
+        };
+        const readAscii = (at, length) => {
+            if (at === null) return null;
+            let text = '';
+            for (let index = 0; index < Math.min(length, 500) && at + index < view.byteLength; index++) {
+                const code = view.getUint8(at + index); if (!code) break; text += String.fromCharCode(code);
+            }
+            return text.trim() || null;
+        };
+        const readRationals = (at, length) => {
+            if (at === null) return [];
+            const values = [];
+            for (let index = 0; index < Math.min(length, 16); index++) {
+                const position = at + index * 8;
+                if (position + 8 > view.byteLength) break;
+                const denominator = view.getUint32(position + 4, little);
+                values.push(denominator ? view.getUint32(position, little) / denominator : 0);
+            }
+            return values;
+        };
+        const readValue = (entry, type, length) => {
+            const at = entryValue(entry, type, length);
+            if (at === null) return null;
+            if (type === 2) return readAscii(at, length);
+            if (type === 3) return view.getUint16(at, little);
+            if (type === 4) return view.getUint32(at, little);
+            if (type === 5) return readRationals(at, length);
+            if (type === 1 || type === 7) return view.getUint8(at);
+            return null;
+        };
         const readDir = (dirStart, wanted) => {
             if (dirStart + 2 > view.byteLength) return;
-            const count = view.getUint16(dirStart, little);
+            const count = Math.min(view.getUint16(dirStart, little), 4096);
             for (let i = 0; i < count; i++) {
                 const entry = dirStart + 2 + i * 12;
                 if (entry + 12 > view.byteLength) return;
@@ -8408,22 +8658,36 @@ const OS = {
                 if (!key) continue;
                 const type = view.getUint16(entry + 2, little);
                 const length = view.getUint32(entry + 4, little);
-                if (type === 3) out[key] = view.getUint16(entry + 8, little);
-                else if (type === 4) out[key] = view.getUint32(entry + 8, little);
-                else if (type === 2) {
-                    const at = length > 4 ? tiff + view.getUint32(entry + 8, little) : entry + 8;
-                    let text = '';
-                    for (let c = 0; c < Math.min(length, 64) && at + c < view.byteLength; c++) {
-                        const code = view.getUint8(at + c);
-                        if (!code) break;
-                        text += String.fromCharCode(code);
-                    }
-                    out[key] = text.trim();
-                }
+                const value = readValue(entry, type, length);
+                if (value !== null) out[key] = value;
             }
         };
         readDir(tiff + first, names);
-        if (out.gpsIfd) { out.hasGps = true; delete out.gpsIfd; }
+        if (out.gpsIfd) {
+            const gps = {};
+            readDir(tiff + out.gpsIfd, {
+                1:'latitudeRef', 2:'latitude', 3:'longitudeRef', 4:'longitude',
+                5:'altitudeRef', 6:'altitude'
+            });
+            // The GPS directory is read into `out`; copy only the known fields
+            // out so the public metadata shape cannot grow with arbitrary tags.
+            ['latitudeRef','latitude','longitudeRef','longitude','altitudeRef','altitude'].forEach(key => {
+                if (out[key] !== undefined) gps[key] = out[key];
+                delete out[key];
+            });
+            const dms = (values, ref) => {
+                if (!Array.isArray(values) || values.length < 3) return null;
+                const sign = String(ref || '').toUpperCase() === 'S' || String(ref || '').toUpperCase() === 'W' ? -1 : 1;
+                return sign * (values[0] + values[1] / 60 + values[2] / 3600);
+            };
+            const latitude = dms(gps.latitude, gps.latitudeRef), longitude = dms(gps.longitude, gps.longitudeRef);
+            out.gps = {
+                latitude, longitude,
+                altitude:Array.isArray(gps.altitude) && gps.altitude.length ? gps.altitude[0] * (Number(gps.altitudeRef) ? -1 : 1) : null
+            };
+            out.hasGps = true;
+            delete out.gpsIfd;
+        }
         return out;
     },
     // Orientation 1-8 as defined by TIFF: 2/4/5/7 mirror, 3/6/8 rotate.
@@ -8756,6 +9020,7 @@ const OS = {
         try {
             const buffer = typeof file.arrayBuffer === 'function' ? await file.arrayBuffer() : null;
             const exif = buffer ? this._readExif(buffer) : null;
+            const imageMetadata = buffer ? this._readImageMetadata(buffer, file.type || file.name || '') : this._emptyImageMetadata();
             const orientation = exif?.orientation;
             const embeddedProfile = buffer ? await this._readEmbeddedColorProfile(buffer, file.type || file.name || '') : null;
             const colorContext = embeddedProfile
@@ -8807,6 +9072,7 @@ const OS = {
                 name:file.name,
                 mode,
                 colorProfile:embeddedProfile,
+                imageMetadata,
                 workingColorSpace:colorContext.targetSpace,
                 colorConversion
             });
@@ -9395,12 +9661,16 @@ const OS = {
         if (this._canvasDimensionFailure(width, height)) throw new Error(this._canvasLimitMessage(width, height, 'Export'));
         const matte = this._validHexColor(options.matte || '#ffffff');
         if (!matte) throw new Error('Export matte color is invalid');
+        const metadataPolicy = ['preserve','strip','strip-location'].includes(String(options.metadataPolicy || '').toLowerCase())
+            ? String(options.metadataPolicy).toLowerCase()
+            : 'strip-location';
         return {
             format,
             quality,
             scale,
             transparent:format !== 'jpeg' && options.transparent !== false,
-            matte
+            matte,
+            metadataPolicy
         };
     },
     _hideNonExportableObjects() {
@@ -9484,18 +9754,37 @@ const OS = {
                 console.warn('Raster ICC embedding unavailable:', error.message);
             }
         }
+        const metadata = this._applyRasterMetadata(dataUrl, normalized.format, normalized.metadataPolicy);
+        dataUrl = metadata.dataUrl;
+        this._lastRasterExportReport = {
+            format:normalized.format,
+            profileEmbedded,
+            profileName:this._documentColorProfileLabel(),
+            profileBytes:profileBytes?.byteLength || 0,
+            metadataPolicy:normalized.metadataPolicy,
+            metadataAction:metadata.action,
+            metadataFields:metadata.fields,
+            metadataWarnings:metadata.warnings
+        };
         return {
             dataUrl,
             options:{
                 ...normalized,
                 profileEmbedded,
                 profileName:this._documentColorProfileLabel(),
-                profileBytes:profileBytes?.byteLength || 0
+                profileBytes:profileBytes?.byteLength || 0,
+                metadataAction:metadata.action,
+                metadataFields:metadata.fields,
+                metadataWarnings:metadata.warnings
             }
         };
     },
     _concatByteArrays(parts) {
-        const arrays = parts.filter(part => part instanceof Uint8Array);
+        // `TextEncoder` and imported project bytes can come from another
+        // realm (the unit harness and embedded hosts both do this); use the
+        // byte-view helper instead of an `instanceof` check that would drop
+        // otherwise valid metadata segments.
+        const arrays = parts.map(part => this._iccBytes(part)).filter(Boolean);
         const output = new Uint8Array(arrays.reduce((total, part) => total + part.byteLength, 0));
         let offset = 0;
         arrays.forEach(part => { output.set(part, offset); offset += part.byteLength; });
@@ -9515,6 +9804,110 @@ const OS = {
         const bytes = new Uint8Array(binary.length);
         for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
         return bytes;
+    },
+    _stripExifLocationSegment(payload) {
+        const source = this._iccBytes(payload);
+        if (!source) return null;
+        const output = new Uint8Array(source);
+        if (output.length < 14 || !this._startsWithBytes(output, [69,120,105,102,0,0])) return output;
+        const view = new DataView(output.buffer, output.byteOffset, output.byteLength);
+        const endian = view.getUint16(6, false);
+        if (endian !== 0x4949 && endian !== 0x4D4D) return output;
+        const little = endian === 0x4949;
+        const first = view.getUint32(10, little), directory = 6 + first;
+        if (directory + 2 > view.byteLength) return output;
+        const count = Math.min(view.getUint16(directory, little), 4096);
+        for (let index = 0; index < count; index++) {
+            const entry = directory + 2 + index * 12;
+            if (entry + 12 > view.byteLength) return output;
+            if (view.getUint16(entry, little) === 0x8825) {
+                // Clear the GPS IFD pointer. The payload remains structurally
+                // valid and all non-location EXIF fields survive the export.
+                view.setUint32(entry + 8, 0, little);
+                break;
+            }
+        }
+        return output;
+    },
+    _stripXmpLocationSegment(payload) {
+        const source = this._iccBytes(payload);
+        const identifier = this._xmpIdentifierBytes();
+        if (!source || !this._startsWithBytes(source, identifier)) return source ? new Uint8Array(source) : null;
+        const xml = new TextDecoder('utf-8', { fatal:false }).decode(source.slice(identifier.length));
+        const location = /(?:gps|latitude|longitude|altitude|location|city|state|country|address)/i;
+        const names = '(?:GPSLatitude|GPSLongitude|GPSAltitude|Location|City|State|Country|CountryCode|Address)';
+        const elementPattern = new RegExp(`<((?:[A-Za-z_][\\w.-]*:)?${names})\\b[^>]*>[\\s\\S]*?<\\/\\1\\s*>`, 'gi');
+        const selfClosingPattern = new RegExp(`<((?:[A-Za-z_][\\w.-]*:)?${names})\\b[^>]*\\/\\s*>`, 'gi');
+        const stripped = xml
+            .replace(elementPattern, (whole, name) => location.test(name) ? '' : whole)
+            .replace(selfClosingPattern, (whole, name) => location.test(name) ? '' : whole)
+            .replace(/\s+(?:exif:)?(?:GPSLatitude|GPSLongitude|GPSAltitude|Location|City|State|Country|CountryCode)\s*=\s*"[^"]*"/gi, '');
+        return this._concatByteArrays([identifier, new TextEncoder().encode(stripped)]);
+    },
+    _makeJPEGAPP1(payload) {
+        const source = this._iccBytes(payload);
+        if (!source || source.byteLength + 2 > 0xFFFF) return null;
+        const output = new Uint8Array(source.byteLength + 4);
+        output.set([0xFF, 0xE1, (source.byteLength + 2) >>> 8, (source.byteLength + 2) & 0xFF], 0);
+        output.set(source, 4);
+        return output;
+    },
+    _metadataExportPlan(format, policy = 'strip-location') {
+        const normalizedFormat = String(format || '').toLowerCase();
+        const normalizedPolicy = ['preserve','strip','strip-location'].includes(String(policy).toLowerCase()) ? String(policy).toLowerCase() : 'strip-location';
+        const metadata = this._normalizeImageMetadata(this._imageMetadata);
+        const warnings = [];
+        if (normalizedPolicy === 'strip') return { policy:normalizedPolicy, action:'stripped-all', fields:[], segments:[], warnings };
+        if (!metadata.exifSegment && !metadata.xmpSegment) return { policy:normalizedPolicy, action:'no-source-metadata', fields:[], segments:[], warnings };
+        if (normalizedFormat !== 'jpeg') {
+            warnings.push(`${normalizedFormat.toUpperCase()} export cannot carry the imported EXIF/XMP APP1 metadata; it was stripped.`);
+            return { policy:normalizedPolicy, action:'stripped-unsupported-format', fields:[], segments:[], warnings };
+        }
+        const segments = [], fields = [];
+        const exif = metadata.exifSegment ? this._decodeProjectBytes(metadata.exifSegment, 'data:application/vnd.openshop.exif;base64,') : null;
+        const xmp = metadata.xmpSegment ? this._decodeProjectBytes(metadata.xmpSegment, 'data:application/vnd.openshop.xmp;base64,') : null;
+        if (exif) { segments.push(this._makeJPEGAPP1(normalizedPolicy === 'strip-location' ? this._stripExifLocationSegment(exif) : exif)); fields.push('EXIF'); }
+        if (xmp) { segments.push(this._makeJPEGAPP1(normalizedPolicy === 'strip-location' ? this._stripXmpLocationSegment(xmp) : xmp)); fields.push('XMP'); }
+        const validSegments = segments.filter(Boolean);
+        if (normalizedPolicy === 'strip-location' && metadata.exif?.hasGps || normalizedPolicy === 'strip-location' && metadata.xmp?.hasLocation) {
+            warnings.push('GPS and location fields were removed; other imported EXIF/XMP fields were preserved.');
+        }
+        return { policy:normalizedPolicy, action:'preserved-selected', fields, segments:validSegments, warnings };
+    },
+    _removeJPEGAPP1Segments(bytes) {
+        const source = this._iccBytes(bytes);
+        if (!source || source.length < 2 || source[0] !== 0xFF || source[1] !== 0xD8) return source ? new Uint8Array(source) : null;
+        const parts = [source.slice(0, 2)];
+        let offset = 2;
+        while (offset + 4 <= source.length) {
+            if (source[offset] !== 0xFF) { parts.push(source.slice(offset)); break; }
+            const marker = source[offset + 1];
+            if (marker === 0xDA || marker === 0xD9) { parts.push(source.slice(offset)); break; }
+            if (marker === 0x01 || marker >= 0xD0 && marker <= 0xD7) { parts.push(source.slice(offset, offset + 2)); offset += 2; continue; }
+            const size = (source[offset + 2] << 8) | source[offset + 3], end = offset + 2 + size;
+            if (size < 2 || end > source.length) { parts.push(source.slice(offset)); break; }
+            if (marker !== 0xE1) parts.push(source.slice(offset, end));
+            offset = end;
+        }
+        return this._concatByteArrays(parts);
+    },
+    _applyRasterMetadata(dataUrl, format, policy = 'strip-location') {
+        const plan = this._metadataExportPlan(format, policy);
+        if (String(format).toLowerCase() !== 'jpeg') return { dataUrl, ...plan };
+        try {
+            const original = this._dataUrlToBytes(dataUrl);
+            const source = plan.policy === 'strip' || plan.segments.length ? this._removeJPEGAPP1Segments(original) : original;
+            if (source.length < 2 || source[0] !== 0xFF || source[1] !== 0xD8) throw new Error('JPEG output has no SOI marker');
+            const total = 2 + plan.segments.reduce((sum, segment) => sum + segment.length, 0) + source.length - 2;
+            const output = new Uint8Array(total);
+            output.set(source.slice(0, 2), 0);
+            let offset = 2;
+            plan.segments.forEach(segment => { output.set(segment, offset); offset += segment.length; });
+            output.set(source.slice(2), offset);
+            return { ...plan, dataUrl:`data:image/jpeg;base64,${this._bytesToBase64(output)}` };
+        } catch (error) {
+            return { ...plan, action:'metadata-injection-failed', segments:[], warnings:[...plan.warnings, error.message] };
+        }
     },
     _crc32(bytes) {
         let crc = 0xFFFFFFFF;
@@ -9897,7 +10290,7 @@ const OS = {
         link.click();
         return true;
     },
-    _getExportImpact(format, { transparent = true } = {}) {
+    _getExportImpact(format, { transparent = true, metadataPolicy = 'strip-location' } = {}) {
         const normalizedFormat = String(format || 'png').toLowerCase();
         const objects = this.canvas.getObjects().filter(object => object.name !== '__boundary__' && !object.excludeFromExport);
         const contentLayers = this.layers.filter(layer => layer.objects.some(object => object.name !== '__boundary__' && !object.excludeFromExport));
@@ -9946,6 +10339,16 @@ const OS = {
             warnings.push(`Pixels were converted from ${profile.name} to ${profile.workingSpace === 'display-p3' ? 'Display P3' : 'sRGB'} (${profile.conversion}).`);
         }
         if (profile.iccData && normalizedFormat === 'avif') warnings.push('The verified AVIF encoder cannot embed ICC payloads; the export is tagged by the report as unprofiled.');
+        const metadata = this._normalizeImageMetadata(this._imageMetadata);
+        metadataPolicy = ['preserve','strip','strip-location'].includes(String(metadataPolicy || '').toLowerCase())
+            ? String(metadataPolicy).toLowerCase()
+            : 'strip-location';
+        if (metadata.exif || metadata.xmp) {
+            if (metadataPolicy === 'preserve' && normalizedFormat !== 'jpeg') warnings.push(`${normalizedFormat.toUpperCase()} cannot carry imported EXIF/XMP APP1 metadata; it will be stripped.`);
+            else if (metadataPolicy === 'preserve') warnings.push('Imported EXIF/XMP metadata will be preserved in the JPEG export, including location fields.');
+            else if (metadataPolicy === 'strip') warnings.push('All imported EXIF/XMP metadata will be stripped from this export.');
+            else warnings.push('Imported EXIF/XMP metadata will be exported with GPS and location fields removed.');
+        }
         warnings.push('History, selections, guides, and other project-only editing state are not included in this export.');
         if (this._isDirty) warnings.push('This export does not save the editable project; unsaved project changes will remain.');
         return { format:normalizedFormat, warnings };
@@ -9985,6 +10388,7 @@ const OS = {
             let bytes = new Uint8Array(await this._encodeAvifImageData(captured.imageData, captured.options.quality));
             let profileEmbedded = false;
             const profileBytes = this._getWorkingICCProfileBytes();
+            const metadata = this._metadataExportPlan('avif', captured.options.metadataPolicy);
             if (profileBytes?.byteLength) {
                 try {
                     bytes = this._embedAVIFICCProfile(bytes, profileBytes);
@@ -9997,7 +10401,11 @@ const OS = {
                 format:'avif',
                 profileEmbedded,
                 profileName:this._documentColorProfileLabel(),
-                profileBytes:profileBytes?.byteLength || 0
+                profileBytes:profileBytes?.byteLength || 0,
+                metadataPolicy:captured.options.metadataPolicy,
+                metadataAction:metadata.action,
+                metadataFields:metadata.fields,
+                metadataWarnings:metadata.warnings
             };
             this._downloadBlob(new Blob([bytes], { type:'image/avif' }), this._exportFileName('avif'), options.deliver);
             this.toast(profileEmbedded ? 'Exported as AVIF with ICC profile' : 'Exported as AVIF', 'success');
@@ -23467,6 +23875,7 @@ self.onmessage = async function(event) {
         const objs = this.canvas.getObjects().filter(o => o.name !== '__boundary__');
         const imgObjs = objs.filter(o => o.type === 'image');
         const textObjs = objs.filter(o => o.type === 'i-text' || o.type === 'text' || o.type === 'textbox');
+        const metadataSummary = this._safeText(this._imageMetadataSummary(), 500);
         const o = document.createElement('div'); o.className = 'modal-overlay';
         o.innerHTML = this._trustedHTML`<div class="modal"><h3>Image Information</h3>
             <dl class="info-grid" style="font-size:12px">
@@ -23480,6 +23889,8 @@ self.onmessage = async function(event) {
                 <dt>History Memory</dt><dd>${(this.historyByteSize() / 1024 / 1024).toFixed(1)} MB of ${Math.round(this.maxHistoryBytes / 1024 / 1024)} MB</dd>
                 <dt>Zoom</dt><dd>${Math.round(this.zoom * 100)}%</dd>
                 <dt>Color Mode</dt><dd>RGB 8-bit</dd>
+                <dt>Source Metadata</dt><dd>${metadataSummary}</dd>
+                <dt>Export Metadata</dt><dd>Strip location by default</dd>
                 <dt>Est. Memory</dt><dd>~${Math.round(this.canvasW * this.canvasH * 4 / 1024 / 1024)} MB (uncompressed)</dd>
             </dl>
             <div class="modal-btns"><button class="btn" data-modal-close>Close</button></div></div>`;
@@ -25297,6 +25708,7 @@ self.onmessage = async function(e) {
             <div class="modal-row"><label>Scale</label><select id="es-scale"><option value="1">1x (Original)</option><option value="0.5">0.5x (Half)</option><option value="2">2x (Double)</option><option value="0.25">0.25x (Quarter)</option></select></div>
             <div class="modal-row"><label><input type="checkbox" id="es-transparent" checked> Preserve transparent pixels</label><span id="es-alpha-help" style="font-size:10px;color:var(--text-muted)"></span></div>
             <div class="modal-row" id="es-matte-row" style="display:none"><label>Matte</label><input type="color" id="es-matte" value="#ffffff"><span style="font-size:10px;color:var(--text-muted)">Fills transparent pixels</span></div>
+            <div class="modal-row"><label>Metadata</label><select id="es-metadata"><option value="strip-location" selected>Strip location only (recommended)</option><option value="preserve">Preserve imported EXIF/XMP</option><option value="strip">Strip all metadata</option></select></div>
             <div class="export-size-est" id="es-size">Est. size: calculating...</div>
             <div class="export-preview alpha" id="es-preview" role="img" aria-label="Export preview"><span class="export-preview-placeholder">Rendering preview…</span></div>
             <div class="export-impact" id="es-impact" role="status"></div>
@@ -25314,6 +25726,7 @@ self.onmessage = async function(e) {
             this._esUpdate(o);
         });
         o.querySelector('#es-matte').addEventListener('input', () => this._esUpdate(o));
+        o.querySelector('#es-metadata').addEventListener('change', () => this._esUpdate(o));
         o.querySelector('[data-es-save-project]').addEventListener('click', async () => {
             await this.saveProject();
             this._esUpdate(o);
@@ -25359,7 +25772,8 @@ self.onmessage = async function(e) {
             quality:(+overlay.querySelector('#es-quality').value || 92) / 100,
             scale:+overlay.querySelector('#es-scale').value || 1,
             transparent:format !== 'jpeg' && overlay.querySelector('#es-transparent').checked,
-            matte:overlay.querySelector('#es-matte').value || '#ffffff'
+            matte:overlay.querySelector('#es-matte').value || '#ffffff',
+            metadataPolicy:overlay.querySelector('#es-metadata')?.value || 'strip-location'
         };
     },
     _esUpdateSize(overlay) {

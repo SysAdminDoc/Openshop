@@ -220,6 +220,27 @@ test('surfaces active document color metadata without stale blank-state values @
   await expect(page.locator('#info-color-profile')).toHaveText('—');
 });
 
+test('shows imported image metadata and makes the export privacy policy explicit @cross-browser', async ({ page }) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).click();
+  await page.evaluate(() => {
+    OS._imageMetadata = OS._normalizeImageMetadata({
+      sourceFormat:'jpeg',
+      exif:{ orientation:1, make:'OpenShop', model:'Camera', hasGps:true },
+      xmp:{ title:'Travel photo', hasLocation:true }
+    });
+    OS.showImageInfo();
+    OS.showExportSettings('jpeg');
+  });
+  await expect(page.locator('.modal-overlay').filter({ hasText:'Image Information' })).toContainText('OpenShop Camera');
+  const exportDialog = page.locator('.modal-overlay').filter({ hasText:'Export Settings' });
+  await expect(exportDialog.locator('#es-metadata')).toHaveValue('strip-location');
+  await expect(exportDialog.locator('#es-metadata option')).toHaveText([
+    'Strip location only (recommended)', 'Preserve imported EXIF/XMP', 'Strip all metadata'
+  ]);
+  await expect.poll(() => page.evaluate(() => OS._getExportImpact('jpeg', { metadataPolicy:'preserve' }).warnings.some(warning => warning.includes('including location fields')))).toBe(true);
+});
+
 test('opens a tagged Display P3 raster with an explicit working-space conversion and embeds it on export', async ({ page }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).evaluate(button => button.click());

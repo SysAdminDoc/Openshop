@@ -3131,6 +3131,57 @@ describe('history eviction, coalescing, and commit guards', () => {
   });
 });
 
+describe('raster metadata policy', () => {
+  it('parses EXIF and XMP, preserves selected fields, and strips location by default', () => {
+    const OS = loadOpenShop();
+    const exif = new Uint8Array(128);
+    exif.set([69, 120, 105, 102, 0, 0], 0);
+    const exifView = new DataView(exif.buffer);
+    exifView.setUint16(6, 0x4949, false);
+    exifView.setUint16(8, 42, true);
+    exifView.setUint32(10, 8, true);
+    exifView.setUint16(14, 4, true);
+    const entry = (index, tag, type, length, value) => {
+      const offset = 16 + index * 12;
+      exifView.setUint16(offset, tag, true);
+      exifView.setUint16(offset + 2, type, true);
+      exifView.setUint32(offset + 4, length, true);
+      exifView.setUint32(offset + 8, value, true);
+    };
+    entry(0, 0x0112, 3, 1, 6);
+    entry(1, 0x010F, 2, 5, 80);
+    entry(2, 0x0110, 2, 6, 85);
+    entry(3, 0x8825, 4, 1, 96);
+    exif.set([79, 112, 101, 110, 0], 86);
+    exif.set([67, 97, 109, 101, 114, 97, 0], 91);
+    exifView.setUint16(102, 0, true);
+    const xmp = new TextEncoder().encode('http://ns.adobe.com/xap/1.0/\0<x:xmpmeta><dc:title>Travel photo</dc:title><exif:GPSLatitude>1,2,3</exif:GPSLatitude></x:xmpmeta>');
+    const app1 = payload => new Uint8Array([0xFF, 0xE1, (payload.length + 2) >>> 8, (payload.length + 2) & 0xFF, ...payload]);
+    const jpeg = new Uint8Array([0xFF, 0xD8, ...app1(xmp), ...app1(exif.slice(0, 103)), 0xFF, 0xD9]);
+
+    const metadata = OS._readImageMetadata(jpeg, 'image/jpeg');
+    expect(metadata.exif).toMatchObject({ orientation:6, make:'Open', model:'Camera', hasGps:true });
+    expect(metadata.xmp).toMatchObject({ title:'Travel photo', hasLocation:true });
+    OS._imageMetadata = metadata;
+
+    const stripped = OS._applyRasterMetadata(`data:image/jpeg;base64,${OS._bytesToBase64(jpeg)}`, 'jpeg', 'strip-location');
+    const strippedMetadata = OS._readImageMetadata(OS._dataUrlToBytes(stripped.dataUrl), 'image/jpeg');
+    expect(stripped.action).toBe('preserved-selected');
+    expect(strippedMetadata.exif).toMatchObject({ make:'Open', model:'Camera', hasGps:false });
+    expect(strippedMetadata.xmp).toMatchObject({ title:'Travel photo', hasLocation:false });
+
+    const preserved = OS._applyRasterMetadata(`data:image/jpeg;base64,${OS._bytesToBase64(jpeg)}`, 'jpeg', 'preserve');
+    const preservedMetadata = OS._readImageMetadata(OS._dataUrlToBytes(preserved.dataUrl), 'image/jpeg');
+    expect(preservedMetadata.exif.hasGps).toBe(true);
+    expect(preservedMetadata.xmp.hasLocation).toBe(true);
+
+    const removed = OS._applyRasterMetadata(`data:image/jpeg;base64,${OS._bytesToBase64(jpeg)}`, 'jpeg', 'strip');
+    expect(removed.action).toBe('stripped-all');
+    expect(removed.dataUrl).toContain('data:image/jpeg;base64,');
+    expect(OS._readImageMetadata(OS._dataUrlToBytes(removed.dataUrl), 'image/jpeg').exif).toBeNull();
+  });
+});
+
 describe('component treatment', () => {
   const source = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
   const fullCss = source.slice(source.indexOf('<style>'), source.lastIndexOf('</style>'));
