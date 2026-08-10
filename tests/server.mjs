@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { releaseMetadata } from '../tools/release-metadata.mjs';
+import { readCheckoutIdentity } from './checkout-identity.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const port = Number(process.env.OPENSHOP_TEST_PORT || 4173);
@@ -130,6 +131,12 @@ async function handleRequest(request, response) {
   if (pathname === '/__test/untrusted.html') {
     send(response, 200, '<!doctype html><meta charset="utf-8"><title>Untrusted harness page</title>', {
       'content-type': 'text/html; charset=utf-8'
+    });
+    return;
+  }
+  if (pathname === '/__test/identity' && request.method === 'GET') {
+    send(response, 200, JSON.stringify(readCheckoutIdentity(root)), {
+      'content-type': 'application/json; charset=utf-8'
     });
     return;
   }

@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { checkoutIdentity } from './checkout-identity.mjs';
 
 const fileAppUrl = pathToFileURL(join(process.cwd(), 'index.html')).toString();
 const fixturePath = name => join(process.cwd(), 'tests', 'fixtures', name);
@@ -13,12 +14,21 @@ function projectAppUrl() {
   return test.info().project.metadata?.appUrl || fileAppUrl;
 }
 
+async function assertCheckoutIdentity(page, url) {
+  const identityUrl = new URL('/__test/identity', url).toString();
+  const response = await page.request.get(identityUrl);
+  expect(response.ok()).toBe(true);
+  expect(await response.json()).toEqual(checkoutIdentity);
+}
+
 // The three libraries the editor needs are fetched and SHA-384 verified in page
 // now rather than loaded from <script src>, so nothing is wired up until the
 // boot promise settles.
 async function openApp(page, url, { axe = false } = {}) {
   if (axe) await page.addInitScript({ path: axeSourcePath });
-  await page.goto(url || projectAppUrl(), { waitUntil: 'domcontentloaded' });
+  const targetUrl = url || projectAppUrl();
+  if (/^https?:/i.test(targetUrl)) await assertCheckoutIdentity(page, targetUrl);
+  await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => document.documentElement.dataset.osBoot === 'ready', null, { timeout: 30000 });
 }
 

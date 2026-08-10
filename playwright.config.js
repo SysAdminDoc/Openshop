@@ -17,7 +17,9 @@ export default defineConfig({
   webServer: {
     command: 'node tests/server.mjs',
     url: 'http://127.0.0.1:4173',
-    reuseExistingServer: true
+    // CI must never inherit an unrelated process. Local reuse remains useful,
+    // but every hosted/offline test verifies the server's checkout token.
+    reuseExistingServer: !process.env.CI
   },
   use: {
     trace: 'retain-on-failure',

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { checkoutIdentity } from './checkout-identity.mjs';
 import { releaseMetadata } from '../tools/release-metadata.mjs';
 
 const origin = 'http://127.0.0.1:4173';
@@ -17,6 +18,12 @@ async function setServerState(request, state = {}) {
   expect(response.ok()).toBe(true);
 }
 
+async function assertCheckoutIdentity(request) {
+  const response = await request.get(`${origin}/__test/identity`);
+  expect(response.ok()).toBe(true);
+  expect(await response.json()).toEqual(checkoutIdentity);
+}
+
 async function clearOfflineState(page) {
   await page.evaluate(async () => {
     if (!navigator.serviceWorker || typeof caches === 'undefined') return;
@@ -31,6 +38,7 @@ test.describe('hosted offline contract', () => {
   test.describe.configure({ mode: 'serial' });
 
   test.beforeEach(async ({ request }) => {
+    await assertCheckoutIdentity(request);
     await setServerState(request);
   });
 
@@ -40,7 +48,7 @@ test.describe('hosted offline contract', () => {
     if (!page.isClosed()) await clearOfflineState(page);
   });
 
-  test('keeps the local harness bound to its public test surface', async ({ request }) => {
+  test('keeps the local harness bound to its public test surface @cross-browser', async ({ request }) => {
     const rebound = await request.get(`${origin}/`, { headers: { host: 'rebound.example' } });
     expect(rebound.status()).toBe(421);
 
@@ -69,7 +77,7 @@ test.describe('hosted offline contract', () => {
     expect((await request.get(`${origin}/manifest.webmanifest`)).status()).toBe(200);
   });
 
-  test('caches the complete core shell and reloads it offline', async ({ page, context, request, browserName }) => {
+  test('caches the complete core shell and reloads it offline @cross-browser', async ({ page, context, request, browserName }) => {
     // Cold-cache worst case: the shell install and the page boot both pull the
     // same three libraries over the network while the rest of the suite runs in
     // parallel.
@@ -105,7 +113,7 @@ test.describe('hosted offline contract', () => {
     expect(pageErrors).toEqual([]);
   });
 
-  test('versions and scopes the runtime cache, and refuses private or opaque responses', async ({ page }) => {
+  test('versions and scopes the runtime cache, and refuses private or opaque responses @cross-browser', async ({ page }) => {
     await page.goto(`${origin}/`, { waitUntil: 'domcontentloaded' });
     // Libraries are verified and executed asynchronously, so there is no OS
     // object to talk to until the boot promise settles.
@@ -222,7 +230,7 @@ test.describe('hosted offline contract', () => {
     });
   });
 
-  test('declares supported file handlers and consumes a queued project launch', async ({ page, request }) => {
+  test('declares supported file handlers and consumes a queued project launch @cross-browser', async ({ page, request }) => {
     await page.addInitScript(() => {
       Object.defineProperty(window, 'launchQueue', {
         configurable: true,
