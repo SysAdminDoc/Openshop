@@ -7601,6 +7601,33 @@ test('refuses to start when a boot library fails its integrity check', async ({ 
   expect(consoleErrors.join('\n')).toMatch(/integrity check/i);
 });
 
+test('surfaces an editor initialization failure with a reload control', async ({ page }) => {
+  await page.route('http://127.0.0.1:4173/', async route => {
+    const response = await route.fetch();
+    let body = await response.text();
+    if (!body.includes('    OS.init();')) throw new Error('Could not find the editor initialization call');
+    body = body.replace(
+      '    OS.init();',
+      "    OS.init = () => { throw new Error('forced editor initialization failure'); };\n    OS.init();"
+    );
+    // The test intentionally changes an inline script, so use the server shell
+    // without its production CSP hash for this isolated failure injection.
+    body = body.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>\s*/i, '');
+    await route.fulfill({ response, body });
+  });
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => document.documentElement.dataset.osBoot === 'failed', null, { timeout: 30000 });
+
+  const panel = page.locator('#welcome-boot-status');
+  await expect(panel).toHaveAttribute('role', 'alert');
+  await expect(panel).toHaveAttribute('data-boot-failure-stage', 'editor initialization');
+  await expect(panel).toContainText('Could not load the editing engine during editor initialization');
+  await expect(panel).toContainText('forced editor initialization failure');
+  await expect(panel.getByRole('button', { name: 'Reload OpenShop' })).toBeVisible();
+  await expect(page.locator('.welcome-actions')).toBeHidden();
+});
+
 test('animation playback moves the highlight without rebuilding the strip', async ({ page }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).click();

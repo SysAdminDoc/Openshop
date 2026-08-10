@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-FEMecnQjR4SDOHmS6hCbdDWcKmbOHryeEol4U1PIFB0=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-lvlCvobRt8adFylKIN7fQADwLaCDg4BFAzJPu72D1Gk=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -1944,6 +1944,24 @@ body.fullscreen #toast-container{bottom:24px}
 .recent-files{margin-top:12px}
 .boot-status{margin:0 0 18px;font-size:12px;color:var(--text-muted);text-align:center;letter-spacing:.2px}
 .boot-status.error{color:var(--danger)}
+.boot-failure-panel{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  margin:0 0 18px;
+  padding:14px;
+  border:1px solid color-mix(in srgb,var(--danger) 58%,var(--border));
+  border-radius:10px;
+  color:var(--text-primary);
+  background:color-mix(in srgb,var(--danger) 8%,var(--bg-depth-2));
+  text-align:left;
+}
+.boot-failure-panel h3{margin:0;color:var(--text-primary);font-size:13px}
+.boot-failure-panel p{margin:0;color:var(--text-secondary);font-size:11px;line-height:1.5}
+.boot-failure-panel .btn{width:100%;margin-top:3px}
+.welcome-launch.boot-failed .welcome-actions,
+.welcome-launch.boot-failed .template-section,
+.welcome-launch.boot-failed .recent-files{display:none}
 
 /* === IMAGEGEN STUDIO PARITY ===
    This pass translates the approved visual references in design/ into the
@@ -27104,22 +27122,57 @@ window.addEventListener('openshop:fabric-error', e => {
 });
 window.addEventListener('error', e => { console.error('Unhandled error:', e.error || e.message); if (typeof OS !== 'undefined' && OS.toast) OS.toast('Something went wrong — see console', 'error'); });
 window.addEventListener('unhandledrejection', e => { console.error('Unhandled promise rejection:', e.reason); if (typeof OS !== 'undefined' && OS.toast) OS.toast('Something went wrong — see console', 'error'); });
+const renderBootFailure = (stage, error) => {
+    const root = document.documentElement;
+    root.dataset.osBoot = 'failed';
+    const existing = document.getElementById('welcome-boot-status');
+    if (existing?.classList.contains('boot-failure-panel')) return existing;
+
+    const reason = error instanceof Error ? error.message : String(error || 'Unknown error');
+    const panel = document.createElement('section');
+    panel.id = 'welcome-boot-status';
+    panel.className = 'boot-failure-panel';
+    panel.dataset.bootFailureStage = stage;
+    panel.setAttribute('role', 'alert');
+
+    const heading = document.createElement('h3');
+    heading.textContent = 'OpenShop could not start';
+    const detail = document.createElement('p');
+    detail.textContent = `Could not load the editing engine during ${stage}: ${reason}`;
+    const hint = document.createElement('p');
+    hint.textContent = 'Reload the page to try again.';
+    const reload = document.createElement('button');
+    reload.type = 'button';
+    reload.className = 'btn btn-primary';
+    reload.textContent = 'Reload OpenShop';
+    reload.addEventListener('click', () => window.location.reload());
+    panel.append(heading, detail, hint, reload);
+
+    const launch = document.querySelector('.welcome-launch');
+    launch?.classList.add('boot-failed');
+    launch?.querySelector('.welcome-actions')?.setAttribute('hidden', '');
+    launch?.querySelector('.template-section')?.setAttribute('hidden', '');
+    launch?.querySelector('.recent-files')?.setAttribute('hidden', '');
+    if (existing?.parentElement) existing.replaceWith(panel);
+    else (launch || document.body).prepend(panel);
+    console.error(`OpenShop failed during ${stage}:`, error);
+    return panel;
+};
 window.addEventListener('DOMContentLoaded', async () => {
     const root = document.documentElement;
     const status = document.getElementById('welcome-boot-status');
     try {
         await window.__openshopBoot;
     } catch (error) {
-        // Without this the editor came up looking usable with no engine behind it.
-        root.dataset.osBoot = 'failed';
-        console.error('OpenShop could not start:', error);
-        if (status) {
-            status.textContent = `Could not load the editing engine — ${error.message}. Check your connection and reload.`;
-            status.classList.add('error');
-        }
+        renderBootFailure('verified library boot', error);
         return;
     }
-    OS.init();
+    try {
+        OS.init();
+    } catch (error) {
+        renderBootFailure('editor initialization', error);
+        return;
+    }
     if (status) status.remove();
     root.dataset.osBoot = 'ready';
 });

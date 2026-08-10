@@ -51,6 +51,9 @@ All notable changes to Openshop will be documented in this file.
   fullscreen now expose their current state visually and through `aria-checked`.
 
 ### Fixed
+- Boot failures from editor initialization now render a standalone failure panel
+  with the failing stage and a reload action instead of leaving the welcome screen
+  waiting indefinitely.
 - Color and palette swatches now expose grid semantics, roving keyboard focus,
   foreground/background keyboard actions, and 24px pointer targets.
 - Menu commands now project their document prerequisites into accessible dropdown
