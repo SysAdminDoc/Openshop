@@ -3884,6 +3884,64 @@ test('drives the whole menubar from the keyboard with clean accessible names @cr
   expect(shortcut).toBe('Ctrl+A');
 });
 
+test('reflects document command state in menu rows and blocks disabled activation @cross-browser', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => OS.dismissWelcome());
+  await expect(page.locator('html')).toHaveAttribute('data-os-document', 'blank');
+
+  const file = page.locator('.menu-bar > .menu-item').first();
+  await file.click();
+  const initial = await page.evaluate(() => {
+    const row = action => document.querySelector(`.menu-bar .dd-item[data-os-click="${action}"]`);
+    return {
+      newImage: row('click-001')?.getAttribute('aria-disabled'),
+      openImage: row('click-002')?.getAttribute('aria-disabled'),
+      exportPng: row('click-004')?.getAttribute('aria-disabled'),
+      selectAll: row('click-027')?.getAttribute('aria-disabled'),
+      aiDepth: row('click-096')?.getAttribute('aria-disabled'),
+      preferences: row('click-026')?.getAttribute('aria-disabled'),
+      exportCommand: row('click-004')?.getAttribute('data-os-command')
+    };
+  });
+  expect(initial).toEqual({
+    newImage: 'false',
+    openImage: 'false',
+    exportPng: 'true',
+    selectAll: 'true',
+    aiDepth: 'true',
+    preferences: 'false',
+    exportCommand: 'menu.click-004'
+  });
+
+  const exportMenu = file.locator(':scope > .menu-dropdown > .dd-sub').filter({ hasText: 'Export As' });
+  await exportMenu.click();
+  await expect(page.locator('[data-os-click="click-004"]')).toBeVisible();
+  await page.evaluate(() => {
+    window.__menuActivationCount = 0;
+    OS.saveFile = () => { window.__menuActivationCount += 1; };
+  });
+  const exportPng = page.locator('[data-os-click="click-004"]');
+  await exportPng.click({ force:true });
+  expect(await page.evaluate(() => window.__menuActivationCount)).toBe(0);
+  await expect(file.locator(':scope > .menu-dropdown')).toBeVisible();
+
+  await exportPng.focus();
+  await page.keyboard.press('Enter');
+  expect(await page.evaluate(() => window.__menuActivationCount)).toBe(0);
+  await expect(file.locator(':scope > .menu-dropdown')).toBeVisible();
+
+  await file.locator('[data-os-click="click-001"]').click();
+  await page.locator('[data-modal-create]').click();
+  await expect(page.locator('html')).toHaveAttribute('data-os-document', 'open');
+
+  await file.click();
+  await expect.poll(() => page.evaluate(() => ({
+    exportPng: document.querySelector('[data-os-click="click-004"]')?.getAttribute('aria-disabled'),
+    selectAll: document.querySelector('[data-os-click="click-027"]')?.getAttribute('aria-disabled'),
+    aiDepth: document.querySelector('[data-os-click="click-096"]')?.getAttribute('aria-disabled')
+  }))).toEqual({ exportPng: 'false', selectAll: 'false', aiDepth: 'false' });
+});
+
 test('menus stay open while the pointer travels from the title into them @cross-browser', async ({ page }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).click();

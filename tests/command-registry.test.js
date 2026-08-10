@@ -110,6 +110,28 @@ describe('OpenShop typed command and tool registry', () => {
     expect(OS.getCommandState('layer.add')).toMatchObject({ enabled: false, blocked: true });
   });
 
+  it('projects document prerequisites into menu command state', () => {
+    const OS = loadOpenShop();
+
+    expect(OS.getCommandState('menu.click-004', { documentOpen: false })).toMatchObject({
+      id: 'menu.click-004',
+      kind: 'menu',
+      enabled: false,
+      blocked: true,
+      implemented: true
+    });
+    expect(OS.getCommandState('menu.click-001', { documentOpen: false })).toMatchObject({
+      kind: 'menu',
+      enabled: true,
+      blocked: false
+    });
+    expect(OS.getCommandState('menu.click-004', { documentOpen: true })).toMatchObject({
+      enabled: true,
+      blocked: false
+    });
+    expect(OS.getCommandState('menu.click-124', { documentOpen: false })).toBeNull();
+  });
+
   it('cycles grouped tools through one selection path', () => {
     const OS = loadOpenShop();
     OS.state.tool = 'marquee-rect';

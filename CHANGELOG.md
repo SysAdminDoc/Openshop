@@ -51,6 +51,9 @@ All notable changes to Openshop will be documented in this file.
   fullscreen now expose their current state visually and through `aria-checked`.
 
 ### Fixed
+- Menu commands now project their document prerequisites into accessible dropdown
+  rows, keeping blank-workspace actions available while blocking pointer and
+  keyboard activation of document-scoped items until a canvas is open.
 - Resolve letter and digit shortcuts by physical key so Ctrl commands and tool
   bindings continue to work under non-Latin layouts; shortcut surfaces now use
   the browser's keyboard layout map when available and retain US labels as a
