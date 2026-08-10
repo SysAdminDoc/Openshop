@@ -1465,6 +1465,33 @@ describe('OpenShop core object', () => {
     ]);
   });
 
+  it('normalizes animated file formats and resolves drop intent from workspace state', () => {
+    const OS = loadOpenShop();
+    const animatedGif = { name:'clip.gif', type:'image/gif', size:10 };
+    const animatedPng = { name:'clip.apng', type:'image/apng', size:10 };
+    const webp = { name:'clip.webp', type:'image/webp', size:10 };
+    const avif = { name:'clip.avif', type:'image/avif', size:10 };
+    const project = { name:'clip.openshop', type:'application/vnd.openshop+json', size:10 };
+
+    expect(OS._describeImportFormat(animatedGif)).toMatchObject({ format:'gif', animated:true, placeable:true });
+    expect(OS._describeImportFormat(animatedPng)).toMatchObject({ format:'apng', animated:true, placeable:true });
+    expect(OS._describeImportFormat(webp)).toMatchObject({ format:'webp', animated:true, placeable:true });
+    expect(OS._describeImportFormat(avif)).toMatchObject({ format:'avif', animated:false, placeable:true });
+    expect(OS._describeImportFormat(project)).toMatchObject({ format:'project', animated:false, placeable:false });
+
+    OS._documentId = 'document-1';
+    OS._blankWorkspace = false;
+    expect(OS._resolveImportIntent(animatedGif, 'open')).toBe('open');
+    expect(OS._resolveImportIntent(animatedGif, 'place')).toBe('place');
+    expect(OS._resolveImportIntent(animatedGif, 'paste')).toBe('paste');
+    expect(OS._resolveImportIntent(animatedGif, 'drop')).toBe('place');
+    expect(OS._resolveImportIntent(project, 'drop')).toBe('open');
+
+    OS._blankWorkspace = true;
+    expect(OS._resolveImportIntent(animatedGif, 'drop')).toBe('open');
+    expect(OS._resolveImportIntent(animatedGif, 'paste')).toBe('open');
+  });
+
   it('caches a measured canvas ceiling and rejects both side and area overflow', () => {
     const OS = loadOpenShop();
     const configured = {

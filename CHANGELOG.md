@@ -5,6 +5,7 @@ All notable changes to Openshop will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Added one normalized Open/Place/Paste/Drop router for raster and animated-image imports. GIF, APNG, and WebP Open plus blank-workspace Drop preserve frame timing; Place, Paste, and Drop into an open document use the documented first-frame-static policy while retaining the full animation payload on the placed object.
 - Added Save/Discard/Cancel transactions before hosted offline shell replacement; dirty documents now require a verified recovery save or explicit discard before Apply Update, Restore Previous Shell, or Rebuild Offline Shell can reload the runtime.
 - Added independent interface and artwork text directions: locale changes now affect DOM chrome only, while explicit LTR/RTL text commands persist per-object through `.openshop` history and serialization.
 - Added validated number fields beside every range slider, plus a persisted Zoom-tool Pixel-perfect mode with reciprocal/integer snapping and nearest-neighbour sampling above 100%.

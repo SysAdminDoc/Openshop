@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10" id="theme-color-meta">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-S9c7v2IJbrEeDoc/sOSveX4z8TFAAdzWFzko8G81BLo=' 'sha256-bOrZ6ms8m1yi83qF1K6VLLvExFhxZUSy1W4bN17pfVk=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-5Xys7KB9Jtdsiqs5vqpI3JpkPXQktYoeMgjrfUG5FUA=' 'sha256-D765hoaQ/ZN3Q/j/7Pz1d5Nm765i0RSPVxge1I4Vcxg=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // OpenShop-specific Fabric configuration. The editor uses Fabric 7's native
@@ -21,7 +21,7 @@ const configureFabric = () => {
 
     api.FabricObject.ownDefaults.originX = 'left';
     api.FabricObject.ownDefaults.originY = 'top';
-    api.FabricObject.customProperties = ['name', 'excludeFromExport', '_openShopObjectId', '_hasMask', '_isArrow', '_openShopAdjustmentBaseSrc', '_openShopAdjustmentLayers', '_openShopLayerMask', '_openShopMaskBaseSrc', '_openShopSmartObject', '_openShopTextFeatures', '_openShopOriginalText', '_openShopTextOnPath', '_openShopTextDirection'];
+    api.FabricObject.customProperties = ['name', 'excludeFromExport', '_openShopObjectId', '_hasMask', '_isArrow', '_openShopAdjustmentBaseSrc', '_openShopAdjustmentLayers', '_openShopLayerMask', '_openShopMaskBaseSrc', '_openShopSmartObject', '_openShopTextFeatures', '_openShopOriginalText', '_openShopTextOnPath', '_openShopTextDirection', '_openShopAnimation'];
 };
 
 // Every hosted competitor puts a credit meter in the corner of the editor.
@@ -3081,6 +3081,7 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
         <div class="menu-dropdown">
             <div class="dd-item" data-os-click="click-001">New</div>
             <div class="dd-item" data-os-click="click-002">Open Image</div>
+            <div class="dd-item" data-os-click="click-237">Place Image</div>
             <div class="dd-item" data-os-click="click-003">Open PSD</div>
             <div class="dd-sep"></div>
             <div class="dd-sub dd-item">Export As
@@ -4067,6 +4068,7 @@ const OS_EVENT_HANDLERS = Object.freeze({
         "click-001": function(event) { OS.newImage() },
         "click-002": function(event) { OS.openFile() },
         "click-003": function(event) { OS.openPSD() },
+        "click-237": function(event) { OS.placeFile() },
         "click-004": function(event) { OS.saveFile('png') },
         "click-005": function(event) { OS.saveFile('jpeg') },
         "click-006": function(event) { OS.saveFile('webp') },
@@ -5006,6 +5008,7 @@ const OS = {
         "Oil Paint...": "油画...",
         "Opacity": "不透明度",
         "Open Image": "打开图像",
+        "Place Image": "置入图像",
         "Open PSD": "打开 PSD",
         "Open Project": "打开项目",
         "Panels": "面板",
@@ -5448,7 +5451,8 @@ const OS = {
         return Boolean(id) && (id === this._documentId || this._documentIdAliases.includes(id));
     },
     _idSequence: 0,
-    _fabricDocumentProperties: ['name', 'excludeFromExport', 'globalCompositeOperation', '_openShopObjectId', '_openShopBaseOpacity', '_hasMask', '_isArrow', '_openShopAdjustmentBaseSrc', '_openShopAdjustmentLayers', '_openShopLayerMask', '_openShopMaskBaseSrc', '_openShopSmartObject', '_openShopTextFeatures', '_openShopOriginalText', '_openShopTextOnPath', '_openShopTextDirection'],
+    _fabricDocumentProperties: ['name', 'excludeFromExport', 'globalCompositeOperation', '_openShopObjectId', '_openShopBaseOpacity', '_hasMask', '_isArrow', '_openShopAdjustmentBaseSrc', '_openShopAdjustmentLayers', '_openShopLayerMask', '_openShopMaskBaseSrc', '_openShopSmartObject', '_openShopTextFeatures', '_openShopOriginalText', '_openShopTextOnPath', '_openShopTextDirection', '_openShopAnimation'],
+    _pendingFileIntent: 'open',
     _isDirty: false,
     _persistenceState: 'clean',
     _documentRevision: 0,
@@ -8086,6 +8090,11 @@ const OS = {
             if (object._openShopSmartObject) object._openShopSmartObject = this._normalizeSmartObject(object._openShopSmartObject, { validate:true });
             if (object._openShopTextFeatures) object._openShopTextFeatures = this._normalizeTextFeatures(object._openShopTextFeatures);
             if (object._openShopTextOnPath) object._openShopTextOnPath = this._normalizeTextOnPath(object._openShopTextOnPath, { validate:true });
+            if (object._openShopAnimation) {
+                const animation = this._normalizePlacedAnimation(object._openShopAnimation);
+                if (animation) object._openShopAnimation = animation;
+                else delete object._openShopAnimation;
+            }
             objectsById.set(id, object);
         });
 
@@ -8361,7 +8370,20 @@ const OS = {
             onDiscard:() => this._discardOfflineDocumentBeforeReplacement()
         });
     },
-    async _addDecodedImageToCanvas(img, { name, mode, openAction = 'Opening an image', colorProfile = null, imageMetadata = null, workingColorSpace = 'srgb', colorConversion = 'identity' }) {
+    _normalizePlacedAnimation(animation) {
+        if (!animation || typeof animation !== 'object' || !Array.isArray(animation.frames)) return null;
+        const frames = animation.frames
+            .filter(frame => typeof frame === 'string' && /^data:image\//i.test(frame))
+            .slice(0, this._importLimits.maxAnimationFrames);
+        if (frames.length < 2) return null;
+        return {
+            format:this._safeText(animation.format || 'animated image', 32),
+            policy:'first-frame-static',
+            frames,
+            delays:this._normalizeAnimationDelays(animation.delays, frames.length)
+        };
+    },
+    async _addDecodedImageToCanvas(img, { name, mode, openAction = 'Opening an image', colorProfile = null, imageMetadata = null, workingColorSpace = 'srgb', colorConversion = 'identity', animationAttachment = null, historyMode = null }) {
         const { width } = this._validateDecodedImage(img);
         if (mode === 'open') {
             // Returns false when the user keeps their work, so callers that do
@@ -8389,31 +8411,41 @@ const OS = {
             return true;
         }
         if (width > this.canvasW) img.scaleToWidth(this.canvasW * 0.8);
+        const normalizedAnimation = this._normalizePlacedAnimation(animationAttachment);
+        if (normalizedAnimation) img.set({ _openShopAnimation:normalizedAnimation });
         img.set({ left:50, top:50, selectable:true, name:this._safeText(name, 120) });
         if (this.layers[this.activeLayerIdx]?.kind === 'adjustment') this._addObjectAsLayer(img, name);
         else { this.canvas.add(img); this.layers[this.activeLayerIdx].objects.push(img); }
-        this.canvas.setActiveObject(img); this.saveHistory(mode === 'paste' ? 'Paste Image' : 'Drop Image', { pixelEdit:true, dirtyRects:this._historyDirtyRectsForImage(img) }); this.updateLayersPanel();
-        this.toast(mode === 'paste' ? 'Image pasted from clipboard' : `Added: ${this._safeText(name, 80)}`, 'success');
+        const actionMode = historyMode || mode;
+        const action = actionMode === 'paste' ? 'Paste Image' : actionMode === 'place' ? 'Place Image' : 'Drop Image';
+        this.canvas.setActiveObject(img); this.saveHistory(action, { pixelEdit:true, dirtyRects:this._historyDirtyRectsForImage(img) }); this.updateLayersPanel();
+        this.toast(actionMode === 'paste' ? 'Image pasted from clipboard' : actionMode === 'place' ? `Placed: ${this._safeText(name, 80)}` : `Added: ${this._safeText(name, 80)}`, 'success');
         return true;
     },
-    async openFile() {
+    async _chooseImageFile(intent = 'open') {
         // A host that took over Open gets asked for the file instead of the
         // user being shown a picker the host cannot see the result of.
-        if (this._embed?.overrideOpen) {
+        if (intent === 'open' && this._embed?.overrideOpen) {
             this._postEmbed({ type:'openshop:open-requested' });
             return;
         }
         if (window.showOpenFilePicker) {
             try {
                 const [handle] = await window.showOpenFilePicker({
-                    types: [{ description: 'Images, OpenRaster, PDF, and RAW', accept: { 'image/*': ['.png','.jpg','.jpeg','.webp','.gif','.bmp','.svg'], 'image/openraster': ['.ora'], 'application/pdf': ['.pdf'], 'application/octet-stream': ['.cr2','.cr3','.nef','.arw','.dng','.raf','.rw2','.orf','.srw','.pef','.raw'] } }]
+                    types: [{ description: intent === 'place' ? 'Place an image' : 'Images, OpenRaster, PDF, and RAW', accept: { 'image/*': ['.png','.jpg','.jpeg','.webp','.gif','.apng','.avif','.bmp','.svg'], 'image/openraster': ['.ora'], 'application/pdf': ['.pdf'], 'application/octet-stream': ['.cr2','.cr3','.nef','.arw','.dng','.raf','.rw2','.orf','.srw','.pef','.raw'] } }]
                 });
                 const file = await handle.getFile();
-                this._handleFileLoad(file);
-                return;
+                return this._handleFileLoad(file, intent);
             } catch(e) { if (e.name === 'AbortError') return; }
         }
+        this._pendingFileIntent = intent;
         document.getElementById('file-input').click();
+    },
+    async openFile() {
+        return this._chooseImageFile('open');
+    },
+    async placeFile() {
+        return this._chooseImageFile('place');
     },
     // JPEGs from phones and cameras carry their rotation in EXIF rather than in
     // the pixels, and nothing here read it — so those photos imported sideways.
@@ -9090,35 +9122,76 @@ const OS = {
             try { await pdf?.cleanup?.(); } catch {}
         }
     },
-    _handleFileLoad(file) {
-        if (this._isORAFile(file)) {
-            void this._loadORAFile(file);
-            return;
+    _describeImportFormat(file) {
+        const type = String(file?.type || '').toLowerCase();
+        const name = String(file?.name || '').toLowerCase();
+        const extension = name.match(/(\.[a-z0-9]+)$/)?.[1] || '';
+        let format = 'raster';
+        if (this._isORAFile(file)) format = 'ora';
+        else if (type === 'image/vnd.adobe.photoshop' || extension === '.psd') format = 'psd';
+        else if (type === 'application/vnd.openshop+json' || extension === '.openshop' || extension === '.json') format = 'project';
+        else if (this._isRAWFile(file)) format = 'raw';
+        else if (this._isPDFFile(file)) format = 'pdf';
+        else if (this._isGifFile(file)) format = 'gif';
+        else if (this._isAPNGFile(file)) format = 'apng';
+        else if (this._isWebPFile(file)) format = 'webp';
+        else if (this._isAvifFile(file)) format = 'avif';
+        else if (this._isSVGFile(file)) format = 'svg';
+        return {
+            format,
+            type,
+            extension,
+            animated:['gif', 'apng', 'webp'].includes(format),
+            placeable:['raster', 'gif', 'apng', 'webp', 'avif', 'svg'].includes(format)
+        };
+    },
+    _normalizeImportIntent(intent) {
+        const value = String(intent || 'open').toLowerCase();
+        return ['open', 'place', 'paste', 'drop'].includes(value) ? value : 'open';
+    },
+    _resolveImportIntent(fileOrDescriptor, requestedIntent = 'open') {
+        const descriptor = fileOrDescriptor?.format
+            ? fileOrDescriptor
+            : this._describeImportFormat(fileOrDescriptor);
+        const requested = this._normalizeImportIntent(requestedIntent);
+        const hasDocument = this._hasActiveDocument();
+        if (requested === 'drop') return descriptor.placeable && hasDocument ? 'place' : 'open';
+        if ((requested === 'place' || requested === 'paste') && !hasDocument) return 'open';
+        if (!descriptor.placeable && requested !== 'open') return 'open';
+        return requested;
+    },
+    async _routeFileImport(file, requestedIntent = 'open', descriptor = this._describeImportFormat(file)) {
+        const requested = this._normalizeImportIntent(requestedIntent);
+        const intent = this._resolveImportIntent(descriptor, requested);
+        if (descriptor.format === 'ora') return this._loadORAFile(file);
+        if (descriptor.format === 'raw') return this._loadRAWFile(file);
+        if (descriptor.format === 'pdf') return this._loadPDFFile(file);
+        if (descriptor.format === 'psd') {
+            if (requested === 'drop') {
+                const ok = await this._confirmDiscardUnsaved('Opening a PSD');
+                return ok ? this._loadPSDFile(file) : false;
+            }
+            return this._loadPSDFile(file);
         }
-        if (this._isRAWFile(file)) {
-            void this._loadRAWFile(file);
-            return;
+        if (descriptor.format === 'project') {
+            if (requested === 'drop') {
+                const ok = await this._confirmDiscardUnsaved('Opening a project');
+                return ok ? this._loadProjectFile(file) : false;
+            }
+            return this._loadProjectFile(file);
         }
-        if (this._isPDFFile(file)) {
-            void this._loadPDFFile(file);
-            return;
-        }
-        try { this._validateImageFile(file); } catch(e) { this.toast(e.message, 'error'); return; }
-        // _docName is set by _addDecodedImageToCanvas once the decode succeeds;
-        // setting it here renamed the open document even when the file failed.
-        if (file.type === 'image/gif') {
-            void this._importGifFrames(file);
-            return;
-        }
-        if (this._isAPNGFile(file) || this._isWebPFile(file)) {
-            void this._importImageDecoderFrames(file);
-            return;
-        }
-        if (this._isSVGFile(file)) {
-            void this._loadSVGFile(file, 'open');
-            return;
-        }
-        void this._loadRasterFile(file);
+        try { this._validateImageFile(file); } catch(e) { this.toast(e.message, 'error'); return false; }
+        if (descriptor.format === 'gif') return this._importGifFrames(file, intent, { historyIntent:requested });
+        if (descriptor.format === 'apng' || descriptor.format === 'webp') return this._importImageDecoderFrames(file, intent, { historyIntent:requested });
+        if (descriptor.format === 'svg') return this._loadSVGFile(file, intent, { historyMode:requested });
+        return this._loadRasterFile(file, intent, { historyMode:requested });
+    },
+    _handleFileLoad(file, intent = 'open') {
+        return this._routeFileImport(file, intent);
+    },
+    _isGifFile(file) {
+        return String(file?.type || '').toLowerCase() === 'image/gif'
+            || String(file?.name || '').toLowerCase().endsWith('.gif');
     },
     _isORAFile(file) {
         const type = String(file?.type || '').toLowerCase();
@@ -9137,7 +9210,10 @@ const OS = {
     // logo can be recoloured and re-typed instead of only resized. The markup
     // is untrusted, so it goes through the same sanitiser the exporter uses
     // before Fabric's parser ever sees it.
-    async _loadSVGFile(file, mode = 'open') {
+    async _loadSVGFile(file, mode = 'open', { historyMode = null } = {}) {
+        const sourceMode = mode;
+        const actionModeSource = historyMode || sourceMode;
+        mode = this._resolveImportIntent(file, mode);
         try {
             if (file.size > this._importLimits.maxJsonBytes) {
                 throw new Error(`SVG is larger than the ${Math.round(this._importLimits.maxJsonBytes / 1024 / 1024)} MB import limit`);
@@ -9164,18 +9240,23 @@ const OS = {
             this._addObjectAsLayer(group, this._safeText(file.name || 'SVG', 120));
             this.canvas.setActiveObject(group);
             this.canvas.requestRenderAll();
-            this.saveHistory('Import SVG');
+            const actionMode = actionModeSource === 'drop' && mode === 'place' ? 'drop' : mode;
+            const action = actionMode === 'open' ? 'Open SVG' : actionMode === 'paste' ? 'Paste SVG' : actionMode === 'place' ? 'Place SVG' : 'Drop SVG';
+            this.saveHistory(action);
             this.updateLayersPanel();
-            this.toast(`Imported ${shapes.length} editable shape${shapes.length === 1 ? '' : 's'}`, 'success');
+            this.toast(`${actionMode === 'open' ? 'Opened' : actionMode === 'paste' ? 'Pasted' : actionMode === 'place' ? 'Placed' : 'Dropped'} ${shapes.length} editable shape${shapes.length === 1 ? '' : 's'}`, 'success');
             return true;
         } catch (error) {
             this.toast(`SVG import failed: ${error.message}`, 'error');
             return false;
         }
     },
-    async _loadRasterFile(file, mode = 'open') {
-        if (this._isAvifFile(file)) return this._loadAvifFile(file, mode);
-        if (this._isSVGFile(file)) return this._loadSVGFile(file, mode);
+    async _loadRasterFile(file, mode = 'open', { historyMode = null } = {}) {
+        const sourceMode = mode;
+        const actionModeSource = historyMode || sourceMode;
+        mode = this._resolveImportIntent(file, mode);
+        if (this._isAvifFile(file)) return this._loadAvifFile(file, mode, { historyMode:actionModeSource });
+        if (this._isSVGFile(file)) return this._loadSVGFile(file, mode, { historyMode:actionModeSource });
         try {
             const buffer = typeof file.arrayBuffer === 'function' ? await file.arrayBuffer() : null;
             const exif = buffer ? this._readExif(buffer) : null;
@@ -9233,7 +9314,8 @@ const OS = {
                 colorProfile:embeddedProfile,
                 imageMetadata,
                 workingColorSpace:colorContext.targetSpace,
-                colorConversion
+                colorConversion,
+                historyMode:actionModeSource
             });
             if (added !== false && exif && orientation > 1) {
                 this.toast(`Rotated to match the photo's EXIF orientation`, 'info');
@@ -9448,7 +9530,9 @@ const OS = {
             return false;
         }
     },
-    async _loadAvifFile(file, mode = 'open') {
+    async _loadAvifFile(file, mode = 'open', { historyMode = null } = {}) {
+        const actionModeSource = historyMode || mode;
+        mode = this._resolveImportIntent(file, mode);
         try {
             const buffer = await file.arrayBuffer();
             const embeddedProfile = await this._readEmbeddedColorProfile(buffer, file.type || file.name || 'image/avif');
@@ -9476,7 +9560,8 @@ const OS = {
                 mode,
                 colorProfile:embeddedProfile,
                 workingColorSpace:colorContext.targetSpace,
-                colorConversion:converted.conversion
+                colorConversion:converted.conversion,
+                historyMode:actionModeSource
             });
             if (added !== false && embeddedProfile && converted.conversion !== 'identity') {
                 this.toast(`${embeddedProfile.name} converted to ${colorContext.targetSpace === 'display-p3' ? 'Display P3' : 'sRGB'} for editing`, 'info');
@@ -9487,17 +9572,25 @@ const OS = {
             return false;
         }
     },
-    async _installAnimationFrames(frames, delays, file, formatLabel, { colorProfile = null, workingColorSpace = 'srgb', colorConversion = 'identity' } = {}) {
+    async _installAnimationFrames(frames, delays, file, formatLabel, { intent = 'open', historyIntent = null, colorProfile = null, workingColorSpace = 'srgb', colorConversion = 'identity' } = {}) {
         if (!Array.isArray(frames) || !frames.length) throw new Error('Animated decoder returned no frames');
+        const sourceIntent = historyIntent || intent;
+        intent = this._resolveImportIntent(file, intent);
         const image = await fabric.FabricImage.fromURL(frames[0]);
         if (await this._addDecodedImageToCanvas(image, {
             name:file.name,
-            mode:'open',
+            mode:intent,
             openAction:`Opening animated ${formatLabel}`,
             colorProfile,
             workingColorSpace,
-            colorConversion
+            colorConversion,
+            animationAttachment:intent === 'open' ? null : { format:formatLabel, frames, delays },
+            historyMode:sourceIntent === 'drop' && intent === 'place' ? 'drop' : sourceIntent
         }) === false) return false;
+        if (intent !== 'open') {
+            this.toast(`Placed the first frame of this animated ${formatLabel}; ${frames.length} frames and timing were retained with the object`, 'info');
+            return true;
+        }
         this._animFrames = frames;
         this._animDelays = this._normalizeAnimationDelays(delays, frames.length);
         this._animIdx = 0;
@@ -9514,8 +9607,10 @@ const OS = {
         return String(file?.type || '').toLowerCase() === 'image/webp'
             || String(file?.name || '').toLowerCase().endsWith('.webp');
     },
-    async _importImageDecoderFrames(file) {
-        const loadStatic = () => this._loadRasterFile(file);
+    async _importImageDecoderFrames(file, mode = 'open', { historyIntent = null } = {}) {
+        const historyMode = historyIntent || mode;
+        mode = this._resolveImportIntent(file, mode);
+        const loadStatic = () => this._loadRasterFile(file, mode, { historyMode });
         if (typeof ImageDecoder !== 'function') {
             if (this._isAPNGFile(file)) this.toast('Animated PNG is unavailable in this browser; loading its first frame instead.', 'info');
             return loadStatic();
@@ -9526,8 +9621,8 @@ const OS = {
             const buffer = await file.arrayBuffer();
             const embeddedProfile = await this._readEmbeddedColorProfile(buffer, file.type || file.name || '');
             const colorContext = embeddedProfile
-                ? this._colorProfileImportContext(embeddedProfile, 'open')
-                : { profile:null, targetSpace:'srgb', conversion:'identity' };
+                ? this._colorProfileImportContext(embeddedProfile, mode)
+                : { profile:null, targetSpace:mode === 'open' ? 'srgb' : this._workingColorSpace, conversion:'identity' };
             let colorConversion = colorContext.conversion;
             decoder = new ImageDecoder({
                 data:new Uint8Array(buffer),
@@ -9589,6 +9684,8 @@ const OS = {
                 canvas.height = 1;
             }
             return await this._installAnimationFrames(frames, delays, file, this._isAPNGFile(file) ? 'PNG' : 'WebP', {
+                intent:mode,
+                historyIntent:historyMode,
                 colorProfile:embeddedProfile,
                 workingColorSpace:colorContext.targetSpace,
                 colorConversion
@@ -9601,7 +9698,9 @@ const OS = {
             try { decoder?.close?.(); } catch {}
         }
     },
-    async _importGifFrames(file) {
+    async _importGifFrames(file, mode = 'open', { historyIntent = null } = {}) {
+        const historyMode = historyIntent || mode;
+        mode = this._resolveImportIntent(file, mode);
         const loadStatic = async () => {
             const dataUrl = await new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -9610,7 +9709,7 @@ const OS = {
                 reader.readAsDataURL(file);
             });
             const image = await fabric.FabricImage.fromURL(dataUrl);
-            return this._addDecodedImageToCanvas(image, { name:file.name, mode:'open' });
+            return this._addDecodedImageToCanvas(image, { name:file.name, mode, historyMode });
         };
         try {
             const generation = this._documentGeneration;
@@ -9621,7 +9720,7 @@ const OS = {
             ]);
             const gif = codec.decode(buffer);
             const count = gif.frames.length;
-            if (count < 2) { await loadStatic(); return; }
+            if (count < 2) return loadStatic();
             // A small GIF can declare hundreds of large frames; every frame is
             // decoded into a canvas and a PNG data URL, so bound it up front.
             if (count > this._importLimits.maxGifFrames) {
@@ -9652,16 +9751,18 @@ const OS = {
                 return;
             }
             const delays = gif.frames.map(frame => Number(frame.delay) || Math.round(1000 / 12));
-            await this._installAnimationFrames(decodedFrames, delays, file, 'GIF');
+            return await this._installAnimationFrames(decodedFrames, delays, file, 'GIF', { intent:mode, historyIntent:historyMode });
         } catch (e) {
             console.warn('GIF frame import failed, loading as static:', e.message);
             this.toast(`Animated import unavailable — ${e.message}. Loading the first frame instead.`, 'info');
-            try { await loadStatic(); } catch (staticError) { this.toast(staticError.message, 'error'); }
+            try { return await loadStatic(); } catch (staticError) { this.toast(staticError.message, 'error'); return false; }
         }
     },
     handleFileOpen(e) {
         const file = e.target.files[0]; if (!file) return;
-        this._handleFileLoad(file);
+        const intent = this._pendingFileIntent || 'open';
+        this._pendingFileIntent = 'open';
+        this._handleFileLoad(file, intent);
         e.target.value='';
     },
     handleDrop(e) {
@@ -9669,41 +9770,7 @@ const OS = {
         const file = files[0];
         if (!file) return;
         if (files.length > 1) this.toast(`Opening ${file.name}; ${files.length - 1} other file(s) ignored`, 'info');
-        const name = file.name.toLowerCase();
-        if (name.endsWith('.psd')) {
-            void this._confirmDiscardUnsaved('Opening a PSD').then(ok => ok && this._loadPSDFile(file));
-            return;
-        }
-        if (name.endsWith('.openshop') || name.endsWith('.json')) {
-            void this._confirmDiscardUnsaved('Opening a project').then(ok => ok && this._loadProjectFile(file));
-            return;
-        }
-        if (this._isORAFile(file)) {
-            void this._confirmDiscardUnsaved('Opening an OpenRaster file').then(ok => ok && this._loadORAFile(file, { skipConfirm:true }));
-            return;
-        }
-        if (this._isRAWFile(file)) {
-            void this._loadRAWFile(file);
-            return;
-        }
-        if (this._isPDFFile(file)) {
-            void this._loadPDFFile(file);
-            return;
-        }
-        try { this._validateImageFile(file); } catch(err) { this.toast(err.message, 'error'); return; }
-        if (this._isAvifFile(file)) {
-            void this._loadAvifFile(file, 'drop');
-            return;
-        }
-        if (this._isAPNGFile(file) || this._isWebPFile(file)) {
-            void this._importImageDecoderFrames(file);
-            return;
-        }
-        if (this._isSVGFile(file)) {
-            void this._loadSVGFile(file, 'drop');
-            return;
-        }
-        void this._loadRasterFile(file, 'drop');
+        return this._handleFileLoad(file, 'drop');
     },
     _exportFileName(format) {
         const base = (this._docName || 'openshop-export').replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -17181,14 +17248,14 @@ self.onmessage = function(event) {
     // menu can share the same prerequisite contract as the palette and tools.
     _menuDocumentlessActions: Object.freeze([
         'click-001', 'click-002', 'click-003', 'click-012', 'click-014',
-        'click-026', 'click-118', 'click-119', 'click-120', 'click-121', 'click-236',
+        'click-026', 'click-118', 'click-119', 'click-120', 'click-121', 'click-236', 'click-237',
         'click-122', 'click-123'
     ]),
     _isMenuCommandAction(action) {
         const match = /^click-(\d+)$/.exec(String(action || ''));
         if (!match) return false;
         const number = Number(match[1]);
-        return (number >= 1 && number <= 123) || [219, 222, 223, 224, 225, 230, 231, 232, 236].includes(number);
+        return (number >= 1 && number <= 123) || [219, 222, 223, 224, 225, 230, 231, 232, 236, 237].includes(number);
     },
     _menuCommandDefinition(id) {
         const prefix = 'menu.';
@@ -26428,6 +26495,7 @@ self.onmessage = async function(e) {
         this._commands = [
             {label:'New Document',cat:'File',fn:()=>this.newImage()},
             {label:'Open Image',cat:'File',fn:()=>this.openFile()},
+            {label:'Place Image',cat:'File',fn:()=>this.placeFile()},
             {label:'Open PSD',cat:'File',fn:()=>this.openPSD()},
             {label:'Export PNG',cat:'File',fn:()=>this.saveFile('png')},
             {label:'Export JPEG',cat:'File',fn:()=>this.saveFile('jpeg')},
@@ -27487,12 +27555,7 @@ self.onmessage = async function(e) {
                 if (item.type.startsWith('image/')) {
                     e.preventDefault();
                     const blob = item.getAsFile();
-                    try { this._validateImageFile(blob); } catch(err) { this.toast(err.message, 'error'); return; }
-                    if (this._isAvifFile(blob)) {
-                        void this._loadAvifFile(blob, 'paste');
-                        return;
-                    }
-                    void this._loadRasterFile(blob, 'paste');
+                    void this._handleFileLoad(blob, 'paste');
                     return;
                 }
             }

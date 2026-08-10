@@ -5248,6 +5248,99 @@ test('imports every frame from a real animated GIF fixture without ImageDecoder 
   expect(result.decodedWithoutImageDecoder).toBe(true);
 });
 
+test('routes animated image intents consistently and preserves placed timing metadata @cross-browser', async ({ page }) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).click();
+
+  const result = await page.evaluate(async () => {
+    const file = new File([new Uint8Array([1, 2, 3])], 'animated.gif', { type:'image/gif' });
+    const routes = [];
+    const originalGif = OS._importGifFrames;
+    const originalDecoder = OS._importImageDecoderFrames;
+    OS._importGifFrames = async (candidate, intent) => { routes.push(['gif', intent, candidate.name]); return true; };
+    OS._importImageDecoderFrames = async (candidate, intent) => { routes.push(['decoder', intent, candidate.name]); return true; };
+    OS._documentId = 'route-document';
+    OS._blankWorkspace = false;
+    await OS._handleFileLoad(file, 'open');
+    await OS._handleFileLoad(file, 'place');
+    await OS._handleFileLoad(file, 'paste');
+    await OS._handleFileLoad(file, 'drop');
+    OS._blankWorkspace = true;
+    await OS._handleFileLoad(file, 'drop');
+    OS._importGifFrames = originalGif;
+    OS._importImageDecoderFrames = originalDecoder;
+
+    const frame = color => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 2;
+      canvas.height = 1;
+      const context = canvas.getContext('2d');
+      context.fillStyle = color;
+      context.fillRect(0, 0, 2, 1);
+      return canvas.toDataURL('image/png');
+    };
+    const frames = [frame('#d33'), frame('#3a6'), frame('#28e')];
+    const delays = [90, 140, 260];
+    const animated = new File([new Uint8Array([1])], 'timed.gif', { type:'image/gif' });
+    OS._confirmDiscardUnsaved = async () => true;
+    OS._blankWorkspace = false;
+    OS.createNewDocument(32, 16, { clean:true });
+    const opened = await OS._installAnimationFrames(frames, delays, animated, 'GIF', { intent:'open' });
+    const openedState = { frames:OS._animFrames.length, delays:OS._animDelays.slice() };
+
+    OS.createNewDocument(32, 16, { clean:true });
+    const placed = await OS._installAnimationFrames(frames, delays, animated, 'GIF', { intent:'place' });
+    const placedObject = OS.canvas.getActiveObject();
+    const placedAnimation = placedObject?._openShopAnimation;
+    const placedProject = OS._captureDocumentState();
+    const placedSerialized = placedProject.canvas.fabric.objects.find(object => object._openShopAnimation)?._openShopAnimation;
+    await OS._loadDocumentState(placedProject, { trusted:true });
+    const restoredObject = OS.canvas.getObjects().find(object => object._openShopAnimation);
+    const restoredAnimation = restoredObject?._openShopAnimation;
+    const placedHistory = OS.history.at(-1)?.action;
+
+    OS.createNewDocument(32, 16, { clean:true });
+    const pasted = await OS._installAnimationFrames(frames, delays, animated, 'GIF', { intent:'paste' });
+    const pastedObject = OS.canvas.getActiveObject();
+
+    return {
+      routes,
+      opened,
+      openedState,
+      placed,
+      placedHistory,
+      placedAnimation,
+      placedSerialized,
+      restoredAnimation,
+      pasted,
+      pastedHistory:OS.history.at(-1)?.action,
+      pastedAnimation:pastedObject?._openShopAnimation,
+      documentAnimation:OS._animFrames.length
+    };
+  });
+
+  expect(result.routes).toEqual([
+    ['gif', 'open', 'animated.gif'],
+    ['gif', 'place', 'animated.gif'],
+    ['gif', 'paste', 'animated.gif'],
+    ['gif', 'place', 'animated.gif'],
+    ['gif', 'open', 'animated.gif']
+  ]);
+  expect(result.opened).toBe(true);
+  expect(result.openedState).toEqual({ frames:3, delays:[90, 140, 260] });
+  expect(result.placed).toBe(true);
+  expect(result.placedHistory).toBe('Place Image');
+  expect(result.placedAnimation).toMatchObject({ format:'GIF', policy:'first-frame-static', delays:[90, 140, 260] });
+  expect(result.placedAnimation.frames).toHaveLength(3);
+  expect(result.placedSerialized).toMatchObject({ policy:'first-frame-static', delays:[90, 140, 260] });
+  expect(result.restoredAnimation).toMatchObject({ policy:'first-frame-static', delays:[90, 140, 260] });
+  expect(result.restoredAnimation.frames).toHaveLength(3);
+  expect(result.pasted).toBe(true);
+  expect(result.pastedHistory).toBe('Paste Image');
+  expect(result.pastedAnimation).toMatchObject({ format:'GIF', policy:'first-frame-static', delays:[90, 140, 260] });
+  expect(result.documentAnimation).toBe(0);
+});
+
 test('imports every PDF page as an editable layer @cross-browser', async ({ page }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).click();
