@@ -11,7 +11,7 @@ describe('PS-010 application shell contract', () => {
     expect(shell).toContain('<div id="canvas-area" role="application"');
     expect(shell).toContain('<div id="panels" role="complementary"');
     expect(shell).toContain('<div id="blank-workspace"');
-    expect(shell).toContain('<nav id="bottom-tabs" aria-label="Bottom panels">');
+    expect(shell).toContain('<nav id="bottom-tabs" role="tablist" aria-label="Bottom panels"');
   });
 
   it('keeps the workspace selector and bottom tabs in the declarative event registry', () => {

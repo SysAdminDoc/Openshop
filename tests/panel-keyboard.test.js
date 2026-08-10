@@ -29,6 +29,77 @@ beforeEach(() => {
 });
 
 describe('Layers and History listbox keyboard contracts', () => {
+  test('publishes tab ownership, roving focus, command composites, and mobile drawer state', () => {
+    const OS = loadOpenShop();
+    const panels = document.getElementById('panels');
+    panels.innerHTML = `
+      <div class="panel-tab-group">
+        <div class="panel-tabs"><button class="panel-tab active">Layers</button><button class="panel-tab">Properties</button></div>
+        <div class="panel-tab-content active" id="layers-panel" data-group="test-group"></div>
+        <div class="panel-tab-content" id="properties-panel" data-group="test-group"></div>
+      </div>`;
+    OS._initPanelTabSemantics();
+    const tablist = panels.querySelector('[role="tablist"]');
+    const tabs = [...tablist.querySelectorAll('[role="tab"]')];
+    expect(tabs[0].getAttribute('aria-controls')).toBe('layers-panel');
+    expect(tabs[0].getAttribute('aria-selected')).toBe('true');
+    expect(tabs[1].tabIndex).toBe(-1);
+    expect(document.getElementById('properties-panel').hidden).toBe(true);
+
+    tabs[0].focus();
+    tabs[0].dispatchEvent(new KeyboardEvent('keydown', { key:'ArrowRight', bubbles:true, cancelable:true }));
+    expect(document.activeElement).toBe(tabs[1]);
+    expect(tabs[1].getAttribute('aria-selected')).toBe('true');
+    expect(document.getElementById('properties-panel').hidden).toBe(false);
+
+    const input = document.createElement('input');
+    input.id = 'cmd-input';
+    input.type = 'text';
+    input.setAttribute('role', 'combobox');
+    input.setAttribute('aria-controls', 'cmd-results');
+    document.body.appendChild(input);
+    const results = document.getElementById('cmd-results');
+    results.setAttribute('role', 'listbox');
+    OS._getCommands = () => [
+      { label:'First command', cat:'Test', fn:vi.fn() },
+      { label:'Second command', cat:'Test', fn:vi.fn() }
+    ];
+    OS.filterCommands('');
+    const options = [...results.querySelectorAll('[role="option"]')];
+    expect(options).toHaveLength(2);
+    expect(options[0].id).toBe('openshop-command-option-0');
+    expect(options[0].getAttribute('aria-selected')).toBe('true');
+    expect(input.getAttribute('aria-activedescendant')).toBe(options[0].id);
+    OS._cmdHover(1);
+    expect(input.getAttribute('aria-activedescendant')).toBe(options[1].id);
+
+    const label = document.createElement('label');
+    label.textContent = 'Dynamic opacity';
+    const range = document.createElement('input');
+    range.type = 'range';
+    document.body.append(label, range);
+    OS._normalizeAccessibleControls(document);
+    expect(range.id).toMatch(/^openshop-a11y-dynamic-opacity-/);
+    expect(label.htmlFor).toBe(range.id);
+    expect(range.getAttribute('aria-label')).toBeNull();
+
+    const toggle = document.createElement('button');
+    toggle.id = 'mobile-panel-toggle';
+    const mobilePanels = document.createElement('div');
+    mobilePanels.id = 'mobile-test-panels';
+    document.body.append(toggle, mobilePanels);
+    document.documentElement.dataset.osWorkspace = 'mobile';
+    // The production method targets the real panel id; swap the fixture into it.
+    panels.id = 'panels';
+    toggle.id = 'mobile-panel-toggle';
+    OS._syncMobilePanelAccessibility();
+    expect(panels.getAttribute('inert')).toBe('');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    OS.toggleMobilePanels(true);
+    expect(panels.hasAttribute('inert')).toBe(false);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  });
+
   test('gives colour grids roving focus, activation, and a keyboard context path', () => {
     const colorGrid = document.createElement('div');
     colorGrid.id = 'color-swatches';

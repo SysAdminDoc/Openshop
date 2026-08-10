@@ -1,10 +1,13 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const fileAppUrl = pathToFileURL(join(process.cwd(), 'index.html')).toString();
 const fixturePath = name => join(process.cwd(), 'tests', 'fixtures', name);
+const require = createRequire(import.meta.url);
+const axeSourcePath = require.resolve('axe-core/axe.min.js');
 
 function projectAppUrl() {
   return test.info().project.metadata?.appUrl || fileAppUrl;
@@ -13,9 +16,24 @@ function projectAppUrl() {
 // The three libraries the editor needs are fetched and SHA-384 verified in page
 // now rather than loaded from <script src>, so nothing is wired up until the
 // boot promise settles.
-async function openApp(page, url) {
+async function openApp(page, url, { axe = false } = {}) {
+  if (axe) await page.addInitScript({ path: axeSourcePath });
   await page.goto(url || projectAppUrl(), { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => document.documentElement.dataset.osBoot === 'ready', null, { timeout: 30000 });
+}
+
+async function runCriticalAxe(page) {
+  await expect.poll(() => page.evaluate(() => Boolean(window.axe))).toBe(true);
+  return page.evaluate(async () => {
+    const result = await window.axe.run(document, { resultTypes:['violations'] });
+    return result.violations
+      .filter(violation => ['serious', 'critical'].includes(violation.impact))
+      .map(violation => ({
+        id:violation.id,
+        impact:violation.impact,
+        nodes:violation.nodes.map(node => node.target.join(' '))
+      }));
+  });
 }
 
 test('keeps a first-class blank workspace separate from the document session @cross-browser', async ({ page }) => {
@@ -98,7 +116,7 @@ test('loads the editor shell and supports core UI interactions @cross-browser', 
   await brushTool.click();
   await expect(brushTool).toHaveClass(/active/);
 
-  const layerItems = page.locator('#layers-list .layer-item');
+  const layerItems = page.locator('#layers-list-visual .layer-item');
   const layerCount = await layerItems.count();
   await page.locator('button[title="New Layer"]').click();
   await expect(layerItems).toHaveCount(layerCount + 1);
@@ -173,7 +191,7 @@ test('opens command search and keeps both zoom readouts synchronized @cross-brow
 
   const commandButton = page.getByRole('button', { name: 'Open command palette' });
   await expect(commandButton).toBeVisible();
-  await commandButton.evaluate(button => button.click());
+  await commandButton.click();
   await expect(page.locator('#cmd-palette')).toHaveClass(/visible/);
   await expect(page.locator('#cmd-input')).toBeFocused();
   await page.evaluate(() => OS.closeCmdPalette());
@@ -184,6 +202,57 @@ test('opens command search and keeps both zoom readouts synchronized @cross-brow
   const statusReadout = page.locator('#zoom-display');
   await expect(canvasReadout).not.toHaveText(before);
   await expect(statusReadout).toHaveText(await canvasReadout.textContent());
+});
+
+test('keeps composite controls and responsive drawers accessible in every shell state @cross-browser @mobile', async ({ page }) => {
+  await openApp(page, undefined, { axe:true });
+  const failures = {};
+  await page.evaluate(() => OS.dismissWelcome());
+  failures.blank = await runCriticalAxe(page);
+
+  await page.evaluate(() => OS.createNewDocument(320, 240, { resetProject:true }));
+  failures.editor = await runCriticalAxe(page);
+
+  const panelSemantics = await page.evaluate(() => ({
+    tablists:document.querySelectorAll('[role="tablist"]').length,
+    tabs:document.querySelectorAll('[role="tab"]').length,
+    tabpanels:document.querySelectorAll('[role="tabpanel"]').length,
+    controlled:[...document.querySelectorAll('[role="tab"]')].every(tab => {
+      const target = document.getElementById(tab.getAttribute('aria-controls'));
+      return target && target.getAttribute('aria-labelledby') === tab.id;
+    }),
+    controls:[...document.querySelectorAll('input:not([type="hidden"]),select,textarea')]
+      .filter(control => !control.getAttribute('aria-label')
+        && !control.getAttribute('aria-labelledby')
+        && !(control.labels && control.labels.length))
+      .map(control => control.id || control.type)
+  }));
+  expect(panelSemantics.tablists).toBeGreaterThanOrEqual(4);
+  expect(panelSemantics.tabs).toBeGreaterThanOrEqual(10);
+  expect(panelSemantics.tabpanels).toBeGreaterThanOrEqual(5);
+  expect(panelSemantics.controlled).toBe(true);
+  expect(panelSemantics.controls).toEqual([]);
+
+  const commandButton = page.getByRole('button', { name: 'Open command palette' });
+  if (await commandButton.isVisible()) await commandButton.click();
+  else await page.evaluate(() => OS.toggleCmdPalette());
+  await expect(page.locator('#cmd-input')).toHaveAttribute('role', 'combobox');
+  await expect(page.locator('#cmd-input')).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#cmd-results')).toHaveAttribute('role', 'listbox');
+  await expect(page.locator('#cmd-results [role="option"]').first()).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('#cmd-input')).toHaveAttribute('aria-activedescendant', /openshop-command-option-/);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#cmd-palette')).not.toHaveClass(/visible/);
+  if (await commandButton.isVisible()) await expect(commandButton).toBeFocused();
+
+  await page.evaluate(() => OS.showShortcuts());
+  failures.modal = await runCriticalAxe(page);
+  await page.locator('.modal-overlay [data-modal-close]').click();
+  await page.evaluate(() => OS.setWorkspaceMode('mobile', { announce:false }));
+  await expect(page.locator('#panels')).toHaveAttribute('inert', '');
+  await expect(page.locator('#mobile-panel-toggle')).toHaveAttribute('aria-expanded', 'false');
+  failures.mobile = await runCriticalAxe(page);
+  expect(failures).toEqual({ blank:[], editor:[], modal:[], mobile:[] });
 });
 
 test('keeps every slider paired with a keyboard-editable number and supports pixel-perfect zoom @cross-browser', async ({ page }) => {
@@ -2040,7 +2109,7 @@ test('keeps layer stacking, locks, visibility, and history in one canonical mode
 
     const summarize = () => ({
       layerNames: OS.layers.map((layer) => layer.name),
-      panelNames: [...document.querySelectorAll('#layers-list .layer-name')].map((node) => node.textContent),
+      panelNames: [...document.querySelectorAll('#layers-list-visual .layer-name')].map((node) => node.textContent),
       canvasOrder: OS.canvas.getObjects().map((object) => object.name),
       foreground: (() => {
         const layer = OS.layers.find((candidate) => candidate.name === 'Foreground');
@@ -3969,9 +4038,9 @@ test('exposes onboarding and layer controls to the keyboard', async ({ page }) =
   await expect(page.locator('#welcome-overlay')).toBeHidden();
 
   // Icon-only layer controls carry accessible names.
-  const visibility = page.locator('#layers-list .layer-vis').first();
+  const visibility = page.locator('#layers-list-visual .layer-vis').first();
   await expect(visibility).toHaveAttribute('aria-label', /(Hide|Show) layer/);
-  const lock = page.locator('#layers-list .layer-lock').first();
+  const lock = page.locator('#layers-list-visual .layer-lock').first();
   await expect(lock).toHaveAttribute('aria-label', /(Lock|Unlock) layer/);
 
   // New Image size presets are buttons, not click-only divs.
@@ -6523,7 +6592,8 @@ test('exposes list, tool and status state to assistive technology @cross-browser
     const tools = [...document.querySelectorAll('.tool-btn')];
     const toasts = document.getElementById('toast-container');
     return {
-      listboxes: document.querySelectorAll('[role="listbox"]').length,
+      listboxes: [...document.querySelectorAll('[role="listbox"]')]
+        .filter(el => !el.hidden && !el.closest('[aria-hidden="true"]')).length,
       layerOptions: layers.length,
       layerSelected: layers.filter(el => el.getAttribute('aria-selected') === 'true').length,
       historyOptions: history.length,

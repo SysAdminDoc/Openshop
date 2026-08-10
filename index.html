@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10" id="theme-color-meta">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-5Xys7KB9Jtdsiqs5vqpI3JpkPXQktYoeMgjrfUG5FUA=' 'sha256-D765hoaQ/ZN3Q/j/7Pz1d5Nm765i0RSPVxge1I4Vcxg=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-5Xys7KB9Jtdsiqs5vqpI3JpkPXQktYoeMgjrfUG5FUA=' 'sha256-cLdUdFVY2glfeoeYoVs179Ew1pNsvbZ6bAmJqC/UxHQ=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // OpenShop-specific Fabric configuration. The editor uses Fabric 7's native
@@ -501,8 +501,11 @@ html.os-native-popovers #context-menu[popover]{position-area:block-end span-inli
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 
 /* Layers */
-#layers-list{max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
-#layers-list:focus-visible,#history-list:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.layers-list-shell{position:relative;min-height:2px}
+#layers-list{position:absolute;inset:0;z-index:2;overflow:hidden;pointer-events:none}
+#layers-list:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#layers-list-visual{max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+#layers-list-visual:focus-visible,#history-list:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .layer-item{display:flex;align-items:center;gap:7px;padding:5px 7px;border-radius:6px;cursor:pointer;transition:var(--transition-chrome);border:1px solid transparent}
 .layer-item:hover{background:var(--bg-depth-3)}.layer-item.active{background:var(--accent-dim);border-color:var(--glass-border)}
 .layer-item.layer-group{font-weight:600}.layer-disclosure{width:18px;height:20px;padding:0;border:0;background:transparent;color:var(--text-muted);cursor:pointer;font-size:15px;line-height:18px;flex-shrink:0}.layer-disclosure:hover{color:var(--text-primary)}.layer-disclosure-spacer{width:18px;flex-shrink:0}.layer-group-glyph{width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:5px;flex-shrink:0}
@@ -511,7 +514,6 @@ html.os-native-popovers #context-menu[popover]{position-area:block-end span-inli
 .layer-lock.locked{opacity:1;color:var(--accent)}
 .layer-item .layer-thumb-checker{width:32px;height:32px;border-radius:2px;background-image:linear-gradient(45deg,var(--checker-a) 25%,transparent 25%),linear-gradient(-45deg,var(--checker-a) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,var(--checker-a) 75%),linear-gradient(-45deg,transparent 75%,var(--checker-a) 75%);background-size:8px 8px;background-position:0 0,0 4px,4px -4px,-4px 0;background-color:var(--checker-b)}
 #layers-empty{display:none;padding:16px 8px;text-align:center;color:var(--text-muted);font-size:11px;font-style:italic}
-#layers-list:empty+#layers-empty{display:block}
 .ctx-section{padding:3px 10px;font-size:10px;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase;pointer-events:none}
 .layer-thumb{width:32px;height:32px;border-radius:3px;background:var(--bg-depth-4);border:1px solid var(--border);overflow:hidden;flex-shrink:0}
 .layer-info{flex:1;min-width:0}
@@ -563,6 +565,7 @@ html.os-native-popovers #context-menu[popover]{position-area:block-end span-inli
 
 /* === CANVAS === */
 #canvas-area{position:absolute;left:var(--toolbar-w);top:calc(var(--topbar-h) + 34px);right:var(--panel-width);bottom:calc(var(--statusbar-h) + var(--bottom-tabs-h));background:var(--canvas-bg);overflow:hidden;cursor:crosshair;touch-action:none}
+#canvas-area:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;box-shadow:var(--focus-ring)}
 #bottom-tabs{position:absolute;left:var(--toolbar-w);right:var(--panel-width);bottom:var(--statusbar-h);height:var(--bottom-tabs-h);display:flex;align-items:stretch;gap:1px;padding:0 8px;background:var(--bg-depth-1);border-top:1px solid var(--border);z-index:900;}
 .bottom-tab{min-width:112px;padding:0 14px;border:0;border-right:1px solid var(--border);background:transparent;color:var(--text-secondary);font:600 10px 'DM Sans',sans-serif;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:var(--transition-chrome)}
 .bottom-tab:hover{background:var(--bg-depth-3);color:var(--text-secondary)}
@@ -1355,7 +1358,7 @@ input[type="number"].range-number{box-sizing:border-box}
   border-color:var(--border-active);
   border-radius:6px;
 }
-#layers-list{gap:4px;max-height:250px}
+#layers-list-visual{gap:4px;max-height:250px}
 .layer-item{
   gap:8px;
   min-height:44px;
@@ -2310,7 +2313,7 @@ body.rulers-on .ruler-v{top:calc(var(--topbar-h) + 74px)}
 .panel-actions{padding-bottom:7px;border-bottom:1px solid rgba(56,84,122,.42)}
 .panel-action{width:30px;height:30px;border-radius:7px}
 .blend-row{gap:9px}
-#layers-list{gap:6px;max-height:270px}
+#layers-list-visual{gap:6px;max-height:270px}
 .layer-item{
   min-height:52px;
   padding:6px 8px;
@@ -3368,7 +3371,7 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3l7 3v5c0 4.7-2.8 8-7 10-4.2-2-7-5.3-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>
         <span>Local only</span>
     </div>
-    <button class="mobile-panel-toggle" data-os-click="click-124" aria-label="Toggle panels" style="display:none">&#9776;</button>
+    <button id="mobile-panel-toggle" class="mobile-panel-toggle" data-os-click="click-124" aria-label="Show panels" aria-controls="panels" aria-expanded="false" aria-keyshortcuts="Alt+P" style="display:none">&#9776;</button>
 </div>
 
 <!-- ===== LEFT TOOLBAR ===== -->
@@ -3630,7 +3633,8 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
 <div class="ruler-v" id="ruler-v"><canvas id="ruler-v-canvas" width="20"></canvas></div>
 
 <!-- ===== CANVAS ===== -->
-<div id="canvas-area" role="application" aria-roledescription="image editor canvas" aria-label="Image canvas" aria-describedby="canvas-a11y-summary">
+<div id="mini-bridge-panel" role="tabpanel" aria-labelledby="mini-bridge-tab" tabindex="-1">
+<div id="canvas-area" role="application" aria-roledescription="image editor canvas" aria-label="Image canvas" aria-describedby="canvas-a11y-summary canvas-a11y-focus-help" tabindex="0" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight">
     <canvas id="editor-canvas" aria-label="Drawing surface"></canvas>
     <canvas class="canvas-grid" id="grid-overlay"></canvas>
     <div id="blank-workspace" aria-live="polite">
@@ -3662,9 +3666,11 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
         <button type="button" data-os-click="click-103" aria-label="Fit canvas to screen" title="Fit canvas to screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg></button>
     </div>
 </div>
-<nav id="bottom-tabs" aria-label="Bottom panels">
-    <button type="button" class="bottom-tab" id="mini-bridge-tab" data-bottom-tab="mini-bridge" aria-selected="true" data-os-click="click-226"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 7h7l2 2h9v10H3z"/><path d="M3 7V5h7l2 2"/></svg><span>Mini Bridge</span></button>
-    <button type="button" class="bottom-tab" id="timeline-tab" data-bottom-tab="timeline" aria-selected="false" aria-controls="timeline-panel" data-os-click="click-117"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14M17 5v14M3 9h4M17 9h4M3 15h4M17 15h4"/></svg><span>Timeline</span><output id="timeline-tab-count" aria-label="Animation frame count">0</output></button>
+<p id="canvas-a11y-focus-help" class="sr-only">Canvas keyboard entry: press Tab to focus the canvas. Use the arrow keys to nudge the selected object, or hold Alt to resize it.</p>
+</div>
+<nav id="bottom-tabs" role="tablist" aria-label="Bottom panels" aria-orientation="horizontal">
+    <button type="button" role="tab" class="bottom-tab" id="mini-bridge-tab" data-bottom-tab="mini-bridge" aria-selected="true" aria-controls="mini-bridge-panel" tabindex="0" data-os-click="click-226"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 7h7l2 2h9v10H3z"/><path d="M3 7V5h7l2 2"/></svg><span>Mini Bridge</span></button>
+    <button type="button" role="tab" class="bottom-tab" id="timeline-tab" data-bottom-tab="timeline" aria-selected="false" aria-controls="timeline-panel" tabindex="-1" data-os-click="click-117"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14M17 5v14M3 9h4M17 9h4M3 15h4M17 15h4"/></svg><span>Timeline</span><output id="timeline-tab-count" aria-label="Animation frame count">0</output></button>
 </nav>
 <section id="canvas-a11y-tree" class="sr-only" aria-label="Canvas state">
     <h2>Canvas state</h2>
@@ -3720,13 +3726,13 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
 <div id="panels" role="complementary" aria-label="Editor panels">
     <!-- ===== TAB GROUP 1: Layers / Properties / Align ===== -->
     <div class="panel-tab-group ptg-flex">
-        <div class="panel-tabs">
-            <button class="panel-tab active" data-os-click="click-154">Layers</button>
-            <button class="panel-tab" data-os-click="click-155">Properties</button>
-            <button class="panel-tab" data-os-click="click-156">Align</button>
+        <div class="panel-tabs" role="tablist" aria-label="Layer panels" aria-orientation="horizontal">
+            <button id="ptg1-tab-layers" class="panel-tab active" role="tab" aria-selected="true" aria-controls="ptg1-layers" tabindex="0" data-os-click="click-154">Layers</button>
+            <button id="ptg1-tab-props" class="panel-tab" role="tab" aria-selected="false" aria-controls="ptg1-props" tabindex="-1" data-os-click="click-155">Properties</button>
+            <button id="ptg1-tab-align" class="panel-tab" role="tab" aria-selected="false" aria-controls="ptg1-align" tabindex="-1" data-os-click="click-156">Align</button>
         </div>
         <!-- Layers Tab -->
-        <div class="panel-tab-content active" id="ptg1-layers" data-group="ptg1">
+        <div class="panel-tab-content active" id="ptg1-layers" role="tabpanel" aria-labelledby="ptg1-tab-layers" tabindex="0" data-group="ptg1">
             <div class="ptc-inner">
                 <div class="panel-actions" style="display:flex;gap:2px;margin-bottom:6px;justify-content:flex-end">
                     <button class="panel-action" title="New Layer" data-os-click="click-157"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
@@ -3753,12 +3759,15 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
                     <input type="range" id="layer-opacity" min="0" max="100" value="100" data-os-input="input-018" data-os-change="change-029">
                     <span class="opt-val" id="layer-opacity-val">100</span>
                 </div>
-                <div id="layers-list" role="listbox" aria-label="Layers"></div>
+                <div class="layers-list-shell">
+                    <div id="layers-list" role="listbox" aria-label="Layers"></div>
+                    <div id="layers-list-visual"></div>
+                </div>
                 <div id="layers-empty">No layers. Click + to add one.</div>
             </div>
         </div>
         <!-- Properties Tab (Adjustments + Text FX + Layer Styles) -->
-        <div class="panel-tab-content" id="ptg1-props" data-group="ptg1">
+        <div class="panel-tab-content" id="ptg1-props" role="tabpanel" aria-labelledby="ptg1-tab-props" tabindex="0" hidden data-group="ptg1">
             <div class="ptc-inner">
                 <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;font-weight:600;margin-bottom:6px">Adjustments</div>
                 <div class="adj-row"><label>Brightness</label><input type="range" id="adj-bright" min="-100" max="100" value="0" data-os-input="input-019"><span class="adj-val" id="adj-bright-val">0</span></div>
@@ -3836,7 +3845,7 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
             </div>
         </div>
         <!-- Align Tab -->
-        <div class="panel-tab-content" id="ptg1-align" data-group="ptg1">
+        <div class="panel-tab-content" id="ptg1-align" role="tabpanel" aria-labelledby="ptg1-tab-align" tabindex="0" hidden data-group="ptg1">
             <div class="ptc-inner">
                 <div class="align-grid">
                     <button data-os-click="click-168" title="Align Left"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="2" x2="4" y2="22"/><rect x="8" y="4" width="12" height="6" rx="1"/><rect x="8" y="14" width="8" height="6" rx="1"/></svg></button>
@@ -3856,11 +3865,11 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
 
     <!-- ===== TAB GROUP 2: Color / Palettes ===== -->
     <div class="panel-tab-group">
-        <div class="panel-tabs">
-            <button class="panel-tab active" data-os-click="click-176">Color</button>
-            <button class="panel-tab" data-os-click="click-177">Swatches</button>
+        <div class="panel-tabs" role="tablist" aria-label="Color panels" aria-orientation="horizontal">
+            <button id="ptg2-tab-color" class="panel-tab active" role="tab" aria-selected="true" aria-controls="ptg2-color" tabindex="0" data-os-click="click-176">Color</button>
+            <button id="ptg2-tab-palettes" class="panel-tab" role="tab" aria-selected="false" aria-controls="ptg2-palettes" tabindex="-1" data-os-click="click-177">Swatches</button>
         </div>
-        <div class="panel-tab-content active" id="ptg2-color" data-group="ptg2">
+        <div class="panel-tab-content active" id="ptg2-color" role="tabpanel" aria-labelledby="ptg2-tab-color" tabindex="0" data-group="ptg2">
             <div class="ptc-inner" style="display:flex;flex-direction:column;gap:8px">
                 <div class="color-wheel-wrap">
                     <canvas class="color-wheel-canvas" id="color-wheel" width="120" height="120"></canvas>
@@ -3888,7 +3897,7 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
                 <div class="color-swatches" id="color-swatches" role="grid" aria-label="Foreground color swatches"></div>
             </div>
         </div>
-        <div class="panel-tab-content" id="ptg2-palettes" data-group="ptg2">
+        <div class="panel-tab-content" id="ptg2-palettes" role="tabpanel" aria-labelledby="ptg2-tab-palettes" tabindex="0" hidden data-group="ptg2">
             <div class="ptc-inner">
                 <div class="palette-name">Default</div>
                 <div class="palette-row" id="palette-default" role="grid" aria-label="Default palette"></div>
@@ -3906,17 +3915,17 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
 
     <!-- ===== TAB GROUP 3: History / Navigator / Info ===== -->
     <div class="panel-tab-group">
-        <div class="panel-tabs">
-            <button class="panel-tab active" data-os-click="click-185">History</button>
-            <button class="panel-tab" data-os-click="click-186">Navigator</button>
-            <button class="panel-tab" data-os-click="click-187">Info</button>
+        <div class="panel-tabs" role="tablist" aria-label="History panels" aria-orientation="horizontal">
+            <button id="ptg3-tab-history" class="panel-tab active" role="tab" aria-selected="true" aria-controls="ptg3-history" tabindex="0" data-os-click="click-185">History</button>
+            <button id="ptg3-tab-nav" class="panel-tab" role="tab" aria-selected="false" aria-controls="ptg3-nav" tabindex="-1" data-os-click="click-186">Navigator</button>
+            <button id="ptg3-tab-info" class="panel-tab" role="tab" aria-selected="false" aria-controls="ptg3-info" tabindex="-1" data-os-click="click-187">Info</button>
         </div>
-        <div class="panel-tab-content active" id="ptg3-history" data-group="ptg3">
+        <div class="panel-tab-content active" id="ptg3-history" role="tabpanel" aria-labelledby="ptg3-tab-history" tabindex="0" data-group="ptg3">
             <div class="ptc-inner">
                 <div id="history-list" role="listbox" aria-label="Undo history"></div>
             </div>
         </div>
-        <div class="panel-tab-content" id="ptg3-nav" data-group="ptg3">
+        <div class="panel-tab-content" id="ptg3-nav" role="tabpanel" aria-labelledby="ptg3-tab-nav" tabindex="0" hidden data-group="ptg3">
             <div class="ptc-inner">
                 <div class="minimap-wrap" id="minimap-wrap" data-os-click="click-188">
                     <canvas id="minimap-canvas"></canvas>
@@ -3934,7 +3943,7 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
                 <div class="histogram-stats"><span id="hist-min">Min: 0</span><span id="hist-mean">Mean: 128</span><span id="hist-max">Max: 255</span></div>
             </div>
         </div>
-        <div class="panel-tab-content" id="ptg3-info" data-group="ptg3">
+        <div class="panel-tab-content" id="ptg3-info" role="tabpanel" aria-labelledby="ptg3-tab-info" tabindex="0" hidden data-group="ptg3">
             <div class="ptc-inner">
                 <dl class="info-grid" id="info-grid">
                     <dt>Canvas</dt><dd id="info-dims">1920 x 1080</dd>
@@ -3975,10 +3984,10 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
 </div>
 <div id="toast-container" role="status" aria-live="polite" aria-atomic="false"></div>
 <!-- ===== COMMAND PALETTE ===== -->
-<div id="cmd-palette" role="dialog" aria-label="Command palette" data-os-click="click-194">
+<div id="cmd-palette" role="dialog" aria-modal="true" aria-label="Command palette" aria-hidden="true" data-os-click="click-194">
     <div id="cmd-box">
-        <input id="cmd-input" type="text" placeholder="Type a command... (Ctrl+K)" aria-label="Search commands" data-os-input="input-023" data-os-keydown="keydown-001">
-        <div id="cmd-results"></div>
+        <input id="cmd-input" type="text" role="combobox" placeholder="Type a command... (Ctrl+K)" aria-label="Search commands" aria-controls="cmd-results" aria-expanded="false" aria-autocomplete="list" data-os-input="input-023" data-os-keydown="keydown-001">
+        <div id="cmd-results" role="listbox" aria-label="Commands"></div>
     </div>
 </div>
 <!-- ===== CONTEXT MENU ===== -->
@@ -4007,7 +4016,7 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
     <div id="liquify-canvas-wrap"><canvas id="liquify-canvas"></canvas></div>
 </div>
 <!-- ===== TIMELINE ===== -->
-<div id="timeline-panel" role="region" aria-label="Animation timeline">
+<div id="timeline-panel" role="tabpanel" aria-labelledby="timeline-tab" aria-label="Animation timeline" tabindex="-1" hidden>
     <div id="timeline-header">
         <span class="timeline-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14M17 5v14M3 9h4M17 9h4M3 15h4M17 15h4"/></svg><span>Timeline</span><small id="timeline-summary">0 frames</small></span>
         <span style="flex:1"></span>
@@ -4194,7 +4203,7 @@ const OS_EVENT_HANDLERS = Object.freeze({
          "click-122": function(event) { OS.toggleFullscreen() },
         "click-diagnostics": function(event) { OS.exportDiagnostics() },
         "click-123": function(event) { OS.showShortcuts() },
-        "click-124": function(event) { document.getElementById('panels').classList.toggle('mobile-open') },
+        "click-124": function(event) { OS.toggleMobilePanels() },
         "click-125": function(event) { OS.setTool('select') },
         "click-126": function(event) { OS.setTool('marquee-rect') },
         "click-127": function(event) { OS.flyoutSelect(this,'selection') },
@@ -4299,7 +4308,7 @@ const OS_EVENT_HANDLERS = Object.freeze({
         "click-225": function(event) { OS.showSnapshotManager() },
         "click-226": function(event) { OS.selectBottomTab('mini-bridge') },
         "click-227": function(event) { OS.resetToolOptions() },
-        "click-228": function(event) { OS.toggleCmdPalette() },
+        "click-228": function(event) { OS.toggleCmdPalette(this) },
         "click-229": function(event) { OS.selectRegistryTool(this) },
         "click-230": function(event) { OS.showTransformSelection() },
         "click-231": function(event) { OS.showSaveSelectionDialog() },
@@ -5703,6 +5712,7 @@ const OS = {
         const next = allowed.has(mode) ? mode : 'standard';
         this.session.workspace = { ...this.session.workspace, mode: next };
         document.documentElement.dataset.osWorkspace = next;
+        this._syncMobilePanelAccessibility();
         const selector = document.getElementById('workspace-selector');
         if (selector && selector.value !== next) selector.value = next;
         this._persistLocal('os_workspace_mode', next, { label:'Workspace preference' });
@@ -6209,7 +6219,7 @@ const OS = {
                 await this._commitStrokeToLayer(e.path, mirrors);
             })();
         });
-        window.addEventListener('resize', () => { this._syncRulerChrome({ resize:false }); this.resizeCanvas(); this.drawGrid(); this.drawRulers(); });
+        window.addEventListener('resize', () => { this._syncRulerChrome({ resize:false }); this.resizeCanvas(); this.drawGrid(); this.drawRulers(); this._syncMobilePanelAccessibility(); });
         window.addEventListener('beforeunload', e => {
             if (this._isDirty && !this._offlineRuntimeReplacementInProgress) { e.preventDefault(); e.returnValue = ''; }
         });
@@ -6273,9 +6283,10 @@ const OS = {
         this._initCanvasFocusContext();
         this._initPanelSplitters();
         this._initSelectionModes();
-        document.querySelectorAll('.panel-tab').forEach(tab => {
-            tab.setAttribute('role', 'tab');
-        });
+        this._initPanelTabSemantics();
+        this._initBottomTabSemantics();
+        this._initAccessibleControls();
+        this._syncMobilePanelAccessibility();
         // PWA manifest
         this.initPWA();
         this._initEmbedBridge();
@@ -13895,7 +13906,7 @@ self.onmessage = function(event) {
         });
     },
     _panelListboxOptions(list) {
-        return [...list.children].filter(child => child.getAttribute('role') === 'option');
+        return [...list.querySelectorAll('[role="option"]')];
     },
     _setPanelListboxActive(list, option, { focus = false } = {}) {
         if (!list || !option) return false;
@@ -13988,9 +13999,11 @@ self.onmessage = function(event) {
     updateLayersPanel() {
         this._enforceLayerInvariants({ render:false });
         const list = document.getElementById('layers-list');
+        const visual = document.getElementById('layers-list-visual') || list;
         this._initPanelListbox(list, 'layers', 'Layers');
         if (!list) return;
         list.replaceChildren();
+        if (visual !== list) visual.replaceChildren();
         list.removeAttribute('aria-activedescendant');
         const rows = this._visibleLayerRows();
         rows.forEach(({ index:i, depth }, rowIndex) => {
@@ -14047,15 +14060,28 @@ self.onmessage = function(event) {
             });
             // The container claims role="listbox" but had no options in it, so
             // neither list was navigable as a list by assistive technology.
-            d.setAttribute('role', 'option');
-            d.setAttribute('aria-selected', i === this.activeLayerIdx ? 'true' : 'false');
-            d.setAttribute('aria-posinset', String(rowIndex + 1));
-            d.setAttribute('aria-setsize', String(rows.length));
-            d.setAttribute('aria-label', `${l.name}${l.visible === false ? ', hidden' : ''}${l.locked ? ', locked' : ''}`);
+            const option = document.createElement('div');
+            option.className = 'sr-only layer-option';
+            option.id = d.id;
+            option.dataset.layerIndex = d.dataset.layerIndex;
+            option.dataset.layerDepth = d.dataset.layerDepth;
+            option.tabIndex = -1;
+            option.textContent = l.name;
+            d.removeAttribute('id');
+            d.removeAttribute('data-layer-index');
+            d.removeAttribute('data-layer-depth');
+            option.setAttribute('role', 'option');
+            option.setAttribute('aria-selected', i === this.activeLayerIdx ? 'true' : 'false');
+            option.setAttribute('aria-posinset', String(rowIndex + 1));
+            option.setAttribute('aria-setsize', String(rows.length));
+            option.setAttribute('aria-label', `${l.name}${l.visible === false ? ', hidden' : ''}${l.locked ? ', locked' : ''}`);
             d.addEventListener('click', event => this.selectLayer(i, { extend:event.shiftKey, toggle:event.ctrlKey || event.metaKey }));
             this.initLayerDrag(d, i);
-            list.appendChild(d);
+            list.appendChild(option);
+            visual.appendChild(d);
         });
+        const empty = document.getElementById('layers-empty');
+        if (empty) empty.style.display = rows.length ? 'none' : 'block';
         this._setPanelListboxActive(list, list.querySelector(`[data-layer-index="${this.activeLayerIdx}"]`));
         const al = this.layers[this.activeLayerIdx];
         if (al) {
@@ -14307,14 +14333,78 @@ self.onmessage = function(event) {
             }, true);
         }
     },
+    _initPanelTabSemantics() {
+        document.querySelectorAll('.panel-tab-group').forEach((group, groupIndex) => {
+            const tablist = group.querySelector(':scope > .panel-tabs');
+            if (!tablist) return;
+            const tabs = [...tablist.querySelectorAll(':scope > .panel-tab')];
+            const contents = [...group.querySelectorAll(':scope > .panel-tab-content')];
+            tablist.setAttribute('role', 'tablist');
+            tablist.setAttribute('aria-orientation', 'horizontal');
+            if (!tablist.getAttribute('aria-label')) {
+                const label = tabs[0]?.textContent?.replace(/\s+/g, ' ').trim() || `Panel group ${groupIndex + 1}`;
+                tablist.setAttribute('aria-label', `${label} panels`);
+            }
+            tabs.forEach((tab, index) => {
+                const content = document.getElementById(tab.getAttribute('aria-controls')) || contents[index];
+                if (!content) return;
+                if (!tab.id) tab.id = `openshop-panel-tab-${groupIndex + 1}-${index + 1}`;
+                tab.setAttribute('role', 'tab');
+                tab.setAttribute('aria-controls', content.id);
+                const selected = tab.classList.contains('active') || content.classList.contains('active');
+                tab.classList.toggle('active', selected);
+                tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+                tab.tabIndex = selected ? 0 : -1;
+                content.setAttribute('role', 'tabpanel');
+                content.setAttribute('aria-labelledby', tab.id);
+                content.tabIndex = 0;
+                content.hidden = !selected;
+            });
+            if (tablist.dataset.keyboardReady === 'true') return;
+            tablist.addEventListener('keydown', event => this._onPanelTabKeydown(event));
+            tablist.dataset.keyboardReady = 'true';
+        });
+    },
+    _onPanelTabKeydown(event) {
+        const tablist = event.currentTarget;
+        const tabs = [...tablist.querySelectorAll(':scope > [role="tab"]')];
+        const current = tabs.indexOf(event.target);
+        if (current < 0) return;
+        let next = current;
+        if (event.key === 'ArrowRight') next = (current + 1) % tabs.length;
+        else if (event.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+        else if (event.key === 'Home') next = 0;
+        else if (event.key === 'End') next = tabs.length - 1;
+        else return;
+        event.preventDefault();
+        const tab = tabs[next];
+        const content = document.getElementById(tab.getAttribute('aria-controls'));
+        if (!content) return;
+        this.switchTab(tab, content.dataset.group, content.id);
+        tab.focus({ preventScroll:true });
+    },
     switchTab(tabBtn, groupId, contentId) {
-        // Deactivate all tabs in this group
-        tabBtn.parentElement.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
-        tabBtn.classList.add('active');
-        // Show target content, hide siblings
-        document.querySelectorAll('.panel-tab-content[data-group="' + groupId + '"]').forEach(c => c.classList.remove('active'));
-        document.getElementById(contentId).classList.add('active');
+        const content = document.getElementById(contentId);
+        if (!tabBtn || !content) return false;
+        const tablist = tabBtn.closest('.panel-tabs');
+        const tabs = [...(tablist?.querySelectorAll(':scope > .panel-tab') || [])];
+        tabs.forEach(tab => {
+            const selected = tab === tabBtn || tab.getAttribute('aria-controls') === contentId;
+            tab.classList.toggle('active', selected);
+            tab.setAttribute('role', 'tab');
+            tab.setAttribute('aria-controls', tab.getAttribute('aria-controls') || contentId);
+            tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+            tab.tabIndex = selected ? 0 : -1;
+        });
+        document.querySelectorAll('.panel-tab-content[data-group="' + groupId + '"]').forEach(candidate => {
+            const selected = candidate === content;
+            candidate.classList.toggle('active', selected);
+            candidate.hidden = !selected;
+            candidate.setAttribute('role', 'tabpanel');
+            if (tabBtn.id) candidate.setAttribute('aria-labelledby', selected ? tabBtn.id : candidate.getAttribute('aria-labelledby') || tabBtn.id);
+        });
         if (this.session?.panels?.activeTabs) this.session.panels.activeTabs[groupId] = contentId;
+        return true;
     },
     _closeAllFlyouts() {
         document.querySelectorAll('.tool-flyout').forEach(f => {
@@ -18375,9 +18465,16 @@ self.onmessage = function(event) {
             list.dataset.state = 'blank';
             const empty = document.createElement('div');
             empty.className = 'history-empty';
-            empty.setAttribute('role', 'status');
+            empty.id = 'openshop-history-option-empty';
+            empty.setAttribute('role', 'option');
+            empty.setAttribute('aria-label', 'History begins after you open a document');
+            empty.setAttribute('aria-selected', 'true');
+            empty.setAttribute('aria-disabled', 'true');
+            empty.setAttribute('aria-posinset', '1');
+            empty.setAttribute('aria-setsize', '1');
             empty.textContent = 'History begins after you open a document.';
             list.appendChild(empty);
+            list.setAttribute('aria-activedescendant', empty.id);
             return;
         }
         delete list.dataset.state;
@@ -18967,7 +19064,7 @@ self.onmessage = function(event) {
             grid.dataset.swatchGridReady = 'true';
         }
     },
-    _swatchGridRows(grid, cells = [...(grid?.querySelectorAll?.(':scope > [role="gridcell"]') || [])]) {
+    _swatchGridRows(grid, cells = [...(grid?.querySelectorAll?.(':scope > [role="gridcell"], :scope > [role="row"] > [role="gridcell"]') || [])]) {
         if (!grid || !cells.length) return [];
         const measured = cells.map(cell => ({
             cell,
@@ -18997,7 +19094,7 @@ self.onmessage = function(event) {
     },
     _syncSwatchGridSemantics(grid) {
         if (!grid) return;
-        const cells = [...grid.querySelectorAll(':scope > [role="gridcell"]')];
+        const cells = [...grid.querySelectorAll(':scope > [role="gridcell"], :scope > [role="row"] > [role="gridcell"]')];
         const rows = this._swatchGridRows(grid, cells);
         grid.setAttribute('aria-rowcount', String(rows.length));
         grid.setAttribute('aria-colcount', String(Math.max(0, ...rows.map(row => row.length))));
@@ -19008,7 +19105,7 @@ self.onmessage = function(event) {
     },
     _syncSwatchGridRoving(grid, preferred = null) {
         if (!grid) return;
-        const cells = [...grid.querySelectorAll(':scope > [role="gridcell"]')];
+        const cells = [...grid.querySelectorAll(':scope > [role="gridcell"], :scope > [role="row"] > [role="gridcell"]')];
         if (!cells.length) {
             this._syncSwatchGridSemantics(grid);
             return;
@@ -19045,6 +19142,19 @@ self.onmessage = function(event) {
         });
         return swatch;
     },
+    _appendSwatchControl(grid, swatch) {
+        if (!grid || !swatch) return false;
+        let row = grid.querySelector(':scope > [role="row"]');
+        if (!row) {
+            row = document.createElement('div');
+            row.setAttribute('role', 'row');
+            row.className = 'swatch-row';
+            row.style.display = 'contents';
+            grid.appendChild(row);
+        }
+        row.appendChild(swatch);
+        return true;
+    },
     _activateSwatch(swatch, { background = false, announce = false } = {}) {
         const color = this._validHexColor(swatch?.dataset?.osSwatchColor);
         if (!color) return false;
@@ -19061,7 +19171,7 @@ self.onmessage = function(event) {
     _onSwatchGridKeydown(event) {
         const grid = event.currentTarget;
         const swatch = event.target?.closest?.('[role="gridcell"]');
-        if (!grid || !swatch || swatch.parentElement !== grid) return;
+        if (!grid || !swatch || !grid.contains(swatch)) return;
         const key = event.key;
         if (key === 'ContextMenu' || (key === 'F10' && event.shiftKey)) {
             event.preventDefault();
@@ -19101,7 +19211,7 @@ self.onmessage = function(event) {
         this._clearNode(el);
         colors.forEach(color => {
             const swatch = this._createSwatchControl(color, 'color-swatch', `Foreground color ${color}`);
-            if (swatch) el.appendChild(swatch);
+            if (swatch) this._appendSwatchControl(el, swatch);
         });
         this._syncSwatchGridRoving(el);
     },
@@ -20085,6 +20195,41 @@ self.onmessage = function(event) {
     // canvas pointer press, cleared the moment focus lands on a real control,
     // so the Tab panel toggle can coexist with focus traversal.
     _canvasFocusContext: false,
+    _isMobilePanelLayout() {
+        return document.documentElement.dataset.osWorkspace === 'mobile'
+            || Boolean(window.matchMedia?.('(max-width: 767px)')?.matches);
+    },
+    _syncMobilePanelAccessibility() {
+        const panels = document.getElementById('panels');
+        const toggle = document.getElementById('mobile-panel-toggle');
+        if (!panels) return { mobile:false, open:false };
+        const mobile = this._isMobilePanelLayout();
+        const open = panels.classList.contains('mobile-open');
+        const closed = mobile && !open;
+        panels.inert = closed;
+        panels.toggleAttribute('inert', closed);
+        panels.setAttribute('aria-hidden', closed ? 'true' : 'false');
+        if (toggle) {
+            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            toggle.setAttribute('aria-label', open ? 'Hide panels' : 'Show panels');
+        }
+        return { mobile, open };
+    },
+    toggleMobilePanels(force = null) {
+        const panels = document.getElementById('panels');
+        const toggle = document.getElementById('mobile-panel-toggle');
+        if (!panels) return false;
+        const open = force === null ? !panels.classList.contains('mobile-open') : Boolean(force);
+        panels.classList.toggle('mobile-open', open);
+        this._syncMobilePanelAccessibility();
+        if (open) {
+            panels.querySelector('.panel-tab[aria-selected="true"], .panel-tab')?.focus({ preventScroll:true });
+        } else {
+            toggle?.focus({ preventScroll:true });
+        }
+        this._announceAccessibility(open ? 'Panels shown' : 'Panels hidden');
+        return open;
+    },
     togglePanels() {
         const ids = ['panels', 'toolbar', 'tool-options'];
         const nodes = ids.map(id => document.getElementById(id)).filter(Boolean);
@@ -20111,6 +20256,10 @@ self.onmessage = function(event) {
             splitter.className = 'panel-splitter';
             splitter.setAttribute('role', 'separator');
             splitter.setAttribute('aria-orientation', 'horizontal');
+            splitter.setAttribute('aria-valuemin', String(this._panelMinHeight));
+            splitter.setAttribute('aria-valuemax', '2000');
+            splitter.setAttribute('aria-valuenow', String(Math.round(group.getBoundingClientRect().height) || this._panelMinHeight));
+            splitter._osPanelGroup = group;
             const label = this._menuOwnText(group.querySelector('.panel-tab')) || `Section ${index + 1}`;
             splitter.setAttribute('aria-label', `Resize ${label} panel`);
             splitter.title = 'Drag, or focus and use the arrow keys, to resize';
@@ -20121,6 +20270,8 @@ self.onmessage = function(event) {
     _setPanelGroupHeight(group, height) {
         const next = Math.max(this._panelMinHeight, Math.round(height));
         group.style.flex = `0 0 ${next}px`;
+        const splitter = group.nextElementSibling?.matches?.('[role="separator"]') ? group.nextElementSibling : null;
+        splitter?.setAttribute('aria-valuenow', String(next));
         return next;
     },
     _persistPanelSizes() {
@@ -20172,6 +20323,7 @@ self.onmessage = function(event) {
         this._canvasFocusContextReady = true;
         const area = document.getElementById('canvas-area');
         area?.addEventListener('pointerdown', () => { this._canvasFocusContext = true; });
+        area?.addEventListener('focus', () => { this._canvasFocusContext = true; });
         // Any control taking focus — by click or by Tab — hands the key back.
         document.addEventListener('focusin', event => {
             if (event.target !== document.body && !area?.contains(event.target)) {
@@ -26643,20 +26795,60 @@ self.onmessage = async function(e) {
             }
         });
     },
-    toggleCmdPalette() {
+    toggleCmdPalette(trigger = null) {
         const el = document.getElementById('cmd-palette');
         if (el.classList.contains('visible')) { this.closeCmdPalette(); return; }
+        this._cmdReturnFocus = trigger?.focus
+            ? trigger
+            : document.activeElement?.closest?.('#cmd-palette')
+                ? this._cmdReturnFocus
+                : document.activeElement;
         el.classList.add('visible');
+        el.setAttribute('aria-hidden', 'false');
         const input = document.getElementById('cmd-input');
+        input?.setAttribute('aria-expanded', 'true');
         input.value = ''; input.focus();
         this._cmdIdx = 0;
         this.filterCommands('');
     },
     closeCmdPalette() {
-        document.getElementById('cmd-palette').classList.remove('visible');
+        const palette = document.getElementById('cmd-palette');
+        if (!palette) return;
+        const wasVisible = palette.classList.contains('visible');
+        const focusInside = palette.contains(document.activeElement);
+        palette.classList.remove('visible');
+        palette.setAttribute('aria-hidden', 'true');
+        const input = document.getElementById('cmd-input');
+        input?.setAttribute('aria-expanded', 'false');
+        input?.removeAttribute('aria-activedescendant');
+        if (!wasVisible && !focusInside) return;
+        this._releaseModal?.(palette);
+        const returnTo = this._cmdReturnFocus;
+        this._cmdReturnFocus = null;
+        if (returnTo && returnTo !== document.body && document.contains(returnTo)
+            && !returnTo.closest?.('[inert]') && this._isVisibleElement?.(returnTo)) {
+            returnTo.focus?.({ preventScroll:true });
+        } else {
+            document.getElementById('command-launch')?.focus({ preventScroll:true });
+        }
+    },
+    _syncCommandPaletteActive() {
+        const input = document.getElementById('cmd-input');
+        const items = [...document.querySelectorAll('#cmd-results [role="option"]')];
+        items.forEach((item, index) => {
+            const selected = index === this._cmdIdx;
+            item.classList.toggle('active', selected);
+            item.setAttribute('aria-selected', selected ? 'true' : 'false');
+        });
+        const active = items[this._cmdIdx];
+        if (input) {
+            if (active) input.setAttribute('aria-activedescendant', active.id);
+            else input.removeAttribute('aria-activedescendant');
+        }
     },
     filterCommands(q) {
         const results = document.getElementById('cmd-results');
+        if (!results) return;
         const cmds = this._getCommands();
         const lower = q.toLowerCase();
         const filtered = lower ? cmds.filter(c => c.label.toLowerCase().includes(lower)
@@ -26668,6 +26860,9 @@ self.onmessage = async function(e) {
         this._cmdFiltered.forEach((c, i) => {
             const item = document.createElement('div');
             item.className = 'cmd-item' + (i === 0 ? ' active' : '');
+            item.id = `openshop-command-option-${i}`;
+            item.setAttribute('role', 'option');
+            item.setAttribute('aria-selected', i === 0 ? 'true' : 'false');
             item.addEventListener('mouseenter', () => this._cmdHover(i));
             item.addEventListener('click', () => this._cmdExec(i));
             const label = document.createElement('span');
@@ -26691,26 +26886,29 @@ self.onmessage = async function(e) {
         if (!this._cmdFiltered.length) {
             const empty = document.createElement('div');
             empty.className = 'cmd-item cmd-empty';
+            empty.setAttribute('role', 'status');
             empty.textContent = lower ? `No commands match “${this._safeText(q, 40)}”` : 'No commands available';
             results.appendChild(empty);
         } else if (!lower && cmds.length > this._cmdFiltered.length) {
             const more = document.createElement('div');
             more.className = 'cmd-item cmd-empty';
+            more.setAttribute('role', 'status');
             more.textContent = `Showing ${this._cmdFiltered.length} of ${cmds.length} commands — keep typing to narrow`;
             results.appendChild(more);
         }
+        this._syncCommandPaletteActive();
     },
     _cmdHover(i) {
         this._cmdIdx = i;
-        document.querySelectorAll('#cmd-results .cmd-item').forEach((el, j) => el.classList.toggle('active', j === i));
+        this._syncCommandPaletteActive();
     },
     cmdKeyDown(e) {
-        const items = document.querySelectorAll('#cmd-results .cmd-item');
+        const items = document.querySelectorAll('#cmd-results [role="option"]');
         if (e.key === 'ArrowDown') { e.preventDefault(); this._cmdIdx = Math.min(this._cmdIdx + 1, items.length - 1); }
         else if (e.key === 'ArrowUp') { e.preventDefault(); this._cmdIdx = Math.max(this._cmdIdx - 1, 0); }
         else if (e.key === 'Enter') { e.preventDefault(); this._cmdExec(this._cmdIdx); return; }
         else return;
-        items.forEach((el, j) => el.classList.toggle('active', j === this._cmdIdx));
+        this._syncCommandPaletteActive();
         items[this._cmdIdx]?.scrollIntoView({ block: 'nearest' });
     },
     _cmdExec(i) {
@@ -27710,7 +27908,7 @@ self.onmessage = async function(e) {
         this._clearNode(row);
         defaults.forEach(c => {
             const swatch = this._createPaletteSwatch(c);
-            if (swatch) row.appendChild(swatch);
+            if (swatch) this._appendSwatchControl(row, swatch);
         });
         this._syncSwatchGridRoving(row);
     },
@@ -27728,7 +27926,7 @@ self.onmessage = async function(e) {
         this._clearNode(row);
         this._savedPalette.forEach(c => {
             const swatch = this._createPaletteSwatch(c);
-            if (swatch) row.appendChild(swatch);
+            if (swatch) this._appendSwatchControl(row, swatch);
         });
         this._syncSwatchGridRoving(row);
     },
@@ -28271,7 +28469,7 @@ self.onmessage = async function(e) {
         }[character]));
         const o = document.createElement('div'); o.className = 'modal-overlay';
         o.innerHTML = this._trustedHTML`<div class="modal" style="min-width:400px"><h3>Keyboard Shortcuts</h3>
-            <dl class="shortcut-grid">${shortcuts.map(([k,v]) => `<dt data-os-shortcut="${escape(k)}">${escape(this._displayShortcut(k))}</dt><dd>${escape(v)}</dd>`).join('')}</dl>
+            <dl class="shortcut-grid" tabindex="0" aria-label="Keyboard shortcuts">${shortcuts.map(([k,v]) => `<dt data-os-shortcut="${escape(k)}">${escape(this._displayShortcut(k))}</dt><dd>${escape(v)}</dd>`).join('')}</dl>
             <div class="modal-btns"><button class="btn" data-modal-close>Close</button></div></div>`;
         document.body.appendChild(o); requestAnimationFrame(() => o.classList.add('show'));
     },
@@ -29388,13 +29586,56 @@ self.onmessage = async function(e) {
     _animationDelay(index, fallback = Math.round(1000 / 12)) {
         return this._normalizeAnimationDelays(this._animDelays, this._animFrames.length, fallback)[index] || fallback;
     },
+    _initBottomTabSemantics() {
+        const tablist = document.getElementById('bottom-tabs');
+        if (!tablist) return;
+        tablist.setAttribute('role', 'tablist');
+        tablist.setAttribute('aria-orientation', 'horizontal');
+        const tabs = [...tablist.querySelectorAll(':scope > .bottom-tab')];
+        tabs.forEach((tab, index) => {
+            tab.setAttribute('role', 'tab');
+            if (!tab.id) tab.id = `openshop-bottom-tab-${index + 1}`;
+            const selected = tab.getAttribute('aria-selected') === 'true';
+            tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+            tab.tabIndex = selected ? 0 : -1;
+        });
+        const timeline = document.getElementById('timeline-panel');
+        if (timeline) {
+            timeline.setAttribute('role', 'tabpanel');
+            timeline.setAttribute('aria-labelledby', document.getElementById('timeline-tab')?.id || 'timeline-tab');
+            timeline.hidden = document.getElementById('timeline-tab')?.getAttribute('aria-selected') !== 'true';
+        }
+        if (tablist.dataset.keyboardReady === 'true') return;
+        tablist.addEventListener('keydown', event => {
+            const current = tabs.indexOf(event.target);
+            if (current < 0) return;
+            let next = current;
+            if (event.key === 'ArrowRight') next = (current + 1) % tabs.length;
+            else if (event.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+            else if (event.key === 'Home') next = 0;
+            else if (event.key === 'End') next = tabs.length - 1;
+            else return;
+            event.preventDefault();
+            const tab = tabs[next];
+            this.selectBottomTab(tab.dataset.bottomTab);
+            tab.focus({ preventScroll:true });
+        });
+        tablist.dataset.keyboardReady = 'true';
+    },
     selectBottomTab(tab) {
         const next = tab === 'timeline' ? 'timeline' : 'mini-bridge';
-        if (next === 'mini-bridge') document.getElementById('timeline-panel')?.classList.remove('visible');
+        const timeline = document.getElementById('timeline-panel');
+        timeline?.classList.toggle('visible', next === 'timeline');
         document.querySelectorAll('#bottom-tabs .bottom-tab').forEach(button => {
             const selected = button.dataset.bottomTab === next;
+            button.setAttribute('role', 'tab');
             button.setAttribute('aria-selected', selected ? 'true' : 'false');
+            button.tabIndex = selected ? 0 : -1;
         });
+        if (timeline) {
+            timeline.hidden = next !== 'timeline';
+            timeline.setAttribute('aria-hidden', next === 'timeline' ? 'false' : 'true');
+        }
         document.documentElement.dataset.osBottomTab = next;
         this._syncViewMenuState();
     },
@@ -31830,6 +32071,111 @@ self.onmessage = async function(e) {
             element.textContent = value;
             if (id.endsWith('color-profile')) element.title = active ? profile : 'No document open';
         });
+    },
+    _a11yControlSequence: 0,
+    _a11yNormalizeQueued: false,
+    _isA11yLabelable(element) {
+        return Boolean(element?.matches?.('input:not([type="hidden"]),select,textarea'));
+    },
+    _a11yLabelText(label) {
+        return String(label?.textContent || '').replace(/\s+/g, ' ').trim();
+    },
+    _a11yHumanize(value) {
+        const text = String(value || '')
+            .replace(/^openshop-a11y-/, '')
+            .replace(/[-_]+/g, ' ')
+            .replace(/\b\w/g, character => character.toUpperCase())
+            .trim();
+        return text || 'Form control';
+    },
+    _a11yLabelTarget(label) {
+        if (!label) return null;
+        const referenced = label.htmlFor ? document.getElementById(label.htmlFor) : null;
+        if (this._isA11yLabelable(referenced)) return referenced;
+        const nested = label.querySelector('input:not([type="hidden"]),select,textarea');
+        if (nested) return nested;
+        let sibling = label.nextElementSibling;
+        while (sibling && !sibling.matches('label')) {
+            if (this._isA11yLabelable(sibling)) return sibling;
+            const nestedSibling = sibling.querySelector?.('input:not([type="hidden"]),select,textarea');
+            if (nestedSibling) return nestedSibling;
+            sibling = sibling.nextElementSibling;
+        }
+        return null;
+    },
+    _a11yAssociatedLabel(control) {
+        if (!control) return null;
+        if (control.id) {
+            const explicit = [...document.querySelectorAll('label[for]')]
+                .find(label => label.htmlFor === control.id);
+            if (explicit) return explicit;
+        }
+        const wrapping = control.closest('label');
+        if (wrapping) return wrapping;
+        let sibling = control.previousElementSibling;
+        while (sibling && !sibling.matches('label')) sibling = sibling.previousElementSibling;
+        return sibling?.matches?.('label') ? sibling : null;
+    },
+    _normalizeAccessibleControls(root = document) {
+        const labels = [...(root?.querySelectorAll?.('label') || [])];
+        labels.forEach(label => {
+            const control = this._a11yLabelTarget(label);
+            if (!control) return;
+            if (!control.id) {
+                const slug = this._a11yHumanize(this._a11yLabelText(label)).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'control';
+                let id;
+                do {
+                    id = `openshop-a11y-${slug}-${++this._a11yControlSequence}`;
+                } while (document.getElementById(id));
+                control.id = id;
+            }
+            if (!label.contains(control)) label.htmlFor = control.id;
+        });
+
+        const controls = [...(root?.querySelectorAll?.('input:not([type="hidden"]),select,textarea') || [])];
+        controls.forEach(control => {
+            const ariaLabel = control.getAttribute('aria-label')?.trim();
+            const labelledBy = control.getAttribute('aria-labelledby')?.trim();
+            if (ariaLabel || labelledBy) return;
+            const label = this._a11yAssociatedLabel(control);
+            if (label && this._a11yLabelText(label)) {
+                if (!label.contains(control) && control.id) label.htmlFor = control.id;
+                return;
+            }
+            const fallback = control.getAttribute('placeholder')?.trim()
+                || control.getAttribute('title')?.trim()
+                || control.getAttribute('name')?.trim()
+                || this._a11yHumanize(control.id || control.type || control.tagName.toLowerCase());
+            control.setAttribute('aria-label', fallback);
+        });
+
+        const buttons = [...(root?.querySelectorAll?.('button,[role="button"]') || [])];
+        buttons.forEach(button => {
+            if (button.getAttribute('aria-label')?.trim() || button.getAttribute('aria-labelledby')?.trim()) return;
+            const text = button.textContent?.replace(/\s+/g, ' ').trim();
+            if (text) return;
+            const fallback = button.getAttribute('title')?.trim()
+                || button.dataset.tip?.trim()
+                || this._a11yHumanize(button.id || 'button');
+            button.setAttribute('aria-label', fallback);
+        });
+    },
+    _initAccessibleControls() {
+        this._normalizeAccessibleControls(document);
+        if (this._a11yControlsReady || typeof MutationObserver === 'undefined' || !document.body) return;
+        this._a11yControlsReady = true;
+        const schedule = () => {
+            if (this._a11yNormalizeQueued) return;
+            this._a11yNormalizeQueued = true;
+            queueMicrotask(() => {
+                this._a11yNormalizeQueued = false;
+                this._normalizeAccessibleControls(document);
+            });
+        };
+        this._a11yControlObserver = new MutationObserver(records => {
+            if (records.some(record => [...record.addedNodes].some(node => node.nodeType === Node.ELEMENT_NODE))) schedule();
+        });
+        this._a11yControlObserver.observe(document.body, { childList:true, subtree:true });
     },
     _renderAccessibilityTree() {
         const root = document.getElementById('canvas-a11y-tree');

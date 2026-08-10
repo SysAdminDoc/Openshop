@@ -197,6 +197,7 @@ export function mountEditorDom() {
     <div id="canvas-a11y-live"></div>
     <div id="tool-display"></div>
     <div id="layers-list"></div>
+    <div id="layers-list-visual"></div>
     <input id="layer-opacity" value="100">
     <span id="layer-opacity-val"></span>
     <select id="layer-blend"><option value="source-over"></option></select>
