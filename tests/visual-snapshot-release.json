@@ -1,0 +1,23 @@
+{
+  "release": "0.29.0",
+  "badge": "v0.29",
+  "project": "chromium",
+  "required": [
+    {
+      "testName": "openshop-blank-shell.png",
+      "file": "openshop-blank-shell-chromium-win32.png"
+    },
+    {
+      "testName": "openshop-editor-shell.png",
+      "file": "openshop-editor-shell-chromium-win32.png"
+    },
+    {
+      "testName": "openshop-select-menu.png",
+      "file": "openshop-select-menu-chromium-win32.png"
+    },
+    {
+      "testName": "openshop-view-menu.png",
+      "file": "openshop-view-menu-chromium-win32.png"
+    }
+  ]
+}

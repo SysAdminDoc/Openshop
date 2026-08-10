@@ -1,9 +1,10 @@
 import { expect, test } from '@playwright/test';
 import { checkoutIdentity } from './checkout-identity.mjs';
-import { releaseMetadata } from '../tools/release-metadata.mjs';
+import { readReleaseSurfaceAssets, releaseMetadata } from '../tools/release-metadata.mjs';
 
 const origin = 'http://127.0.0.1:4173';
 const productionRevision = releaseMetadata.shellRevision;
+const releaseSurfaceAssets = readReleaseSurfaceAssets();
 
 async function setServerState(request, state = {}) {
   const response = await request.post(`${origin}/__test/control`, {
@@ -261,6 +262,11 @@ test.describe('hosted offline contract', () => {
     expect(manifest.file_handlers[0].accept['application/octet-stream']).toContain('.cr3');
     for (const screenshot of manifest.screenshots) {
       expect((await request.get(`${origin}/${screenshot.src.slice(2)}`)).ok()).toBe(true);
+    }
+    for (const asset of releaseSurfaceAssets) {
+      expect(asset.local, `${asset.source} should resolve locally`).toBe(true);
+      const response = await request.get(`${origin}${asset.hostedPath}`);
+      expect(response.ok(), `${asset.source} hosted asset`).toBe(true);
     }
 
     await page.goto(`${origin}/`, { waitUntil: 'domcontentloaded' });

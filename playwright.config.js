@@ -23,7 +23,10 @@ export default defineConfig({
   },
   use: {
     trace: 'retain-on-failure',
-    viewport: { width: 1440, height: 1000 }
+    viewport: { width: 1440, height: 1000 },
+    // Keep Chromium visual baselines independent of the operator/CI desktop
+    // preference. Theme-specific coverage selects its theme explicitly.
+    colorScheme: 'dark'
   },
   projects: [
     { name: 'chromium', use: { browserName: 'chromium' } },
