@@ -1127,6 +1127,84 @@ describe('OpenShop core object', () => {
     vi.unstubAllGlobals();
   });
 
+  it('releases verified runtime payloads and blob URLs at the lifecycle boundary', async () => {
+    const OS = loadOpenShop();
+    const revoke = vi.spyOn(URL, 'revokeObjectURL');
+    const worker = { terminate: vi.fn() };
+    OS._runtimeAssetPromises = new Map([
+      ['fixture', Promise.resolve({ asset:{}, bytes:new ArrayBuffer(4096) })]
+    ]);
+    OS._runtimeAssetByteLengths = new Map([['fixture', 4096]]);
+    OS._runtimeLoadedAssets = new Set(['fixture']);
+    OS._runtimeBlobPromises = new Map([['worker', Promise.resolve('blob:worker')]]);
+    OS._runtimeBlobUrls = new Map([['worker', 'blob:worker']]);
+    OS._runtimeBlobOwners = new Map([['worker', 1]]);
+    OS._verifiedScriptPromises = new Map([['script', Promise.resolve(true)]]);
+    OS._libRawBlobUrls = { wasmUrl:'blob:libraw-wasm' };
+    OS._pdfJsPromise = Promise.resolve({});
+    OS._libRawPromise = Promise.resolve(() => {});
+    OS._avifEncoderPromise = Promise.resolve({});
+    OS._avifDecoderPromise = Promise.resolve({});
+    OS._aiLib = {};
+    OS._photonFilterWorker = worker;
+    OS._filterWorker = worker;
+
+    expect(OS._runtimeResourceReport()).toMatchObject({
+      assetPromises:1,
+      retainedAssetBytes:4096,
+      blobPromises:1,
+      blobUrls:1,
+      verifiedScriptPromises:1
+    });
+    const after = OS._disposeRuntimeResources();
+
+    expect(after).toMatchObject({
+      assetPromises:0,
+      retainedAssetBytes:0,
+      loadedAssets:0,
+      blobPromises:0,
+      blobUrls:0,
+      blobOwners:0,
+      verifiedScriptPromises:0,
+      scriptUrls:0
+    });
+    expect(OS._pdfJsPromise).toBeNull();
+    expect(OS._libRawPromise).toBeNull();
+    expect(OS._aiLib).toBeNull();
+    expect(worker.terminate).toHaveBeenCalled();
+    expect(revoke).toHaveBeenCalledWith('blob:worker');
+    expect(revoke).toHaveBeenCalledWith('blob:libraw-wasm');
+    revoke.mockRestore();
+  });
+
+  it('keeps shared verified blob owners alive until the last consumer releases them', async () => {
+    const OS = loadOpenShop();
+    const revoke = vi.spyOn(URL, 'revokeObjectURL');
+    const fetchRuntime = vi.spyOn(OS, '_fetchVerifiedRuntimeAsset').mockResolvedValue({
+      asset:{ type:'application/javascript' },
+      bytes:new Uint8Array([1, 2, 3]).buffer
+    });
+
+    const first = await OS._verifiedRuntimeBlobUrl('shared');
+    const second = await OS._verifiedRuntimeBlobUrl('shared');
+    expect(second).toBe(first);
+    expect(fetchRuntime).toHaveBeenCalledTimes(1);
+    expect(OS._runtimeResourceReport()).toMatchObject({
+      assetPromises:0,
+      retainedAssetBytes:0,
+      blobPromises:1,
+      blobUrls:1,
+      blobOwners:2
+    });
+
+    OS._releaseVerifiedRuntimeBlob('shared');
+    expect(OS._runtimeResourceReport()).toMatchObject({ blobPromises:1, blobUrls:1, blobOwners:1 });
+    OS._releaseVerifiedRuntimeBlob('shared');
+    expect(OS._runtimeResourceReport()).toMatchObject({ blobPromises:0, blobUrls:0, blobOwners:0, scriptUrls:0 });
+    expect(revoke).toHaveBeenCalledWith(first);
+    revoke.mockRestore();
+  });
+
   it('converts a clicked segmentation result into a pixel selection mask', async () => {
     const OS = loadOpenShop();
     const target = {

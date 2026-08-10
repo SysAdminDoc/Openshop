@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10" id="theme-color-meta">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-5Xys7KB9Jtdsiqs5vqpI3JpkPXQktYoeMgjrfUG5FUA=' 'sha256-DxBDKZi4Wc36rDye51bFw28oUQtyJbfIfPXKtNtLfZ4=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-5Xys7KB9Jtdsiqs5vqpI3JpkPXQktYoeMgjrfUG5FUA=' 'sha256-5aN2x3uLEL+4zsisDkPm0P5BN1aa+gfeO2dhFoS25HI=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // OpenShop-specific Fabric configuration. The editor uses Fabric 7's native
@@ -4589,7 +4589,29 @@ const OS = {
     }),
     /* OPENSHOP_RUNTIME_MANIFEST:LAZY:END */
     _runtimeAssetPromises: new Map(),
+    _runtimeAssetByteLengths: new Map(),
+    _runtimeLoadedAssets: new Set(),
     _runtimeBlobPromises: new Map(),
+    _runtimeBlobUrls: new Map(),
+    _runtimeBlobOwners: new Map(),
+    _runtimeScriptUrls() {
+        return typeof OPENSHOP_SCRIPT_URLS === 'undefined'
+            ? (this._runtimeScriptUrlFallback ||= new Set())
+            : OPENSHOP_SCRIPT_URLS;
+    },
+    _revokeRuntimeScriptUrl(url) {
+        if (typeof revokeOpenShopScriptBlobUrl === 'function') revokeOpenShopScriptBlobUrl(url);
+        else {
+            this._runtimeScriptUrls().delete(String(url));
+            URL.revokeObjectURL(String(url));
+        }
+    },
+    _createRuntimeScriptBlobUrl(blob) {
+        if (typeof createOpenShopScriptBlobUrl === 'function') return createOpenShopScriptBlobUrl(blob);
+        const url = URL.createObjectURL(blob);
+        this._runtimeScriptUrls().add(url);
+        return url;
+    },
     _pdfJsPromise: null,
     _pdfWorkerBlobUrl: null,
     _libRawPromise: null,
@@ -4610,13 +4632,94 @@ const OS = {
         if (actual !== match[2]) throw new Error('Runtime asset integrity check failed');
         return true;
     },
+    _releaseVerifiedRuntimeAsset(name) {
+        const pending = this._runtimeAssetPromises.get(name);
+        this._runtimeAssetPromises.delete(name);
+        this._runtimeAssetByteLengths.delete(name);
+        pending?.catch?.(() => {});
+    },
+    _releaseVerifiedRuntimeBlob(name) {
+        const owners = this._runtimeBlobOwners.get(name) || 0;
+        if (owners > 1) {
+            this._runtimeBlobOwners.set(name, owners - 1);
+            return;
+        }
+        this._runtimeBlobOwners.delete(name);
+        const pending = this._runtimeBlobPromises.get(name);
+        this._runtimeBlobPromises.delete(name);
+        const activeUrl = this._runtimeBlobUrls.get(name);
+        if (activeUrl) {
+            this._runtimeBlobUrls.delete(name);
+            this._revokeRuntimeScriptUrl(activeUrl);
+            return;
+        }
+        pending?.then?.(url => {
+            if (this._runtimeBlobPromises.get(name) === pending) return;
+            if (this._runtimeBlobUrls.get(name) === url) this._runtimeBlobUrls.delete(name);
+            this._revokeRuntimeScriptUrl(url);
+        }).catch?.(() => {});
+    },
+    _runtimeResourceReport() {
+        return {
+            assetPromises:this._runtimeAssetPromises.size,
+            retainedAssetBytes:[...this._runtimeAssetByteLengths.values()].reduce((sum, value) => sum + value, 0),
+            loadedAssets:this._runtimeLoadedAssets.size,
+            blobPromises:this._runtimeBlobPromises.size,
+            blobUrls:this._runtimeBlobUrls.size,
+            blobOwners:[...this._runtimeBlobOwners.values()].reduce((sum, value) => sum + value, 0),
+            verifiedScriptPromises:this._verifiedScriptPromises.size,
+            scriptUrls:this._runtimeScriptUrls().size
+        };
+    },
+    _disposeRuntimeResources() {
+        const runtimeUrls = new Set([...this._runtimeScriptUrls(), ...this._runtimeBlobUrls.values()]);
+        for (const url of runtimeUrls) this._revokeRuntimeScriptUrl(url);
+        for (const url of Object.values(this._libRawBlobUrls || {})) {
+            if (url && !runtimeUrls.has(url)) URL.revokeObjectURL(url);
+        }
+        this._libRawBlobUrls = null;
+        this._pdfWorkerBlobUrl = null;
+        this._aiWasmFactoryUrl = null;
+        this._runtimeAssetPromises.clear();
+        this._runtimeAssetByteLengths.clear();
+        this._runtimeLoadedAssets.clear();
+        this._runtimeBlobPromises.clear();
+        this._runtimeBlobUrls.clear();
+        this._runtimeBlobOwners.clear();
+        this._verifiedScriptPromises.clear();
+        this._pdfJsPromise = null;
+        this._libRawPromise = null;
+        this._avifEncoderPromise = null;
+        this._avifDecoderPromise = null;
+        ['modernGif', 'ImageTracer', 'fabricExtensions', 'svg2pdf'].forEach(name => {
+            try { delete globalThis[name]; } catch { globalThis[name] = undefined; }
+        });
+        Object.values(this._aiPipelines || {}).forEach(value => {
+            void Promise.resolve(value).then(runtime => runtime?.dispose?.()).catch(() => {});
+        });
+        Object.values(this._aiArtifacts || {}).forEach(value => {
+            Object.values(value || {}).forEach(runtime => {
+                void Promise.resolve(runtime).then(instance => instance?.dispose?.()).catch(() => {});
+            });
+        });
+        this._aiPipelines = {};
+        this._aiArtifacts = {};
+        this._aiLib = null;
+        ['_photonFilterWorker', '_filterWorker', '_rendererWorker'].forEach(key => {
+            this[key]?.terminate?.();
+            this[key] = null;
+        });
+        this._filterWorkerPhotonReady = false;
+        return this._runtimeResourceReport();
+    },
     async _fetchVerifiedRuntimeAsset(name, { report = true } = {}) {
         if (!Object.prototype.hasOwnProperty.call(this._runtimeAssets, name)) {
             throw new Error(`Unknown runtime asset: ${name}`);
         }
         if (!this._runtimeAssetPromises.has(name)) {
             const asset = this._runtimeAssets[name];
-            const pending = (async () => {
+            let pending;
+            pending = (async () => {
                 const load = async cache => {
                     const response = await fetch(asset.url, { cache, credentials:'omit', mode:'cors' });
                     if (!response.ok) throw new Error(`Runtime asset request failed (${response.status})`);
@@ -4632,8 +4735,15 @@ const OS = {
                     console.warn('Runtime asset failed from cache, refetching:', name, error.message);
                     return { asset, bytes: await load('reload') };
                 }
-            })().catch(error => {
-                this._runtimeAssetPromises.delete(name);
+            })().then(result => {
+                if (this._runtimeAssetPromises.get(name) === pending) {
+                    this._runtimeAssetByteLengths.set(name, result.bytes.byteLength);
+                    this._runtimeLoadedAssets.add(name);
+                }
+                return result;
+            }).catch(error => {
+                if (this._runtimeAssetPromises.get(name) === pending) this._runtimeAssetPromises.delete(name);
+                this._runtimeAssetByteLengths.delete(name);
                 if (report) {
                     this._reportFailure(`Runtime asset ${name}`, error, {
                         key:`runtime-asset:${name}`,
@@ -4648,11 +4758,27 @@ const OS = {
         return this._runtimeAssetPromises.get(name);
     },
     async _verifiedRuntimeBlobUrl(name, { report = true } = {}) {
-        if (!this._runtimeBlobPromises.has(name)) {
-            const pending = this._fetchVerifiedRuntimeAsset(name, { report })
-                .then(({asset, bytes}) => createOpenShopScriptBlobUrl(new Blob([bytes], {type:asset.type})))
+        if (this._runtimeBlobPromises.has(name)) {
+            this._runtimeBlobOwners.set(name, (this._runtimeBlobOwners.get(name) || 0) + 1);
+        } else {
+            let pending;
+            this._runtimeBlobOwners.set(name, 1);
+            pending = this._fetchVerifiedRuntimeAsset(name, { report })
+                .then(({asset, bytes}) => {
+                    const url = this._createRuntimeScriptBlobUrl(new Blob([bytes], {type:asset.type}));
+                    if (this._runtimeBlobPromises.get(name) !== pending) {
+                        this._revokeRuntimeScriptUrl(url);
+                        return url;
+                    }
+                    this._runtimeBlobUrls.set(name, url);
+                    this._releaseVerifiedRuntimeAsset(name);
+                    return url;
+                })
                 .catch(error => {
-                    this._runtimeBlobPromises.delete(name);
+                    if (this._runtimeBlobPromises.get(name) === pending) {
+                        this._runtimeBlobPromises.delete(name);
+                        this._runtimeBlobOwners.delete(name);
+                    }
                     throw error;
                 });
             this._runtimeBlobPromises.set(name, pending);
@@ -4669,15 +4795,19 @@ const OS = {
         if (!this._verifiedScriptPromises.has(name)) {
             const pending = (async () => {
                 const url = await this._verifiedRuntimeBlobUrl(name, { report:false });
-                await new Promise((resolve, reject) => {
-                    const element = document.createElement('script');
-                    element.src = OPENSHOP_TRUSTED_SCRIPT_URL(url);
-                    element.onload = () => resolve(true);
-                    element.onerror = () => reject(new Error(`${name} failed to execute`));
-                    (document.head || document.documentElement).appendChild(element);
-                });
-                if (!globalThis[globalName]) throw new Error(`${name} did not publish ${globalName}`);
-                return globalThis[globalName];
+                try {
+                    await new Promise((resolve, reject) => {
+                        const element = document.createElement('script');
+                        element.src = OPENSHOP_TRUSTED_SCRIPT_URL(url);
+                        element.onload = () => resolve(true);
+                        element.onerror = () => reject(new Error(`${name} failed to execute`));
+                        (document.head || document.documentElement).appendChild(element);
+                    });
+                    if (!globalThis[globalName]) throw new Error(`${name} did not publish ${globalName}`);
+                    return globalThis[globalName];
+                } finally {
+                    this._releaseVerifiedRuntimeBlob(name);
+                }
             })().catch(error => {
                 this._verifiedScriptPromises.delete(name);
                 this._reportFailure(`Runtime script ${name}`, error, {
@@ -4702,6 +4832,7 @@ const OS = {
     },
     async _loadLibRaw() {
         if (!this._libRawPromise) {
+            const runtimeAssets = ['rawIndex', 'rawWorker', 'rawLib', 'rawWasm'];
             this._libRawPromise = (async () => {
                 const [indexAsset, workerAsset, libAsset, wasmAsset] = await Promise.all([
                     this._fetchVerifiedRuntimeAsset('rawIndex'),
@@ -4742,7 +4873,9 @@ const OS = {
                 } finally {
                     revokeOpenShopScriptBlobUrl(indexUrl);
                 }
-            })().catch(error => {
+            })().finally(() => {
+                runtimeAssets.forEach(name => this._releaseVerifiedRuntimeAsset(name));
+            }).catch(error => {
                 this._libRawPromise = null;
                 throw error;
             });
@@ -4751,6 +4884,7 @@ const OS = {
     },
     async _loadPdfJs() {
         if (!this._pdfJsPromise) {
+            const runtimeAssets = ['pdfModule', 'pdfWorker'];
             this._pdfJsPromise = (async () => {
                 const [moduleAsset, workerAsset] = await Promise.all([
                     this._fetchVerifiedRuntimeAsset('pdfModule'),
@@ -4775,7 +4909,9 @@ const OS = {
                 } finally {
                     revokeOpenShopScriptBlobUrl(moduleUrl);
                 }
-            })().catch(error => {
+            })().finally(() => {
+                runtimeAssets.forEach(name => this._releaseVerifiedRuntimeAsset(name));
+            }).catch(error => {
                 this._pdfJsPromise = null;
                 this._pdfWorkerBlobUrl = null;
                 throw error;
@@ -4785,6 +4921,7 @@ const OS = {
     },
     async _loadAvifEncoder() {
         if (!this._avifEncoderPromise) {
+            const runtimeAssets = ['avifEncoderModule', 'avifEncoderWasm'];
             this._avifEncoderPromise = (async () => {
                 const [moduleAsset, wasmAsset] = await Promise.all([
                     this._fetchVerifiedRuntimeAsset('avifEncoderModule'),
@@ -4809,7 +4946,9 @@ const OS = {
                 } finally {
                     revokeOpenShopScriptBlobUrl(moduleUrl);
                 }
-            })().catch(error => {
+            })().finally(() => {
+                runtimeAssets.forEach(name => this._releaseVerifiedRuntimeAsset(name));
+            }).catch(error => {
                 this._avifEncoderPromise = null;
                 throw error;
             });
@@ -4848,6 +4987,7 @@ const OS = {
     },
     async _loadAvifDecoder() {
         if (!this._avifDecoderPromise) {
+            const runtimeAssets = ['avifDecoderModule', 'avifDecoderWasm'];
             this._avifDecoderPromise = (async () => {
                 const [moduleAsset, wasmAsset] = await Promise.all([
                     this._fetchVerifiedRuntimeAsset('avifDecoderModule'),
@@ -4870,7 +5010,9 @@ const OS = {
                 } finally {
                     revokeOpenShopScriptBlobUrl(moduleUrl);
                 }
-            })().catch(error => {
+            })().finally(() => {
+                runtimeAssets.forEach(name => this._releaseVerifiedRuntimeAsset(name));
+            }).catch(error => {
                 this._avifDecoderPromise = null;
                 throw error;
             });
@@ -9725,6 +9867,7 @@ const OS = {
             return loadStatic();
         } finally {
             try { decoder?.close?.(); } catch {}
+            this._releaseVerifiedRuntimeBlob('gifWorker');
         }
     },
     async _importGifFrames(file, mode = 'open', { historyIntent = null } = {}) {
@@ -12213,14 +12356,20 @@ self.onmessage = function(event) {
         const url = createOpenShopScriptBlobUrl(new Blob([decoder.bytes, '\n', code], { type:'application/javascript' }));
         return new Promise((resolve, reject) => {
             if (job.cancelled) {
+                this._releaseVerifiedRuntimeAsset('psdDecoder');
                 revokeOpenShopScriptBlobUrl(url);
                 const error = new Error('PSD import cancelled');
                 error.name = 'AbortError';
                 reject(error);
                 return;
             }
-            const worker = new Worker(OPENSHOP_TRUSTED_SCRIPT_URL(url));
-            revokeOpenShopScriptBlobUrl(url);
+            let worker;
+            try {
+                worker = new Worker(OPENSHOP_TRUSTED_SCRIPT_URL(url));
+            } finally {
+                this._releaseVerifiedRuntimeAsset('psdDecoder');
+                revokeOpenShopScriptBlobUrl(url);
+            }
             job.worker = worker;
             job.reject = reject;
             const finish = () => {
@@ -20674,7 +20823,7 @@ self.onmessage = function(event) {
         };
         return Promise.all(this._networkCapabilities.map(async capability => {
             const states = await Promise.all(capability.assets.map(async name => {
-                if (this._runtimeAssetPromises.has(name)) return true;
+                if (this._runtimeLoadedAssets.has(name) || this._runtimeBlobPromises.has(name)) return true;
                 return cached(this._runtimeAssets[name]?.url || '');
             }));
             return {
@@ -25847,6 +25996,7 @@ self.onmessage = async function(e) {
             }
             const runtime = payload.runtime ? {wasmBytes:payload.runtime.wasmBytes} : null;
             worker.postMessage({...payload, runtime, _jobId: id, data: buf, width, height, params: params||{}}, [buf]);
+            if (payload.runtime) payload.runtime = null;
         });
         return promise.finally(() => this._finishComputeJob(job));
     },
@@ -25954,6 +26104,9 @@ self.onmessage = async function(e) {
         } catch (error) {
             this._finishComputeJob(job);
             throw error;
+        } finally {
+            this._releaseVerifiedRuntimeAsset('photonModule');
+            this._releaseVerifiedRuntimeAsset('photonWasm');
         }
     },
     // GPU operations are admitted by the browser parity harness at a one-level
@@ -29856,47 +30009,55 @@ self.onmessage = async function(e) {
     async _loadGifCodec() {
         if (window.modernGif?.encode && window.modernGif?.decodeFrames) return window.modernGif;
         const sourceUrl = await this._verifiedRuntimeBlobUrl('gifCodec');
-        return new Promise((resolve, reject) => {
-            const s = document.createElement('script');
-            s.src = OPENSHOP_TRUSTED_SCRIPT_URL(sourceUrl);
-            s.addEventListener('load', () => {
-                s.remove();
-                if (window.modernGif?.encode && window.modernGif?.decodeFrames) resolve(window.modernGif);
-                else reject(new Error('Verified modern-gif did not expose its codec'));
-            }, {once:true});
-            s.addEventListener('error', () => {
-                s.remove();
-                reject(new Error('Failed to execute verified modern-gif'));
-            }, {once:true});
-            document.head.appendChild(s);
-        });
+        try {
+            return await new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = OPENSHOP_TRUSTED_SCRIPT_URL(sourceUrl);
+                s.addEventListener('load', () => {
+                    s.remove();
+                    if (window.modernGif?.encode && window.modernGif?.decodeFrames) resolve(window.modernGif);
+                    else reject(new Error('Verified modern-gif did not expose its codec'));
+                }, {once:true});
+                s.addEventListener('error', () => {
+                    s.remove();
+                    reject(new Error('Failed to execute verified modern-gif'));
+                }, {once:true});
+                document.head.appendChild(s);
+            });
+        } finally {
+            this._releaseVerifiedRuntimeBlob('gifCodec');
+        }
     },
     async _encodeGifFrames(frameSources, delay, onProgress) {
         const [codec, workerUrl] = await Promise.all([
             this._loadGifCodec(),
             this._verifiedRuntimeBlobUrl('gifWorker')
         ]);
-        const first = await this._loadImage(frameSources[0]);
-        const width = first.naturalWidth || first.width;
-        const height = first.naturalHeight || first.height;
-        if (!width || !height) throw new Error('GIF frames have invalid dimensions');
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const context = canvas.getContext('2d', { willReadFrequently:true });
-        const encoder = new codec.Encoder({ workerUrl:OPENSHOP_TRUSTED_SCRIPT_URL(workerUrl).toString(), width, height, maxColors:255 });
-        for (let index = 0; index < frameSources.length; index++) {
-            const image = index === 0 ? first : await this._loadImage(frameSources[index]);
-            context.clearRect(0, 0, width, height);
-            context.drawImage(image, 0, 0, width, height);
-            // Encoder.encode transfers the RGBA buffer to the verified worker,
-            // avoiding a second full animation copy on the main thread.
-            const frameDelay = Array.isArray(delay) ? delay[index] : delay;
-            await encoder.encode({ data:context.getImageData(0, 0, width, height).data, delay:Math.max(10, Math.min(60000, Math.round(Number(frameDelay) || 83))) });
-            onProgress?.(index + 1, frameSources.length);
+        try {
+            const first = await this._loadImage(frameSources[0]);
+            const width = first.naturalWidth || first.width;
+            const height = first.naturalHeight || first.height;
+            if (!width || !height) throw new Error('GIF frames have invalid dimensions');
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext('2d', { willReadFrequently:true });
+            const encoder = new codec.Encoder({ workerUrl:OPENSHOP_TRUSTED_SCRIPT_URL(workerUrl).toString(), width, height, maxColors:255 });
+            for (let index = 0; index < frameSources.length; index++) {
+                const image = index === 0 ? first : await this._loadImage(frameSources[index]);
+                context.clearRect(0, 0, width, height);
+                context.drawImage(image, 0, 0, width, height);
+                // Encoder.encode transfers the RGBA buffer to the verified worker,
+                // avoiding a second full animation copy on the main thread.
+                const frameDelay = Array.isArray(delay) ? delay[index] : delay;
+                await encoder.encode({ data:context.getImageData(0, 0, width, height).data, delay:Math.max(10, Math.min(60000, Math.round(Number(frameDelay) || 83))) });
+                onProgress?.(index + 1, frameSources.length);
+            }
+            const output = await encoder.flush();
+            return new Blob([output], { type:'image/gif' });
+        } finally {
+            this._releaseVerifiedRuntimeBlob('gifWorker');
         }
-        const output = await encoder.flush();
-        return new Blob([output], { type:'image/gif' });
     },
     async exportGIF() {
         if (this._animFrames.length < 2) { this.toast('Add at least 2 frames', 'info'); return; }
@@ -30248,8 +30409,8 @@ self.onmessage = async function(e) {
     async _loadTransformers(job = null, { report = true } = {}) {
         if (this._aiLib) return this._aiLib;
         this._showAIProgress('Loading Transformers.js', 'Verifying AI runtime and inference engine...', job);
+        const backendNames = this._aiBackendAssetNames();
         try {
-            const backendNames = this._aiBackendAssetNames();
             const loading = Promise.all([
                 this._verifiedRuntimeBlobUrl('transformers', { report:false }),
                 this._fetchVerifiedRuntimeAsset(backendNames.wasm, { report:false }),
@@ -30280,6 +30441,10 @@ self.onmessage = async function(e) {
             this._clearFailureNotice('ai-runtime-load');
             return lib;
         } catch(e) {
+            if (!this._aiLib && this._aiWasmFactoryUrl) {
+                this._revokeRuntimeScriptUrl(this._aiWasmFactoryUrl);
+                this._aiWasmFactoryUrl = null;
+            }
             this._hideAIProgress(job);
             if (!this._isComputeAbort(e) && report) {
                 this._reportFailure('Failed to load AI library', e, {
@@ -30289,6 +30454,10 @@ self.onmessage = async function(e) {
                 });
             }
             throw e;
+        } finally {
+            this._releaseVerifiedRuntimeBlob('transformers');
+            this._releaseVerifiedRuntimeAsset(backendNames.wasm);
+            this._releaseVerifiedRuntimeAsset(backendNames.factory);
         }
     },
 

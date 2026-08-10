@@ -2833,7 +2833,7 @@ test('traces a raster layer into editable paths that survive SVG and PDF export 
     OS.layers[OS.activeLayerIdx].objects.push(image);
     OS.canvas.setActiveObject(image);
 
-    const lazyBefore = OS._runtimeAssetPromises.has('imageTracer');
+    const lazyBefore = OS._runtimeLoadedAssets.has('imageTracer');
     const layersBefore = OS.layers.length;
     const ok = await OS.traceRasterLayer({ colors: 4, smoothing: 1, detail: 8 });
     const group = OS.canvas.getActiveObject();
@@ -2841,7 +2841,7 @@ test('traces a raster layer into editable paths that survive SVG and PDF export 
     const svg = OS.canvas.toSVG();
     return {
       lazyBefore,
-      lazyAfter: OS._runtimeAssetPromises.has('imageTracer'),
+      lazyAfter: OS._runtimeLoadedAssets.has('imageTracer'),
       verified: OS._runtimeAssets.imageTracer.integrity.startsWith('sha384-'),
       ok,
       newLayer: OS.layers.length - layersBefore,
@@ -3047,7 +3047,7 @@ test('drags gradient stops on canvas and colours text decorations @cross-browser
     const rect = OS.canvas.getObjects().at(-1);
     OS.canvas.setActiveObject(rect);
     const before = Object.keys(rect.controls).sort();
-    const lazyBefore = OS._runtimeAssetPromises.has('fabricExtensions');
+    const lazyBefore = OS._runtimeLoadedAssets.has('fabricExtensions');
     const attached = await OS.editGradientStops();
     const controls = Object.keys(rect.controls);
 
@@ -3070,7 +3070,7 @@ test('drags gradient stops on canvas and colours text decorations @cross-browser
     OS.canvas.setActiveObject(rect);
     return {
       lazyBefore,
-      lazyAfter: OS._runtimeAssetPromises.has('fabricExtensions'),
+      lazyAfter: OS._runtimeLoadedAssets.has('fabricExtensions'),
       verified: OS._runtimeAssets.fabricExtensions.integrity.startsWith('sha384-'),
       attached,
       newControls: controls.filter(name => !before.includes(name)).length,
@@ -3461,10 +3461,10 @@ test('encodes deterministic verified AVIF and reopens it @cross-browser', async 
         }
       }
       const pixels = new ImageData(rgba, 4, 4);
-      const lazyBefore = !OS._runtimeAssetPromises.has('avifEncoderModule')
-        && !OS._runtimeAssetPromises.has('avifEncoderWasm')
-        && !OS._runtimeAssetPromises.has('avifDecoderModule')
-        && !OS._runtimeAssetPromises.has('avifDecoderWasm');
+      const lazyBefore = !OS._runtimeLoadedAssets.has('avifEncoderModule')
+        && !OS._runtimeLoadedAssets.has('avifEncoderWasm')
+        && !OS._runtimeLoadedAssets.has('avifDecoderModule')
+        && !OS._runtimeLoadedAssets.has('avifDecoderWasm');
       const first = new Uint8Array(await OS._encodeAvifImageData(pixels, 0.73));
       const second = new Uint8Array(await OS._encodeAvifImageData(pixels, 0.73));
       const firstHash = await hash(first.buffer);
@@ -5523,9 +5523,13 @@ test('loads the verified LibRaw runtime and imports a demosaiced RAW preview', a
     }
     OS._libRawPromise = Promise.resolve(FakeLibRaw);
     const imported = await OS._loadRAWFile(new File([new Uint8Array([1,2,3])], 'fixture.dng', { type:'application/octet-stream' }));
+    const runtimeBeforeDispose = OS._runtimeResourceReport();
+    const runtimeAfterDispose = OS._disposeRuntimeResources();
     return {
       runtimeLoaded,
       imported,
+      runtimeBeforeDispose,
+      runtimeAfterDispose,
       size:[OS.canvasW, OS.canvasH],
       raw:OS._lastImportRaw,
       imageCount:OS.layers.flatMap(layer => layer.objects).filter(object => object.type === 'image').length
@@ -5534,6 +5538,8 @@ test('loads the verified LibRaw runtime and imports a demosaiced RAW preview', a
 
   expect(result.runtimeLoaded).toBe(true);
   expect(result.imported).toBe(true);
+  expect(result.runtimeBeforeDispose).toMatchObject({ assetPromises:0, retainedAssetBytes:0 });
+  expect(result.runtimeAfterDispose).toMatchObject({ assetPromises:0, retainedAssetBytes:0, blobUrls:0, scriptUrls:0 });
   expect(result.size).toEqual([2, 1]);
   expect(result.raw.model).toBe('Fixture');
   expect(result.imageCount).toBe(1);

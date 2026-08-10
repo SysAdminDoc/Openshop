@@ -354,6 +354,7 @@ One honest limitation: on the standalone `file://` lane a cold start needs the t
 
 - Core startup CDN scripts are version-pinned and loaded with [Subresource Integrity (SRI)](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity) hashes
 - PSD, Photon, GIF, AVIF, Transformers.js, and ONNX lazy runtime bytes are version-pinned, SHA-384 verified before execution, and discarded on any digest mismatch
+- Verified lazy runtime byte buffers are released after initialization, temporary executable blob URLs are revoked at their last safe owner, and the lifecycle disposer clears shared codec, PDF, RAW, AI, and worker resources without retaining duplicate payloads
 - Static controls carry opaque action IDs resolved by a frozen listener registry; executable HTML event attributes are forbidden by the release security check
 - Recent files, saved palettes, templates, and photo presets render through DOM APIs so persisted values remain inert text
 - Worker-backed filters use a named operation registry, so filter jobs no longer pass executable source strings or require `unsafe-eval`
