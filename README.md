@@ -92,7 +92,7 @@ Heavy filters (Oil Paint, Tilt Shift, Unsharp Mask, Posterize, Threshold, Vignet
 
 | Feature | Description |
 |---------|-------------|
-| **Precision Studio UI** | High-contrast dark workspace with a floating tool dock, structured inspector cards, responsive local-first launcher, and default, midnight, and OLED variants |
+| **Precision Studio UI** | High-contrast workspace with a floating tool dock, structured inspector cards, responsive local-first launcher, dark/midnight/OLED variants, and a light theme that follows the system preference on first run |
 | **Command Palette** | `Ctrl+K` to search and run any command |
 | **Sandboxed Plugin API** | Register immutable JavaScript source in an opaque-origin `iframe` with explicit `commands`, `document:read`, `selection:read`, and `ui:toast` capabilities; plugin commands use the versioned `postMessage` protocol and can be disposed cleanly |
 | **Action Recorder** | Records validated, versioned edit commands and replays mixed actions atomically; a failed step rolls back the whole action |
@@ -443,7 +443,7 @@ When contributing:
 - Run `npm test` and `npm run test:e2e`; run `npm run test:cross-browser` before changing anything the browser-support table claims
 - Run `npm run runtime:sync` and `npm run security:write` after changing a runtime asset or its inline loader
 - Maintain the single-file architecture
-- Keep the dark theme consistent with existing CSS variables
+- Keep every theme consistent with the shared CSS token scale
 - Route replayable edits through a schema-v1 command and one history transaction; use `saveHistory()` only for a completed synchronous mutation
 - Heavy pixel operations should use `_runFilterInWorker()` to avoid blocking the UI
 

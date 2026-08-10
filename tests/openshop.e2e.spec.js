@@ -3841,24 +3841,45 @@ test('applies every theme across the studio chrome and persists the choice', asy
   });
 
   const seen = {};
-  for (const theme of ['default', 'midnight', 'oled']) {
+  for (const theme of ['default', 'midnight', 'oled', 'light']) {
     await page.evaluate((t) => OS.setTheme(t, { silent: true, persist: false }), theme);
+    await page.waitForTimeout(220);
     seen[theme] = await sample();
   }
 
   // Every chrome surface must actually change between themes.
-  for (const surface of Object.keys(seen.default)) {
-    expect(seen.default[surface], surface).not.toBe(seen.oled[surface]);
-    expect(seen.default[surface], surface).not.toBe(seen.midnight[surface]);
-    expect(seen.midnight[surface], surface).not.toBe(seen.oled[surface]);
+  for (const [index, theme] of ['default', 'midnight', 'oled', 'light'].entries()) {
+    for (const other of ['default', 'midnight', 'oled', 'light'].slice(index + 1)) {
+      for (const surface of Object.keys(seen.default)) {
+        expect(seen[theme][surface], `${theme}/${other}/${surface}`).not.toBe(seen[other][surface]);
+      }
+    }
   }
   // OLED drives the canvas well to near black.
   expect(seen.oled.canvasArea).toBe('rgb(3, 4, 5)');
+  expect(seen.light.canvasArea).toBe('rgb(229, 233, 239)');
 
   // The choice survives a reload.
   await page.evaluate(() => OS.setTheme('oled'));
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.locator('html')).toHaveClass(/theme-oled/);
+
+  const systemTheme = await page.evaluate(() => {
+    const originalMatchMedia = window.matchMedia;
+    localStorage.removeItem('os_theme');
+    OS._systemThemeMediaQuery = null;
+    window.matchMedia = () => ({ matches:true, addEventListener() {} });
+    OS._restoreTheme();
+    const result = {
+      light: document.documentElement.classList.contains('theme-light'),
+      persisted: localStorage.getItem('os_theme')
+    };
+    window.matchMedia = originalMatchMedia;
+    OS.setTheme('default', { silent:true, persist:false });
+    return result;
+  });
+  expect(systemTheme.light).toBe(true);
+  expect(systemTheme.persisted).toBeNull();
 });
 
 test('exposes onboarding and layer controls to the keyboard', async ({ page }) => {
@@ -4469,7 +4490,8 @@ test('resolves accent-derived chrome through the token scale in every theme', as
       return values;
     };
     const out = {};
-    for (const theme of ['default', 'midnight', 'oled']) {
+    document.querySelector('.welcome-actions .btn-primary')?.style.setProperty('transition', 'none');
+    for (const theme of ['default', 'midnight', 'oled', 'light']) {
       OS.setTheme(theme, { silent: true, persist: false });
       await new Promise(resolve => requestAnimationFrame(resolve));
       out[theme] = read();
@@ -4489,13 +4511,13 @@ test('resolves accent-derived chrome through the token scale in every theme', as
   expect(sampled.cornerColor).toBe(sampled.default.accent);
   expect(sampled.cornerColor.startsWith('var(')).toBe(false);
 
-  const themes = ['default', 'midnight', 'oled'];
-  expect(new Set(themes.map(theme => sampled[theme].accent)).size).toBe(3);
-  expect(new Set(themes.map(theme => sampled[theme].lassoFill)).size).toBe(3);
-  expect(new Set(themes.map(theme => sampled[theme].primaryShadow)).size).toBe(3);
+  const themes = ['default', 'midnight', 'oled', 'light'];
+  expect(new Set(themes.map(theme => sampled[theme].accent)).size).toBe(4);
+  expect(new Set(themes.map(theme => sampled[theme].lassoFill)).size).toBe(4);
+  expect(new Set(themes.map(theme => sampled[theme].primaryShadow)).size).toBe(4);
   // Checkerboards and guides used to sit outside the token scale entirely.
   for (const key of ['guide', 'smartGuide', 'checkerBase', 'checkerSquares']) {
-    expect(new Set(themes.map(theme => sampled[theme][key])).size, key).toBe(3);
+    expect(new Set(themes.map(theme => sampled[theme][key])).size, key).toBe(4);
   }
   for (const theme of themes) {
     expect(sampled[theme].lassoFill).not.toContain('108, 140, 255');
@@ -4503,6 +4525,34 @@ test('resolves accent-derived chrome through the token scale in every theme', as
     expect(sampled[theme].checkerBase).not.toBe('rgb(102, 102, 102)');
     expect(sampled[theme].guide).not.toContain('108, 220, 255');
   }
+});
+
+test('keeps chrome color declarations on the theme token scale @cross-browser', async ({ page }) => {
+  await openApp(page);
+
+  const literals = await page.evaluate(() => {
+    const violations = [];
+    const tokenRule = selector => /^:root(?:\.theme-[\w-]+|:not\([^)]*\))?$/.test(selector.trim());
+    const visit = rules => {
+      for (const rule of rules) {
+        if (rule.type === CSSRule.STYLE_RULE) {
+          if (!tokenRule(rule.selectorText)) {
+            for (let i = 0; i < rule.style.length; i++) {
+              const property = rule.style[i];
+              const value = rule.style.getPropertyValue(property);
+              if (/#(?:[0-9a-f]{3,8})\b/i.test(value)) violations.push(`${rule.selectorText} ${property}: ${value}`);
+            }
+          }
+        } else if (rule.cssRules) visit(rule.cssRules);
+      }
+    };
+    for (const sheet of document.styleSheets) {
+      try { visit(sheet.cssRules); } catch (error) {}
+    }
+    return violations;
+  });
+
+  expect(literals).toEqual([]);
 });
 
 test('runs every migrated pixel filter off the main thread with unchanged math @cross-browser', async ({ page }) => {
@@ -6535,7 +6585,10 @@ test('meets WCAG 2.2 text contrast across every theme @cross-browser', async ({ 
 
     const failures = [];
     let sampled = 0;
-    for (const theme of ['default', 'midnight', 'oled']) {
+    const auditStyle = document.createElement('style');
+    auditStyle.textContent = '*,*::before,*::after{transition:none!important;animation:none!important}';
+    document.head.appendChild(auditStyle);
+    for (const theme of ['default', 'midnight', 'oled', 'light']) {
       OS.setTheme(theme, { silent: true, persist: false });
       // Open representative surfaces so muted text inside dialogs and panels is
       // measured, not only the resting studio chrome.
@@ -6569,6 +6622,7 @@ test('meets WCAG 2.2 text contrast across every theme @cross-browser', async ({ 
         }
       }
     }
+    auditStyle.remove();
     return { failures: [...new Set(failures)], sampled };
   });
 
