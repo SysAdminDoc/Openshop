@@ -492,6 +492,7 @@ describe('OpenShop core object', () => {
     expect(handle.manifest).toMatchObject({ id:manifest.id, version:'1.0.0', sourceHash:manifest.sourceHash });
     const record = OS._pluginRecords.get(handle.id);
     expect(record.iframe.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(record.iframe.title).toBe('Sandbox Probe plugin sandbox');
     expect(record.capabilities).toEqual(['commands', 'document:read']);
     OS._pluginResolveReady(record, handle);
     expect(() => OS._handlePluginRequest(record, {

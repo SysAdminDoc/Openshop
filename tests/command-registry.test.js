@@ -22,6 +22,17 @@ describe('OpenShop typed command and tool registry', () => {
     expect(tools.every(tool => tool.optionsContext && tool.sideEffect && tool.undoPolicy)).toBe(true);
   });
 
+  it('keeps the legacy command-palette tools on executable tool IDs', () => {
+    const OS = loadOpenShop();
+    const paletteTools = OS._getCommands().filter(command => command.cat === 'Tool');
+    const states = paletteTools.map(command => command.toolState);
+    const branches = new Set([...OS.setTool.toString().matchAll(/case ['"]([^'"]+)['"]/g)].map(match => match[1]));
+
+    expect(states).not.toContain('wand');
+    expect(states).toEqual(expect.arrayContaining(['magic-wand', 'dodge', 'burn', 'sponge', 'smudge']));
+    expect(states.every(state => branches.has(state))).toBe(true);
+  });
+
   it('marks unimplemented tools as refused instead of executable no-ops', async () => {
     const OS = loadOpenShop();
     OS.toast = vi.fn();

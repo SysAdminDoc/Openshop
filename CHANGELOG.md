@@ -51,6 +51,9 @@ All notable changes to Openshop will be documented in this file.
   fullscreen now expose their current state visually and through `aria-checked`.
 
 ### Fixed
+- Plugin sandbox iframes now use the manifest name for their accessible title, and
+  the command palette now uses `magic-wand` plus the implemented Dodge, Burn,
+  Sponge, and Smudge tool IDs.
 - Boot failures from editor initialization now render a standalone failure panel
   with the failing stage and a reload action instead of leaving the welcome screen
   waiting indefinitely.

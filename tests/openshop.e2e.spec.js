@@ -7897,6 +7897,7 @@ test('registers a sandbox plugin and lets it contribute a command', async ({ pag
       rejectedInit,
       rejectedConsent,
       sandbox: record.iframe.getAttribute('sandbox'),
+      iframeTitle: record.iframe.title,
       registered,
       commandFound: Boolean(command),
       commandResult,
@@ -7908,6 +7909,7 @@ test('registers a sandbox plugin and lets it contribute a command', async ({ pag
   expect(result.rejectedInit).toBeUndefined();
   expect(result.rejectedConsent).toBeUndefined();
   expect(result.sandbox).toBe('allow-scripts');
+  expect(result.iframeTitle).toBe('Probe plugin sandbox');
   expect(result.registered).toBe(true);
   expect(result.commandFound).toBe(true);
   expect(result.commandResult).toBe('ran');

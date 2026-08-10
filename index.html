@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-lvlCvobRt8adFylKIN7fQADwLaCDg4BFAzJPu72D1Gk=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-wCJw2vaJNGRoULgh2J9Fvsq77oiPYRYRD3e8tSmfLmY=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -21718,10 +21718,10 @@ self.onmessage = async function(e) {
             {label:'Duplicate Layer',cat:'Layer',fn:()=>this.duplicateLayer()},
             {label:'Merge Down',cat:'Layer',fn:()=>this.mergeDown()},
             // Tools
-            ...['select','marquee-rect','marquee-ellipse','wand','lasso','ai-segment','brush','eraser','pencil','spray',
-                'clone','healing','line','rect','circle','triangle','arrow','polygon','star','pen',
+            ...['select','marquee-rect','marquee-ellipse','magic-wand','lasso','ai-segment','brush','eraser','pencil','spray',
+                'clone','healing','dodge','burn','sponge','smudge','line','rect','circle','triangle','arrow','polygon','star','pen',
                 'text','gradient','pattern','fill','eyedropper','measure','note','crop','pan','zoom'
-            ].map(t => ({label:'Tool: '+t.charAt(0).toUpperCase()+t.slice(1).replace(/-/g,' '),cat:'Tool',fn:()=>this.setTool(t)})),
+            ].map(t => ({toolState:t,label:'Tool: '+t.charAt(0).toUpperCase()+t.slice(1).replace(/-/g,' '),cat:'Tool',fn:()=>this.setTool(t)})),
         ];
         return this._commands;
     },
@@ -25500,7 +25500,7 @@ self.onmessage = async function(e) {
     // in the nearest open-source rival (miniPaint#312). The mode is captured
     // when the gesture starts, because by the time a marquee is released the
     // modifier is often already back up.
-    _selectionCombineTools: new Set(['marquee-rect','marquee-ellipse','wand','magic-wand','lasso','ai-segment']),
+    _selectionCombineTools: new Set(['marquee-rect','marquee-ellipse','magic-wand','lasso','ai-segment']),
     _selectionCombine: 'replace',
     // What the toolbar is set to. A held modifier wins for that one gesture.
     _selectionCombineDefault: 'replace',
@@ -26738,7 +26738,7 @@ self.onmessage = async function(e) {
         const iframe = document.createElement('iframe');
         iframe.setAttribute('sandbox', 'allow-scripts');
         iframe.setAttribute('aria-hidden', 'true');
-        iframe.title = `${name} plugin sandbox`;
+        iframe.title = `${record.manifest.name} plugin sandbox`;
         iframe.tabIndex = -1;
         iframe.style.display = 'none';
         record.iframe = iframe;
