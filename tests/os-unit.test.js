@@ -1922,6 +1922,57 @@ describe('OpenShop core object', () => {
     await expect(failed).resolves.toBe(true);
   });
 
+  it('puts a verified Save/Discard/Cancel transaction in front of offline shell replacement', async () => {
+    const OS = loadOpenShop();
+    quietUiMethods(OS);
+    installModalDelegation();
+    OS._isDirty = true;
+    OS._saveOfflineDocumentBeforeReplacement = vi.fn().mockResolvedValue(true);
+    OS._discardOfflineDocumentBeforeReplacement = vi.fn().mockResolvedValue(true);
+
+    const cancelled = OS._confirmOfflineRuntimeReplacement('Apply Update');
+    const first = document.querySelector('.modal-overlay');
+    expect(first.textContent).toMatch(/reload OpenShop and replace the running app/);
+    expect([...first.querySelectorAll('button')].map(button => button.textContent))
+      .toEqual(['Cancel', 'Save', 'Discard']);
+    first.querySelector('[data-modal-cancel]').click();
+    await expect(cancelled).resolves.toBe(false);
+    expect(OS._saveOfflineDocumentBeforeReplacement).not.toHaveBeenCalled();
+    expect(OS._discardOfflineDocumentBeforeReplacement).not.toHaveBeenCalled();
+
+    const saved = OS._confirmOfflineRuntimeReplacement('Restore Previous Shell');
+    const second = document.querySelector('.modal-overlay');
+    [...second.querySelectorAll('button')].find(button => button.textContent === 'Save').click();
+    await expect(saved).resolves.toBe(true);
+    expect(OS._saveOfflineDocumentBeforeReplacement).toHaveBeenCalledTimes(1);
+
+    const discarded = OS._confirmOfflineRuntimeReplacement('Rebuild Offline Shell');
+    const third = document.querySelector('.modal-overlay');
+    [...third.querySelectorAll('button')].find(button => button.textContent === 'Discard').click();
+    await expect(discarded).resolves.toBe(true);
+    expect(OS._discardOfflineDocumentBeforeReplacement).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires an acknowledged current recovery generation before offline replacement', async () => {
+    const OS = loadOpenShop();
+    quietUiMethods(OS);
+    OS._documentId = 'document-offline';
+    OS._documentRevision = 4;
+    OS._autoSave = vi.fn().mockResolvedValue(true);
+    OS._autoSaveDirty = false;
+    OS._getRecoveryTabId = () => 'tab-offline';
+    OS._listRecoveryGenerations = vi.fn().mockResolvedValue([{
+      valid:true, documentId:'document-offline', revision:4, ownerId:'tab-offline'
+    }]);
+
+    await expect(OS._saveOfflineDocumentBeforeReplacement()).resolves.toBe(true);
+    expect(OS._autoSave).toHaveBeenCalledTimes(1);
+
+    OS._listRecoveryGenerations.mockResolvedValue([]);
+    await expect(OS._saveOfflineDocumentBeforeReplacement()).resolves.toBe(false);
+    expect(OS.toast).toHaveBeenCalledWith(expect.stringContaining('could not be verified'), 'error');
+  });
+
   it('offers recovery above the welcome launcher', () => {
     const OS = loadOpenShop();
     quietUiMethods(OS);

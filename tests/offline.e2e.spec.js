@@ -435,6 +435,98 @@ test.describe('hosted offline contract', () => {
     await context.setOffline(false);
   });
 
+  test('gates every runtime replacement behind an explicit dirty-document decision', async ({ page }) => {
+    await page.goto(`${origin}/`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => document.documentElement.dataset.osBoot === 'ready', null, { timeout: 60000 });
+    await page.getByRole('button', { name: 'Enter Studio' }).click();
+
+    const result = await page.evaluate(async () => {
+      OS._isDirty = true;
+      OS._pwaRegistration = { waiting:{} };
+      OS.__offlineCalls = [];
+      OS._requestOfflineWorker = async type => { OS.__offlineCalls.push(type); return true; };
+      OS._saveOfflineDocumentBeforeReplacement = async () => { OS.__offlineSaved = true; return true; };
+      OS._discardOfflineDocumentBeforeReplacement = async () => { OS.__offlineDiscarded = true; return true; };
+
+      const decide = async (operation, label) => {
+        const pending = operation();
+        await new Promise(resolve => setTimeout(resolve, 0));
+        const overlay = [...document.querySelectorAll('.modal-overlay')].at(-1);
+        const button = [...overlay.querySelectorAll('button')].find(candidate => candidate.textContent === label);
+        if (!button) throw new Error(`Decision button ${label} was not rendered`);
+        button.click();
+        return pending;
+      };
+
+      const cancelled = await decide(() => OS.applyOfflineUpdate(), 'Cancel');
+      const afterCancel = { calls:[...OS.__offlineCalls], dirty:OS._isDirty };
+
+      OS._offlineRuntimeReplacementInProgress = false;
+      OS._offlineReloadForUpdate = false;
+      OS._isDirty = true;
+      OS._saveOfflineDocumentBeforeReplacement = async () => false;
+      const failedSavePromise = OS.applyOfflineUpdate();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      const failedSaveOverlay = [...document.querySelectorAll('.modal-overlay')].at(-1);
+      failedSaveOverlay.querySelector('button:not([data-modal-cancel])').click();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      const failedSaveModalStayed = document.body.contains(failedSaveOverlay);
+      const failedSaveCalls = [...OS.__offlineCalls];
+      failedSaveOverlay.querySelector('[data-modal-cancel]').click();
+      const failedSave = await failedSavePromise;
+
+      OS._offlineRuntimeReplacementInProgress = false;
+      OS._offlineReloadForUpdate = false;
+      OS._isDirty = true;
+      OS._saveOfflineDocumentBeforeReplacement = async () => { OS.__offlineSaved = true; return true; };
+      const saved = await decide(() => OS.applyOfflineUpdate(), 'Save');
+      const afterSave = { calls:[...OS.__offlineCalls], saved:OS.__offlineSaved, replacement:OS._offlineRuntimeReplacementInProgress };
+
+      OS._offlineRuntimeReplacementInProgress = false;
+      OS._offlineReloadForUpdate = false;
+      OS._isDirty = true;
+      const rollbackCancelled = await decide(() => OS.rollbackOfflineShell(), 'Cancel');
+      const afterRollbackCancel = [...OS.__offlineCalls];
+
+      OS._offlineRuntimeReplacementInProgress = false;
+      OS._isDirty = true;
+      OS._requestOfflineWorker = async type => {
+        OS.__offlineCalls.push(type);
+        throw new Error('test keeps the page from reloading');
+      };
+      const restageDiscarded = await decide(() => OS.restageOfflineShell(), 'Discard');
+      return {
+        cancelled,
+        afterCancel,
+        failedSave,
+        failedSaveModalStayed,
+        failedSaveCalls,
+        saved,
+        afterSave,
+        rollbackCancelled,
+        afterRollbackCancel,
+        restageDiscarded,
+        discarded:OS.__offlineDiscarded,
+        finalReplacement:OS._offlineRuntimeReplacementInProgress
+      };
+    });
+
+    expect(result.cancelled).toBe(false);
+    expect(result.afterCancel).toEqual({ calls:[], dirty:true });
+    expect(result.failedSave).toBe(false);
+    expect(result.failedSaveModalStayed).toBe(true);
+    expect(result.failedSaveCalls).toEqual([]);
+    expect(result.saved).toBe(true);
+    expect(result.afterSave).toEqual({
+      calls:['OPENSHOP_APPLY_UPDATE'], saved:true, replacement:true
+    });
+    expect(result.rollbackCancelled).toBe(false);
+    expect(result.afterRollbackCancel).toEqual(['OPENSHOP_APPLY_UPDATE']);
+    expect(result.restageDiscarded).toBe(false);
+    expect(result.discarded).toBe(true);
+    expect(result.finalReplacement).toBe(false);
+  });
+
   test('resumes an interrupted promotion without replacing the verified shell', async ({ page, request }) => {
     test.setTimeout(120000);
     await page.goto(`${origin}/`, { waitUntil: 'domcontentloaded' });

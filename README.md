@@ -108,7 +108,7 @@ Heavy filters (Oil Paint, Tilt Shift, Unsharp Mask, Posterize, Threshold, Vignet
 | **Marching Ants** | Animated selection borders |
 | **Welcome Screen** | Template presets for common canvas sizes |
 | **Tab Toggle** | `Tab` hides all panels for distraction-free editing |
-| **Offline & Install** | The hosted HTTPS lane stages and verifies its complete core shell, supports install prompts, exposes cache/model state, and rolls back an update that cannot confirm startup; the one-file `file://` lane is explicitly network-first |
+| **Offline & Install** | The hosted HTTPS lane stages and verifies its complete core shell, gates Apply Update, Restore Previous Shell, and Rebuild Offline Shell behind Save/Discard/Cancel when the document is dirty, supports install prompts, exposes cache/model state, and rolls back an update that cannot confirm startup; the one-file `file://` lane is explicitly network-first |
 | **Accessibility** | ARIA roles, keyboard navigation, focus indicators, reduced-motion support, hidden canvas-state mirror, and live status announcements |
 | **Save State** | The status bar and document title distinguish clean, unsaved, saving, saved, and failed writes; unload warnings follow actual dirty state |
 
@@ -366,7 +366,7 @@ OpenShop has two explicit distribution contracts:
 - `index.html` opened from disk remains the portable one-file editor. Core libraries are pinned but CDN-hosted, so a cold launch and any uncached optional helper require a connection. Browsers do not allow this lane to register a service worker.
 - An HTTPS or localhost deployment that includes `sw.js`, `plugin-sandbox.html`, `plugin-sandbox.js`, `manifest.webmanifest`, both icons, and the two `design/` install screenshots stages the editor, plugin runtime, manifest, install assets, Fabric, ag-psd, and jsPDF as one verified shell. The status bar reports readiness. Once ready, the core editor reloads offline.
 
-Hosted updates install into a separate cache and remain waiting until applied. The new shell must complete an editor health check; if it does not, the next launch returns to the last verified shell. The Offline & Install dialog exposes update, rollback, connection, install, optional-helper, and pinned AI-model cache state.
+Hosted updates install into a separate cache and remain waiting until applied. The new shell must complete an editor health check; if it does not, the next launch returns to the last verified shell. The Offline & Install dialog exposes update, rollback, connection, install, optional-helper, and pinned AI-model cache state. Apply Update, Restore Previous Shell, and Rebuild Offline Shell first ask dirty documents whether to Save a verified recovery generation, Discard it explicitly, or Cancel without changing the worker or document; a failed Save leaves the current shell active.
 
 Installed-app file launch is progressively enhanced through `launchQueue`. Supporting Chromium releases can launch raster, vector, AVIF/APNG, PDF, RAW, PSD, OpenRaster, and `.openshop` project files. Installed browsers can also receive image files from the system share sheet; OpenShop stores the multipart handoff locally before opening it, so document pixels never upload. Other browsers retain Open, drag/drop, and file-picker workflows. AI models are intentionally outside the core shell and require one successful online use before their own cache can help offline.
 

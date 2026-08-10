@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10" id="theme-color-meta">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-S9c7v2IJbrEeDoc/sOSveX4z8TFAAdzWFzko8G81BLo=' 'sha256-dbE7nsY5qJiPpbByUPl7JMqw2YNOhBC4TgrVSIo/xgM=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-S9c7v2IJbrEeDoc/sOSveX4z8TFAAdzWFzko8G81BLo=' 'sha256-bOrZ6ms8m1yi83qF1K6VLLvExFhxZUSy1W4bN17pfVk=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // OpenShop-specific Fabric configuration. The editor uses Fabric 7's native
@@ -6207,7 +6207,7 @@ const OS = {
         });
         window.addEventListener('resize', () => { this._syncRulerChrome({ resize:false }); this.resizeCanvas(); this.drawGrid(); this.drawRulers(); });
         window.addEventListener('beforeunload', e => {
-            if (this._isDirty) { e.preventDefault(); e.returnValue = ''; }
+            if (this._isDirty && !this._offlineRuntimeReplacementInProgress) { e.preventDefault(); e.returnValue = ''; }
         });
         this._initRangeNumberInputs();
         this.initSwatches();
@@ -8252,8 +8252,11 @@ const OS = {
             requestAnimationFrame(() => { o.classList.add('show'); cancel.focus(); });
         });
     },
-    _confirmDiscardUnsaved(action = 'Replacing this document') {
+    _confirmDiscardUnsaved(action = 'Replacing this document', options = {}) {
         if (!this._isDirty) return Promise.resolve(true);
+        const saveLabel = options.saveLabel || 'Save first';
+        const saveAction = typeof options.onSave === 'function' ? options.onSave : () => this.saveProject();
+        const discardAction = typeof options.onDiscard === 'function' ? options.onDiscard : () => true;
         return new Promise(resolve => {
             let settled = false;
             const finish = value => { if (settled) return; settled = true; o.remove(); resolve(value); };
@@ -8262,10 +8265,10 @@ const OS = {
             const modal = document.createElement('div');
             modal.className = 'modal';
             const title = document.createElement('h3');
-            title.textContent = 'Discard unsaved changes?';
+            title.textContent = options.title || 'Discard unsaved changes?';
             const message = document.createElement('p');
             message.style.cssText = 'font-size:12px;color:var(--text-secondary);margin:8px 0 16px';
-            message.textContent = `${action} will discard edits you have not saved. This cannot be undone.`;
+            message.textContent = options.message || `${action} will discard edits you have not saved. This cannot be undone.`;
             const buttons = document.createElement('div');
             buttons.className = 'modal-btns';
             const cancel = document.createElement('button');
@@ -8275,21 +8278,87 @@ const OS = {
             cancel.addEventListener('click', () => finish(false));
             const save = document.createElement('button');
             save.className = 'btn';
-            save.textContent = 'Save first';
+            save.textContent = saveLabel;
             save.addEventListener('click', async () => {
                 save.disabled = true;
-                const saved = await this.saveProject();
+                const saved = await saveAction();
                 if (saved) finish(true); else save.disabled = false;
             });
             const discard = document.createElement('button');
             discard.className = 'btn btn-danger';
             discard.textContent = 'Discard';
-            discard.addEventListener('click', () => finish(true));
+            discard.addEventListener('click', async () => {
+                discard.disabled = true;
+                const discarded = await discardAction();
+                if (discarded) finish(true); else discard.disabled = false;
+            });
             buttons.append(cancel, save, discard);
             modal.append(title, message, buttons);
             o.appendChild(modal);
             document.body.appendChild(o);
             requestAnimationFrame(() => { o.classList.add('show'); cancel.focus(); });
+        });
+    },
+    async _verifyOfflineDocumentSave() {
+        const records = await this._listRecoveryGenerations({ includeLegacy:false });
+        const documentId = String(this._documentId || '');
+        const revision = Number(this._documentRevision || 0);
+        return records.some(record => record.valid
+            && String(record.documentId || '') === documentId
+            && Number(record.revision || 0) >= revision
+            && (!record.ownerId || record.ownerId === this._getRecoveryTabId()));
+    },
+    async _saveOfflineDocumentBeforeReplacement() {
+        try {
+            if (this._autoSaveInFlight) await this._autoSaveInFlight;
+            let saved = await this._autoSave();
+            if (!saved) throw new Error('Recovery storage did not acknowledge the save');
+            // A last-second edit can leave the first autosave valid but stale;
+            // require a second acknowledged generation before the worker may
+            // replace the running shell.
+            if (this._autoSaveDirty) {
+                saved = await this._autoSave();
+                if (!saved) throw new Error('The latest edits were not acknowledged');
+            }
+            if (!await this._verifyOfflineDocumentSave()) {
+                throw new Error('The saved recovery generation could not be verified');
+            }
+            return true;
+        } catch (error) {
+            this.toast('Could not save edits before replacing the offline shell: ' + error.message, 'error');
+            return false;
+        }
+    },
+    async _discardOfflineDocumentBeforeReplacement() {
+        try {
+            if (this._autoSaveInFlight) await this._autoSaveInFlight.catch(() => {});
+            const documentIds = [this._documentId, ...(this._documentIdAliases || [])].filter(Boolean);
+            const cleared = await this._clearAutoSave({
+                documentIds,
+                recoveryFilename:this._activeRecoverySourceFilename
+            });
+            if (navigator.storage?.getDirectory && !cleared) {
+                throw new Error('Recovery storage did not confirm the discard');
+            }
+            this._autoSaveDirty = false;
+            this._isDirty = false;
+            this._savedSnapshot = this._currentHistorySnapshot();
+            this._setPersistenceState('clean');
+            this._syncSessionDocument();
+            return true;
+        } catch (error) {
+            this.toast('Could not discard recovery data: ' + error.message, 'error');
+            return false;
+        }
+    },
+    _confirmOfflineRuntimeReplacement(action) {
+        if (!this._isDirty) return Promise.resolve(true);
+        return this._confirmDiscardUnsaved(action, {
+            title:'Unsaved changes before runtime replacement',
+            message:`${action} will reload OpenShop and replace the running app. Save or discard your edits, or cancel to keep both unchanged.`,
+            saveLabel:'Save',
+            onSave:() => this._saveOfflineDocumentBeforeReplacement(),
+            onDiscard:() => this._discardOfflineDocumentBeforeReplacement()
         });
     },
     async _addDecodedImageToCanvas(img, { name, mode, openAction = 'Opening an image', colorProfile = null, imageMetadata = null, workingColorSpace = 'srgb', colorConversion = 'identity' }) {
@@ -20048,6 +20117,7 @@ self.onmessage = function(event) {
     _pwaRegistration: null,
     _installPrompt: null,
     _offlineReloadForUpdate: false,
+    _offlineRuntimeReplacementInProgress: false,
     _pwaShareIntakePromise: null,
     _pwaShareDatabaseName: 'openshop-share-v1',
     _pwaShareDatabaseVersion: 1,
@@ -20636,6 +20706,12 @@ self.onmessage = function(event) {
             return false;
         }
     },
+    async _authorizeOfflineRuntimeReplacement(action) {
+        const approved = await this._confirmOfflineRuntimeReplacement(action);
+        if (!approved) return false;
+        this._offlineRuntimeReplacementInProgress = true;
+        return true;
+    },
     async checkOfflineUpdate() {
         if (this._offlineState.lane !== 'hosted' || !this._pwaRegistration) {
             this.toast('Updates are available only in the hosted app', 'info');
@@ -20657,33 +20733,39 @@ self.onmessage = function(event) {
             this.toast('No staged update is waiting', 'info');
             return false;
         }
+        if (!await this._authorizeOfflineRuntimeReplacement('Apply Update')) return false;
         try {
             this._offlineReloadForUpdate = true;
             await this._requestOfflineWorker('OPENSHOP_APPLY_UPDATE', {}, waiting);
             return true;
         } catch(error) {
             this._offlineReloadForUpdate = false;
+            this._offlineRuntimeReplacementInProgress = false;
             this.toast('Could not apply update: ' + error.message, 'error');
             return false;
         }
     },
     async rollbackOfflineShell() {
+        if (!await this._authorizeOfflineRuntimeReplacement('Restore Previous Shell')) return false;
         try {
             await this._requestOfflineWorker('OPENSHOP_ROLLBACK');
             location.reload();
             return true;
         } catch(error) {
+            this._offlineRuntimeReplacementInProgress = false;
             this.toast('Rollback unavailable: ' + error.message, 'error');
             return false;
         }
     },
     async restageOfflineShell() {
+        if (!await this._authorizeOfflineRuntimeReplacement('Rebuild Offline Shell')) return false;
         try {
             this.toast('Rebuilding the offline shell...', 'info');
             await this._requestOfflineWorker('OPENSHOP_RESTAGE');
             location.reload();
             return true;
         } catch(error) {
+            this._offlineRuntimeReplacementInProgress = false;
             this.toast('Could not rebuild the offline shell: ' + error.message, 'error');
             return false;
         }

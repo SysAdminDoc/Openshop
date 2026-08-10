@@ -5,6 +5,7 @@ All notable changes to Openshop will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Added Save/Discard/Cancel transactions before hosted offline shell replacement; dirty documents now require a verified recovery save or explicit discard before Apply Update, Restore Previous Shell, or Rebuild Offline Shell can reload the runtime.
 - Added independent interface and artwork text directions: locale changes now affect DOM chrome only, while explicit LTR/RTL text commands persist per-object through `.openshop` history and serialization.
 - Added validated number fields beside every range slider, plus a persisted Zoom-tool Pixel-perfect mode with reciprocal/integer snapping and nearest-neighbour sampling above 100%.
 - Added document-backed EXIF/XMP import metadata, Image Information reporting, and export choices for Preserve, Strip, or Strip location only (the privacy-preserving default); JPEG export reattaches selected APP1 fields after pixel encoding and reports unsupported-format losses.
