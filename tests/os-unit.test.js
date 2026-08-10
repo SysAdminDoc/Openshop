@@ -1984,7 +1984,7 @@ describe('OpenShop core object', () => {
 
     const state = OS._captureDocumentState();
     expect(state.kind).toBe('openshop-document');
-    expect(state.schemaVersion).toBe(1);
+    expect(state.schemaVersion).toBe(2);
     expect(state.canvas.width).toBe(800);
     expect(state.canvas.height).toBe(600);
     expect(state.layers).toHaveLength(1);

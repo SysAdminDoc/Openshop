@@ -5,6 +5,7 @@ All notable changes to Openshop will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Added live layer groups with collapsible hierarchy rows, Shift/Cmd multi-selection, Ctrl+G/Ctrl+Shift+G grouping shortcuts, group visibility/lock/opacity cascading, drag-to-group/reparent, project schema v2 migration, and PSD nested-group materialization for round-trip export.
 - Added OpenRaster (`.ora`) layered import and export with bounded stored/deflated ZIP parsing, PNG layer offsets, opacity, visibility, blend mapping, merged-image and thumbnail output, plus explicit group and unsupported-construct compatibility reports.
 - Added ICC profile parsing and colour-managed raster import/export across JPEG, PNG, WebP, AVIF, and PSD. Display P3 sources retain their named profile, use a Display P3 working canvas where supported, convert to sRGB with an explicit report elsewhere, and embed the active working profile on export where the container allows it.
 - Added parity-gated GPU kernels for grayscale, threshold, brightness, contrast, blur, and sharpen alongside invert, with WebGPU/WebGL2 fallback and per-operation backend metrics. The release harness now measures each admitted operation against the CPU worker before allowing acceleration.

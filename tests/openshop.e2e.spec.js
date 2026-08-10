@@ -118,6 +118,55 @@ test('loads the editor shell and supports core UI interactions @cross-browser', 
   expect(pageErrors).toEqual([]);
 });
 
+test('groups layers with live hierarchy, persistence, cascading state, and shortcuts @cross-browser', async ({ page }) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Enter Studio' }).click();
+
+  const result = await page.evaluate(async () => {
+    OS.addLayer({ name:'Groupable A' });
+    OS.addLayer({ name:'Groupable B' });
+    const a = OS.layers.findIndex(layer => layer.name === 'Groupable A');
+    const b = OS.layers.findIndex(layer => layer.name === 'Groupable B');
+    const first = new fabric.Rect({ left:40, top:40, width:20, height:20, fill:'#f00', name:'Groupable A object' });
+    const second = new fabric.Rect({ left:80, top:40, width:20, height:20, fill:'#00f', name:'Groupable B object' });
+    OS.canvas.add(first); OS.canvas.add(second);
+    OS.layers[a].objects.push(first); OS.layers[b].objects.push(second);
+    OS._enforceLayerInvariants();
+    OS.groupLayers([a, b]);
+    const group = OS.layers[OS.activeLayerIdx];
+    const childNames = OS.layers.filter(layer => layer.parentId === group.id).map(layer => layer.name);
+    OS.toggleLayerVisibility(OS.activeLayerIdx);
+    OS.setLayerOpacity(50);
+    const cascaded = [first, second].map(object => ({ visible:object.visible, opacity:object.opacity }));
+    const beforeCollapse = document.querySelectorAll('#layers-list [role="option"]').length;
+    OS.toggleGroupCollapsed(OS.activeLayerIdx);
+    const afterCollapse = document.querySelectorAll('#layers-list [role="option"]').length;
+    const saved = OS._captureDocumentState();
+    await OS._loadDocumentState(saved, { trusted:true });
+    const restoredGroup = OS.layers.find(layer => layer.kind === 'group');
+    const restoredChildren = OS.layers.filter(layer => layer.parentId === restoredGroup?.id).map(layer => layer.name);
+    OS.selectLayer(OS.layers.indexOf(restoredGroup));
+    return {
+      group:{ name:group.name, kind:group.kind, childNames, visible:group.visible, opacity:group.opacity },
+      cascaded,
+      collapsedRows:[beforeCollapse, afterCollapse],
+      restored:{ kind:restoredGroup?.kind, opacity:restoredGroup?.opacity, collapsed:restoredGroup?.collapsed, children:restoredChildren },
+      optionLabels:[...document.querySelectorAll('#layers-list [role="option"]')].map(option => option.getAttribute('aria-label'))
+    };
+  });
+
+  expect(result.group).toEqual({ name:'Group', kind:'group', childNames:['Groupable A', 'Groupable B'], visible:false, opacity:50 });
+  expect(result.cascaded).toEqual([{ visible:false, opacity:0.5 }, { visible:false, opacity:0.5 }]);
+  expect(result.collapsedRows[1]).toBe(result.collapsedRows[0] - 2);
+  expect(result.restored).toEqual({ kind:'group', opacity:50, collapsed:true, children:['Groupable A', 'Groupable B'] });
+  expect(result.optionLabels).toContain('Group, hidden');
+
+  await page.keyboard.press('Control+Shift+G');
+  await expect.poll(() => page.evaluate(() => OS.layers.some(layer => layer.kind === 'group'))).toBe(false);
+  await page.keyboard.press('Control+G');
+  await expect.poll(() => page.evaluate(() => OS.layers.some(layer => layer.kind === 'group'))).toBe(true);
+});
+
 test('opens command search and keeps both zoom readouts synchronized @cross-browser', async ({ page }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).evaluate(button => button.click());
@@ -1098,10 +1147,15 @@ test('imports a Photoshop-authored nested PSD fixture', async ({ page }) => {
     return {
       imported,
       dimensions: [OS.canvasW, OS.canvasH],
-      layers: OS.layers.slice(1).map(layer => ({
+      layers: OS.layers.slice(1).filter(layer => layer.kind !== 'group').map(layer => ({
         name: layer.name,
         parent: namesById.get(layer.psd?.parentId) || null,
         hasPixels: Boolean(layer.objects[0]?.getElement?.())
+      })),
+      liveGroups: OS.layers.filter(layer => layer.kind === 'group').map(layer => ({
+        name: layer.name,
+        parent: OS.layers.find(candidate => candidate.id === layer.parentId)?.name || null,
+        collapsed: layer.collapsed
       })),
       groups: groups.map(group => ({
         name: group.name,
@@ -1119,6 +1173,11 @@ test('imports a Photoshop-authored nested PSD fixture', async ({ page }) => {
     { name: 'Layer1 (#ff)', parent: null, hasPixels: true },
     { name: 'Layer10 (#00)', parent: 'Folder10', hasPixels: true }
   ]);
+  expect(result.liveGroups).toEqual(Array.from({ length: 10 }, (_, index) => ({
+    name: `Folder${index + 1}`,
+    parent: index === 0 ? null : `Folder${index}`,
+    collapsed: false
+  })));
   expect(result.groups).toEqual(Array.from({ length: 10 }, (_, index) => ({
     name: `Folder${index + 1}`,
     parent: index === 0 ? null : `Folder${index}`
@@ -1181,7 +1240,7 @@ test('round-trips nested PSD groups, blends, opacity, and basic text without dup
     }, { trimImageData: true, noBackground: true });
 
     const summarizeDocument = () => ({
-      layers: OS.layers.map((layer) => ({
+      layers: OS.layers.filter((layer) => layer.kind !== 'group').map((layer) => ({
         name: layer.name,
         opacity: layer.opacity,
         blend: layer.blend,
@@ -1189,6 +1248,13 @@ test('round-trips nested PSD groups, blends, opacity, and basic text without dup
         text: layer.objects[0]?.text || null,
         parentId: layer.psd?.parentId || null,
         effectiveOpacity: layer.objects[0]?.opacity ?? null
+      })),
+      liveGroups: OS.layers.filter((layer) => layer.kind === 'group').map((group) => ({
+        name: group.name,
+        parentId: OS.layers.find((layer) => layer.id === group.parentId)?.name || null,
+        opacity: group.opacity,
+        blend: group.blend,
+        collapsed: group.collapsed
       })),
       groups: OS._psdInterchange?.groups.map((group) => ({
         name: group.name,
@@ -1294,6 +1360,10 @@ test('round-trips nested PSD groups, blends, opacity, and basic text without dup
       text: 'Hello'
     }));
     expect(snapshot.groups.map((group) => group.name)).toEqual(['Outer', 'Inner']);
+    expect(snapshot.liveGroups).toEqual([
+      { name:'Outer', parentId:null, opacity:75, blend:'source-over', collapsed:true },
+      { name:'Inner', parentId:'Outer', opacity:100, blend:'source-over', collapsed:false }
+    ]);
     expect(snapshot.groups[0]).toEqual(expect.objectContaining({
       parentId: null,
       blendMode: 'pass through',

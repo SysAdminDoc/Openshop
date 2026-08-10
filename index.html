@@ -9,7 +9,7 @@
 <meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0c10">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-VJPt++DK30ZaDmskDd0J0F/UwEEz8WvCDRFj4Ckj+zo=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-/LQzy7a38hW9L9/hVV1OI48hN2FLyMMJpmHv4PoJpRw=' 'sha256-IYsshqYeD1ZStssj6bMMEQF0Xm9Wyik+OI16R5h7ON4=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
 <title>OpenShop v0.29.0 — Online Image Editor</title>
 <script>
 // Keep existing project files and editing commands stable across Fabric's
@@ -554,6 +554,7 @@ html.os-native-popovers #context-menu[popover]{position-area:block-end span-inli
 #layers-list:focus-visible,#history-list:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .layer-item{display:flex;align-items:center;gap:7px;padding:5px 7px;border-radius:6px;cursor:pointer;transition:var(--transition-chrome);border:1px solid transparent}
 .layer-item:hover{background:var(--bg-depth-3)}.layer-item.active{background:var(--accent-dim);border-color:var(--glass-border)}
+.layer-item.layer-group{font-weight:600}.layer-disclosure{width:18px;height:20px;padding:0;border:0;background:transparent;color:var(--text-muted);cursor:pointer;font-size:15px;line-height:18px;flex-shrink:0}.layer-disclosure:hover{color:var(--text-primary)}.layer-disclosure-spacer{width:18px;flex-shrink:0}.layer-group-glyph{width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:5px;flex-shrink:0}
 .layer-lock{background:none;border:none;padding:2px;cursor:pointer;color:var(--text-muted);opacity:.6;transition:var(--transition-chrome);flex-shrink:0}
 .layer-lock:hover{opacity:1;color:var(--text-secondary)}
 .layer-lock.locked{opacity:1;color:var(--accent)}
@@ -836,6 +837,7 @@ body.fullscreen #canvas-area{left:0;top:0;right:0;bottom:0}
 .layer-item.dragging{opacity:.4;background:var(--accent-dim)}
 .layer-item.drop-above{border-top:2px solid var(--accent)!important}
 .layer-item.drop-below{border-bottom:2px solid var(--accent)!important}
+.layer-item.drop-into{outline:2px solid var(--accent)!important;background:var(--accent-dim)!important}
 .layer-drag-handle{cursor:grab;color:var(--text-muted);padding:0 2px;flex-shrink:0;display:flex;align-items:center}
 .layer-drag-handle:active{cursor:grabbing}
 
@@ -3667,6 +3669,8 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
             <div class="ptc-inner">
                 <div class="panel-actions" style="display:flex;gap:2px;margin-bottom:6px;justify-content:flex-end">
                     <button class="panel-action" title="New Layer" data-os-click="click-157"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+                    <button class="panel-action" title="Group Layers" data-os-click="click-234"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7.5h7l1.7 2H21v9.5H3z"/><path d="M3 7.5V5h7l1.7 2"/></svg></button>
+                    <button class="panel-action" title="Ungroup Layers" data-os-click="click-235"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h14v14H7z"/><path d="M3 17V3h14"/><path d="M12 12h6M15 9v6"/></svg></button>
                     <button class="panel-action" title="Duplicate" data-os-click="click-158"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
                     <button class="panel-action" title="Merge Down" data-os-click="click-159"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 18L12 22L16 18"/><path d="M12 2V22"/></svg></button>
                     <button class="panel-action" title="Delete" data-os-click="click-160"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
@@ -4160,6 +4164,8 @@ const OS_EVENT_HANDLERS = Object.freeze({
         "click-155": function(event) { OS.switchTab(this,'ptg1','ptg1-props') },
         "click-156": function(event) { OS.switchTab(this,'ptg1','ptg1-align') },
         "click-157": function(event) { OS.addLayer() },
+        "click-234": function(event) { OS.groupLayers() },
+        "click-235": function(event) { OS.ungroupLayers() },
         "click-158": function(event) { OS.duplicateLayer() },
         "click-159": function(event) { OS.mergeDown() },
         "click-160": function(event) { OS.deleteLayer() },
@@ -5301,7 +5307,7 @@ const OS = {
     _rendererProbeId: 0,
     _rendererReadyPromise: null,
     _blankWorkspace: false,
-    canvas: null, layers: [], activeLayerIdx: -1,
+    canvas: null, layers: [], activeLayerIdx: -1, _selectedLayerIds: [],
     // One source for the version every file the app writes is stamped with.
     // These were hardcoded and went stale for three releases, so saved
     // projects, recovery generations and exported actions all claimed 0.21.0
@@ -5313,12 +5319,23 @@ const OS = {
     // created in millimetres or inches carries whatever it was created at, and
     // the PSD and PDF exporters declare that rather than assuming 96.
     _documentResolution: 96,
-    _documentSchemaVersion: 1,
+    _documentSchemaVersion: 2,
     // Migrations are keyed by the schema they accept and must return the next
     // schema shape. Keeping the registry explicit makes a future schema bump
     // auditable instead of silently accepting an incompatible payload.
     _documentMigrationRegistry: Object.freeze({
-        1: project => project
+        1: project => ({
+            ...project,
+            layers: Array.isArray(project?.layers)
+                ? project.layers.map(layer => ({
+                    ...layer,
+                    kind:layer?.kind === 'group' ? 'group' : layer?.kind === 'adjustment' ? 'adjustment' : 'pixel',
+                    parentId:typeof layer?.parentId === 'string' ? layer.parentId : null,
+                    collapsed:Boolean(layer?.collapsed)
+                }))
+                : []
+        }),
+        2: project => project
     }),
     _lastDocumentMigrationReport: null,
     _lastDocumentExportReport: null,
@@ -5344,7 +5361,7 @@ const OS = {
         return Boolean(id) && (id === this._documentId || this._documentIdAliases.includes(id));
     },
     _idSequence: 0,
-    _fabricDocumentProperties: ['name', 'excludeFromExport', 'globalCompositeOperation', '_openShopObjectId', '_hasMask', '_isArrow', '_openShopAdjustmentBaseSrc', '_openShopAdjustmentLayers', '_openShopLayerMask', '_openShopMaskBaseSrc', '_openShopSmartObject', '_openShopTextFeatures', '_openShopOriginalText', '_openShopTextOnPath'],
+    _fabricDocumentProperties: ['name', 'excludeFromExport', 'globalCompositeOperation', '_openShopObjectId', '_openShopBaseOpacity', '_hasMask', '_isArrow', '_openShopAdjustmentBaseSrc', '_openShopAdjustmentLayers', '_openShopLayerMask', '_openShopMaskBaseSrc', '_openShopSmartObject', '_openShopTextFeatures', '_openShopOriginalText', '_openShopTextOnPath'],
     _isDirty: false,
     _persistenceState: 'clean',
     _documentRevision: 0,
@@ -5973,6 +5990,7 @@ const OS = {
         this.canvasH = 0;
         this.layers = [];
         this.activeLayerIdx = -1;
+        this._selectedLayerIds = [];
         this.history = [];
         this.historyIdx = -1;
         this._historyByteTotal = 0;
@@ -6518,10 +6536,11 @@ const OS = {
             backgroundObjects.push(fill);
         }
         this.layers.push(
-            { id:this._newDocumentId('layer'), name:'Background', visible:true, locked:true, opacity:100, blend:'source-over', kind:'pixel', objects:backgroundObjects },
-            { id:this._newDocumentId('layer'), name:'Layer 1', visible:true, locked:false, opacity:100, blend:'source-over', kind:'pixel', objects:[] }
+            { id:this._newDocumentId('layer'), name:'Background', visible:true, locked:true, opacity:100, blend:'source-over', kind:'pixel', parentId:null, objects:backgroundObjects },
+            { id:this._newDocumentId('layer'), name:'Layer 1', visible:true, locked:false, opacity:100, blend:'source-over', kind:'pixel', parentId:null, objects:[] }
         );
         this.activeLayerIdx = 1;
+        this._selectedLayerIds = [this.layers[this.activeLayerIdx].id];
         this._restoreGuidesState([]);
         this._restoreSelectionState({ bounds:null, mask:null });
         this._stopAnimationPlayback();
@@ -7399,16 +7418,18 @@ const OS = {
                 locked: Boolean(layer.locked),
                 opacity: Math.max(0, Math.min(100, Number(layer.opacity ?? 100))),
                 blend: this._safeText(layer.blend || 'source-over', 40),
-                kind: layer.kind === 'adjustment' ? 'adjustment' : 'pixel',
+                kind: layer.kind === 'group' ? 'group' : layer.kind === 'adjustment' ? 'adjustment' : 'pixel',
+                parentId:typeof layer.parentId === 'string' && layer.parentId ? this._coerceDocumentId(layer.parentId, 'layer') : null,
+                collapsed:layer.kind === 'group' ? Boolean(layer.collapsed) : false,
                 adjustment: layer.kind === 'adjustment' ? this._normalizeAdjustment(layer.adjustment) : null,
                 psd: this._normalizePSDLayerMetadata(layer.psd),
-                objectIds
+                objectIds:layer.kind === 'group' ? [] : objectIds
             };
         });
         if (!layers.length) {
             const layer = { name:'Layer 0', visible:true, locked:false, opacity:100, blend:'source-over', kind:'pixel', objects:[] };
             this.layers.push(layer);
-            layers.push({ id:this._ensureLayerId(layer, usedLayerIds), name:'Layer 0', visible:true, locked:false, opacity:100, blend:'source-over', objectIds:[] });
+            layers.push({ id:this._ensureLayerId(layer, usedLayerIds), name:'Layer 0', visible:true, locked:false, opacity:100, blend:'source-over', kind:'pixel', parentId:null, collapsed:false, objectIds:[] });
             this.activeLayerIdx = 0;
         }
         const activeLayerIndex = Math.max(0, Math.min(this.activeLayerIdx, layers.length - 1));
@@ -7500,6 +7521,9 @@ const OS = {
             locked: Boolean(layer.locked),
             opacity: Math.max(0, Math.min(100, Number(layer.opacity ?? 100))),
             blend: this._safeText(layer.blend || 'source-over', 40),
+            kind:'pixel',
+            parentId:null,
+            collapsed:false,
             objectIds: []
         }));
         const backgroundLayerIndex = Math.max(0, layers.findIndex(layer => /background/i.test(layer.name)));
@@ -7538,7 +7562,7 @@ const OS = {
         const activeLayerIndex = Math.max(0, Math.min(Number(meta.activeLayerIdx ?? layers.length - 1), layers.length - 1));
         return {
             kind: 'openshop-document',
-            schemaVersion: 1,
+            schemaVersion: this._documentSchemaVersion,
             appVersion: this._safeText(meta.version || fabricState.version || 'legacy', 40),
             migratedFrom: this._safeText(meta.version || fabricState.version || 'legacy-fabric', 40),
             document: {
@@ -7655,7 +7679,7 @@ const OS = {
             report = this._documentCompatibilityReport({
                 direction:'import',
                 sourceVersion:'legacy',
-                steps:['legacy-envelope-to-schema-1'],
+                steps:['legacy-envelope-to-schema-1', 'schema-1-to-2'],
                 losses:[{
                     code:'openshop.legacy-envelope',
                     path:'root',
@@ -7772,12 +7796,14 @@ const OS = {
                 locked: Boolean(layer.locked),
                 opacity: Math.max(0, Math.min(100, Number(layer.opacity ?? 100))),
                 blend: this._safeText(layer.blend || 'source-over', 40),
-                kind: layer.kind === 'adjustment' ? 'adjustment' : 'pixel',
+                kind: layer.kind === 'group' ? 'group' : layer.kind === 'adjustment' ? 'adjustment' : 'pixel',
+                parentId:typeof layer.parentId === 'string' && layer.parentId ? this._safeText(layer.parentId, 120) : null,
+                collapsed:layer.kind === 'group' ? Boolean(layer.collapsed) : false,
                 adjustment: layer.kind === 'adjustment' ? this._normalizeAdjustment(layer.adjustment) : null,
                 psd: this._normalizePSDLayerMetadata(layer.psd),
                 objects: []
             };
-            (Array.isArray(layer.objectIds) ? layer.objectIds : []).forEach(id => {
+            (restored.kind === 'group' ? [] : Array.isArray(layer.objectIds) ? layer.objectIds : []).forEach(id => {
                 const object = objectsById.get(id);
                 if (!object || claimedIds.has(id)) return;
                 claimedIds.add(id);
@@ -7792,13 +7818,17 @@ const OS = {
             });
             return restored;
         });
-        if (!this.layers.length) this.layers = [{ id:this._newDocumentId('layer'), name:'Layer 0', visible:true, locked:false, opacity:100, blend:'source-over', kind:'pixel', objects:[] }];
+        if (!this.layers.length) this.layers = [{ id:this._newDocumentId('layer'), name:'Layer 0', visible:true, locked:false, opacity:100, blend:'source-over', kind:'pixel', parentId:null, objects:[] }];
         this._psdInterchange = this._normalizePSDInterchange(state.interchange?.psd);
         const activeLayerId = state.active?.layerId;
         this.activeLayerIdx = Math.max(0, this.layers.findIndex(layer => layer.id === activeLayerId));
+        this._selectedLayerIds = this.layers[this.activeLayerIdx] ? [this.layers[this.activeLayerIdx].id] : [];
+        const unclaimedObjectLayer = this.layers[this.activeLayerIdx]?.kind === 'group'
+            ? this.layers.findIndex(layer => layer.kind !== 'group')
+            : this.activeLayerIdx;
         objects.forEach(object => {
             if (!claimedIds.has(object._openShopObjectId) && !object.excludeFromExport) {
-                this.layers[this.activeLayerIdx].objects.push(object);
+                this.layers[Math.max(0, unclaimedObjectLayer)].objects.push(object);
                 claimedIds.add(object._openShopObjectId);
             }
         });
@@ -11687,14 +11717,23 @@ self.onmessage = function(event) {
         return this._showFormatCompatibilityReport(report, title, { className:'ora-compat-report', formatLabel:'OpenRaster' });
     },
     _getPSDGroupState(layer) {
+        const liveAncestors = this._layerAncestors?.(layer) || [];
+        if (liveAncestors.length) {
+            return liveAncestors.reduce((state, group) => ({
+                visible:state.visible && group.visible !== false,
+                opacity:state.opacity * Math.max(0, Math.min(1, Number(group.opacity ?? 100) / 100)),
+                locked:state.locked || Boolean(group.locked)
+            }), { visible:true, opacity:1, locked:false });
+        }
         const metadata = layer?.psd;
         const groups = this._psdInterchange?.groups;
-        if (!metadata?.parentId || !Array.isArray(groups)) return { visible:true, opacity:1 };
+        if (!metadata?.parentId || !Array.isArray(groups)) return { visible:true, opacity:1, locked:false };
         const byId = new Map(groups.map(group => [group.id, group]));
         const visited = new Set();
         let id = metadata.parentId;
         let visible = true;
         let opacity = 1;
+        let locked = false;
         while (id && byId.has(id) && !visited.has(id)) {
             visited.add(id);
             const group = byId.get(id);
@@ -11702,7 +11741,78 @@ self.onmessage = function(event) {
             opacity *= this._normalizePSDOpacity(group.opacity);
             id = group.parentId;
         }
-        return { visible, opacity };
+        return { visible, opacity, locked };
+    },
+    _materializePSDGroups(layers, interchange) {
+        const normalized = this._normalizePSDInterchange(interchange);
+        const groups = normalized?.groups || [];
+        if (!groups.length) return { layers, interchange:normalized };
+        const sourceLayers = Array.isArray(layers) ? layers.slice() : [];
+        const usedIds = new Set(sourceLayers.map(layer => layer.id));
+        const idMap = new Map();
+        groups.forEach(group => {
+            let id = this._coerceDocumentId(group.id, 'layer');
+            if (usedIds.has(id)) id = this._newDocumentId('layer');
+            usedIds.add(id);
+            idMap.set(group.id, id);
+        });
+        const groupById = new Map(groups.map(group => [group.id, group]));
+        const nodes = new Map(groups.map(group => [group.id, {
+            id:idMap.get(group.id),
+            name:this._safeText(group.name || 'Group', 120),
+            visible:!group.hidden,
+            locked:false,
+            opacity:Math.round(this._normalizePSDOpacity(group.opacity) * 100),
+            blend:group.blendMode === 'pass through' ? 'source-over' : this._psdBlendToCanvas(group.blendMode),
+            kind:'group',
+            parentId:idMap.get(group.parentId) || null,
+            collapsed:group.opened === false,
+            objects:[]
+        }]));
+        const oldParentForLayer = new Map();
+        sourceLayers.forEach(layer => {
+            const oldParent = layer.psd?.parentId || layer.parentId || null;
+            oldParentForLayer.set(layer, oldParent);
+            layer.parentId = idMap.get(oldParent) || null;
+            if (layer.psd && oldParent) layer.psd = this._normalizePSDLayerMetadata({ ...layer.psd, parentId:idMap.get(oldParent) || null });
+        });
+        const belongsTo = (layer, groupId) => {
+            const visited = new Set();
+            let parentId = oldParentForLayer.get(layer) || null;
+            while (parentId && !visited.has(parentId)) {
+                if (parentId === groupId) return true;
+                visited.add(parentId);
+                parentId = groupById.get(parentId)?.parentId || null;
+            }
+            return false;
+        };
+        const sourceIndex = new Map(sourceLayers.map((layer, index) => [layer, index]));
+        const depth = group => {
+            let count = 0, parentId = group.parentId;
+            const seen = new Set();
+            while (parentId && !seen.has(parentId)) {
+                seen.add(parentId); count += 1;
+                parentId = groupById.get(parentId)?.parentId || null;
+            }
+            return count;
+        };
+        const orderedGroups = groups.slice().sort((a, b) => {
+            const aFirst = Math.min(...sourceLayers.filter(layer => belongsTo(layer, a.id)).map(layer => sourceIndex.get(layer)), this._psdLimits.maxLayers + a.order);
+            const bFirst = Math.min(...sourceLayers.filter(layer => belongsTo(layer, b.id)).map(layer => sourceIndex.get(layer)), this._psdLimits.maxLayers + b.order);
+            return aFirst - bFirst || depth(a) - depth(b) || a.order - b.order;
+        });
+        const materialized = sourceLayers.slice();
+        orderedGroups.forEach(group => {
+            const node = nodes.get(group.id);
+            const descendant = sourceLayers.find(layer => belongsTo(layer, group.id));
+            const position = descendant ? materialized.indexOf(descendant) : materialized.length;
+            materialized.splice(Math.max(0, position), 0, node);
+        });
+        const remappedGroups = groups.map(group => ({ ...group, id:idMap.get(group.id), parentId:idMap.get(group.parentId) || null }));
+        return {
+            layers:materialized,
+            interchange:{ ...normalized, groups:remappedGroups }
+        };
     },
     async _preparePSDImport(psd, job, { colorProfile = null, targetSpace = 'srgb' } = {}) {
         const boundary = this._createCheckerBoundary(psd.width, psd.height);
@@ -11767,11 +11877,11 @@ self.onmessage = function(event) {
             const sharedOptions = {
                 left:layer.left || 0,
                 top:layer.top || 0,
-                selectable:!layer.hidden && !layer.protected && groupState.visible,
-                evented:!layer.hidden && !layer.protected && groupState.visible,
+                selectable:!layer.hidden && !layer.protected,
+                evented:!layer.hidden && !layer.protected,
                 name,
-                visible:!layer.hidden && groupState.visible,
-                opacity:opacity * groupState.opacity,
+                visible:!layer.hidden,
+                opacity:1,
                 globalCompositeOperation:importedCanvasBlend
             };
             let image = layer.text?.simple
@@ -11782,6 +11892,7 @@ self.onmessage = function(event) {
             }
             if (!image) continue;
             image.set(sharedOptions);
+            image._openShopBaseOpacity = 1;
             layers.push({
                 id:this._newDocumentId('layer'),
                 name,
@@ -11816,12 +11927,13 @@ self.onmessage = function(event) {
         if (layers.length === 1) {
             layers.push({ id:this._newDocumentId('layer'), name:'Layer 1', visible:true, locked:false, opacity:100, blend:'source-over', kind:'pixel', objects:[] });
         }
+        const materialized = this._materializePSDGroups(layers, { groups:report.groups, warnings:report.warnings });
         return {
             boundary,
-            layers,
+            layers:materialized.layers,
             objects,
-            decodedLayerCount:Math.max(0, layers.length - 1),
-            psdInterchange:this._normalizePSDInterchange({ groups:report.groups, warnings:report.warnings }),
+            decodedLayerCount:Math.max(0, layers.filter(layer => layer.kind !== 'group').length - 1),
+            psdInterchange:materialized.interchange,
             colorProfile,
             report
         };
@@ -11879,7 +11991,9 @@ self.onmessage = function(event) {
             this.canvasW = psd.width;
             this.canvasH = psd.height;
             this.layers = prepared.layers;
-            this.activeLayerIdx = Math.max(1, this.layers.length - 1);
+            const lastDrawable = this.layers.map((layer, index) => ({ layer, index })).filter(({ layer }) => layer.kind !== 'group').pop()?.index;
+            this.activeLayerIdx = Number.isInteger(lastDrawable) ? lastDrawable : Math.max(0, this.layers.length - 1);
+            this._selectedLayerIds = this.layers[this.activeLayerIdx] ? [this.layers[this.activeLayerIdx].id] : [];
             this._docName = this._safeText(String(file.name || 'Untitled').replace(/\.[^.]+$/, ''), 100) || 'Untitled';
             this._adoptDocumentId(this._newDocumentId('document'));
             this._projectFileHandle = null;
@@ -12034,6 +12148,131 @@ self.onmessage = function(event) {
     _layerOwnership: null,
     _drawingLayerTools: new Set(['brush','pencil','eraser','spray']),
     _activeLayerWriteTools: new Set(['brush','pencil','eraser','spray','text','gradient','pattern','line','rect','circle','triangle','arrow','polygon','star','pen']),
+    _isGroupLayer(layerOrIndex) {
+        const layer = typeof layerOrIndex === 'number' ? this.layers[layerOrIndex] : layerOrIndex;
+        return layer?.kind === 'group';
+    },
+    _layerById(id) {
+        const value = String(id || '');
+        return this.layers.find(layer => layer?.id === value) || null;
+    },
+    _layerIndexById(id) {
+        const value = String(id || '');
+        return this.layers.findIndex(layer => layer?.id === value);
+    },
+    _layerChildren(parentId = null) {
+        const normalized = parentId || null;
+        return this.layers
+            .map((layer, index) => ({ layer, index }))
+            .filter(({ layer }) => (layer.parentId || null) === normalized)
+            .map(({ index }) => index);
+    },
+    _layerAncestors(layerOrIndex) {
+        const layer = typeof layerOrIndex === 'number' ? this.layers[layerOrIndex] : layerOrIndex;
+        if (!layer || !Array.isArray(this.layers)) return [];
+        const byId = new Map(this.layers.map(candidate => [candidate.id, candidate]));
+        const ancestors = [];
+        const visited = new Set([layer.id]);
+        let parentId = layer.parentId || null;
+        while (parentId && !visited.has(parentId)) {
+            visited.add(parentId);
+            const parent = byId.get(parentId);
+            if (!parent || parent.kind !== 'group') break;
+            ancestors.push(parent);
+            parentId = parent.parentId || null;
+        }
+        return ancestors;
+    },
+    _layerDepth(layerOrIndex) {
+        return this._layerAncestors(layerOrIndex).length;
+    },
+    _layerDescendantIndexes(index, { includeSelf = false } = {}) {
+        const root = Math.round(Number(index));
+        if (!Number.isInteger(root) || !this.layers[root]) return [];
+        const result = includeSelf ? [root] : [];
+        const stack = this._layerChildren(this.layers[root].id).reverse();
+        const visited = new Set([root]);
+        while (stack.length) {
+            const child = stack.pop();
+            if (visited.has(child)) continue;
+            visited.add(child);
+            result.push(child);
+            if (this._isGroupLayer(child)) this._layerChildren(this.layers[child].id).reverse().forEach(next => stack.push(next));
+        }
+        return result.sort((a, b) => a - b);
+    },
+    _layerSubtree(index) {
+        return this._layerDescendantIndexes(index, { includeSelf:true })
+            .map(layerIndex => this.layers[layerIndex])
+            .filter(Boolean);
+    },
+    _visibleLayerRows() {
+        const rows = [];
+        const visit = (parentId, depth) => {
+            this._layerChildren(parentId).reverse().forEach(index => {
+                const layer = this.layers[index];
+                rows.push({ index, depth });
+                if (layer.kind === 'group' && !layer.collapsed) visit(layer.id, depth + 1);
+            });
+        };
+        visit(null, 0);
+        return rows;
+    },
+    _normalizeLayerHierarchy() {
+        if (!Array.isArray(this.layers)) return;
+        const usedIds = new Set();
+        this.layers.forEach(layer => {
+            if (!layer || typeof layer !== 'object') return;
+            this._ensureLayerId(layer, usedIds);
+            layer.kind = layer.kind === 'group' ? 'group' : layer.kind === 'adjustment' ? 'adjustment' : 'pixel';
+            layer.objects = Array.isArray(layer.objects) ? layer.objects : [];
+            layer.collapsed = layer.kind === 'group' ? Boolean(layer.collapsed) : false;
+            if (layer.kind === 'group') layer.objects = [];
+        });
+        const groupIds = new Set(this.layers.filter(layer => layer.kind === 'group').map(layer => layer.id));
+        this.layers.forEach(layer => {
+            const parentId = typeof layer.parentId === 'string' && layer.parentId ? layer.parentId : null;
+            layer.parentId = parentId && groupIds.has(parentId) && parentId !== layer.id ? parentId : null;
+        });
+        // A malformed project can contain a longer parent cycle even when no
+        // individual layer points at itself. Detach the first repeated edge so
+        // every row remains reachable and the renderer cannot recurse forever.
+        this.layers.forEach(layer => {
+            const seen = new Set([layer.id]);
+            let current = layer;
+            while (current.parentId) {
+                if (seen.has(current.parentId)) {
+                    current.parentId = null;
+                    break;
+                }
+                seen.add(current.parentId);
+                const parent = this._layerById(current.parentId);
+                if (!parent) { current.parentId = null; break; }
+                current = parent;
+            }
+        });
+    },
+    _objectTargetLayerIndex(preferred = this.activeLayerIdx) {
+        const preferredIndex = Math.round(Number(preferred));
+        if (this.layers[preferredIndex] && !this._isGroupLayer(preferredIndex)) return preferredIndex;
+        const ancestor = this._layerAncestors(preferredIndex).find(layer => layer.kind !== 'group');
+        if (ancestor) return this.layers.indexOf(ancestor);
+        const child = this._layerDescendantIndexes(preferredIndex).find(index => !this._isGroupLayer(index));
+        if (Number.isInteger(child)) return child;
+        return this.layers.findIndex(layer => layer.kind !== 'group');
+    },
+    _ensureObjectBaseOpacity(object, layer) {
+        if (!object || object.name === '__boundary__') return 1;
+        const stored = Number(object._openShopBaseOpacity);
+        if (Number.isFinite(stored)) return Math.max(0, Math.min(1, stored));
+        const current = Number(object.opacity);
+        const ownOpacity = Math.max(0, Math.min(1, Number(layer?.opacity ?? 100) / 100));
+        const base = Number.isFinite(current)
+            ? ownOpacity > 0.0001 ? current / ownOpacity : current > 0 ? current : 1
+            : 1;
+        object._openShopBaseOpacity = Math.max(0, Math.min(1, base));
+        return object._openShopBaseOpacity;
+    },
     _rebuildLayerOwnership() {
         if (!Array.isArray(this.layers) || !this.layers.length) {
             if (this._blankWorkspace) {
@@ -12044,12 +12283,17 @@ self.onmessage = function(event) {
             }
             this.layers = [{ id:this._newDocumentId('layer'), name:'Layer 0', visible:true, locked:false, opacity:100, blend:'source-over', kind:'pixel', objects:[] }];
         }
+        this._normalizeLayerHierarchy();
         this.activeLayerIdx = Math.max(0, Math.min(Number(this.activeLayerIdx) || 0, this.layers.length - 1));
         const canvasObjects = this.canvas?.getObjects?.() || [];
         const canvasSet = new Set(canvasObjects);
         const claimed = new Set();
         const ownership = new WeakMap();
         this.layers.forEach((layer, layerIndex) => {
+            if (this._isGroupLayer(layer)) {
+                layer.objects = [];
+                return;
+            }
             if (!Array.isArray(layer.objects)) layer.objects = [];
             layer.objects = layer.objects.filter(object => {
                 if (!object || !canvasSet.has(object) || claimed.has(object)) return false;
@@ -12058,12 +12302,14 @@ self.onmessage = function(event) {
                 return true;
             });
         });
-        const fallback = this.layers[this.activeLayerIdx];
+        const fallbackIndex = this._objectTargetLayerIndex(this.activeLayerIdx);
+        const fallback = this.layers[fallbackIndex] || this.layers[this.activeLayerIdx];
         canvasObjects.forEach(object => {
             if (claimed.has(object) || object.excludeFromExport || object._wandOverlay) return;
+            if (!fallback || this._isGroupLayer(fallback)) return;
             fallback.objects.push(object);
             claimed.add(object);
-            ownership.set(object, this.activeLayerIdx);
+            ownership.set(object, fallbackIndex);
         });
         this._layerOwnership = ownership;
         return ownership;
@@ -12078,7 +12324,7 @@ self.onmessage = function(event) {
     _isLayerEditable(layerOrIndex = this.activeLayerIdx) {
         const layer = typeof layerOrIndex === 'number' ? this.layers[layerOrIndex] : layerOrIndex;
         const groupState = this._getPSDGroupState(layer);
-        return Boolean(layer && layer.kind !== 'adjustment' && layer.visible !== false && groupState.visible && !layer.locked);
+        return Boolean(layer && layer.kind !== 'group' && layer.kind !== 'adjustment' && layer.visible !== false && groupState.visible && !groupState.locked && !layer.locked);
     },
     _isObjectEditable(object) {
         if (object?.type === 'activeSelection' && object.forEachObject) {
@@ -12109,6 +12355,7 @@ self.onmessage = function(event) {
         const desired = [];
         const included = new Set();
         this.layers.forEach(layer => {
+            if (this._isGroupLayer(layer)) return;
             layer.objects.forEach(object => {
                 if (canvasSet.has(object) && !included.has(object)) {
                     desired.push(object);
@@ -12156,10 +12403,11 @@ self.onmessage = function(event) {
             const layer = index >= 0 ? this.layers[index] : null;
             const groupState = this._getPSDGroupState(layer);
             const visible = layer?.visible !== false && groupState.visible;
-            const editable = visible && !layer?.locked;
+            const editable = visible && !layer?.locked && !groupState.locked;
             object.visible = visible;
-            if (layer?.psd) {
-                object.opacity = Math.max(0, Math.min(1, (Number(layer.opacity ?? 100) / 100) * groupState.opacity));
+            if (layer) {
+                const baseOpacity = this._ensureObjectBaseOpacity(object, layer);
+                object.opacity = Math.max(0, Math.min(1, baseOpacity * Math.max(0, Math.min(1, Number(layer.opacity ?? 100) / 100)) * groupState.opacity));
                 object.globalCompositeOperation = layer.blend || 'source-over';
             }
             object.selectable = selectMode && editable;
@@ -12213,24 +12461,169 @@ self.onmessage = function(event) {
         return true;
     },
     _enforceLayerInvariants({ render = true } = {}) {
+        this._normalizeLayerHierarchy();
         this._syncCanvasStackFromLayers({ render:false });
         this._applyLayerInteractionState({ render:false });
+        this._selectedLayerIds = (this._selectedLayerIds || []).filter(id => this._layerIndexById(id) >= 0);
+        if (!this._selectedLayerIds.length && this.layers[this.activeLayerIdx]) this._selectedLayerIds = [this.layers[this.activeLayerIdx].id];
         if (render) this.canvas.renderAll();
     },
-    _moveLayer(fromIndex, toIndex, { recordHistory = true } = {}) {
+    _moveLayer(fromIndex, toIndex, { recordHistory = true, parentId = undefined } = {}) {
         const from = Math.round(Number(fromIndex));
         const to = Math.round(Number(toIndex));
-        if (!Number.isInteger(from) || !Number.isInteger(to) || !this.layers[from] || !this.layers[to] || from === to) return false;
+        if (!Number.isInteger(from) || !Number.isInteger(to) || !this.layers[from]) return false;
+        this._normalizeLayerHierarchy();
+        const subtreeIndexes = this._layerDescendantIndexes(from, { includeSelf:true });
+        if (subtreeIndexes.length === this.layers.length) return false;
         const activeLayer = this.layers[this.activeLayerIdx];
-        const [moved] = this.layers.splice(from, 1);
-        this.layers.splice(to, 0, moved);
+        const moved = subtreeIndexes.map(index => this.layers[index]);
+        const movedSet = new Set(subtreeIndexes);
+        const remaining = this.layers.filter((_, index) => !movedSet.has(index));
+        const destination = Math.max(0, Math.min(remaining.length, to));
+        const root = moved[0];
+        if (parentId !== undefined) {
+            const nextParent = parentId && remaining.some(layer => layer.id === parentId && layer.kind === 'group') ? parentId : null;
+            root.parentId = nextParent;
+        }
+        this.layers = remaining.slice(0, destination).concat(moved, remaining.slice(destination));
         this.activeLayerIdx = Math.max(0, this.layers.indexOf(activeLayer));
         this._enforceLayerInvariants();
-        if (moved.kind === 'adjustment') void this._rebuildAdjustmentLayers();
+        if (moved.some(layer => layer.kind === 'adjustment')) void this._rebuildAdjustmentLayers();
         this.updateLayersPanel();
         if (recordHistory) this.saveHistory('Reorder Layers', {
-            command:this._makeCommand('layer.move', { layerId:this._ensureLayerId(moved), toIndex:to })
+            command:this._makeCommand('layer.move', { layerId:this._ensureLayerId(root), toIndex:destination, parentId:root.parentId || null })
         });
+        return true;
+    },
+    _moveLayerIntoGroup(fromIndex, groupIndex, { recordHistory = true } = {}) {
+        const from = Math.round(Number(fromIndex));
+        const target = Math.round(Number(groupIndex));
+        if (!Number.isInteger(from) || !Number.isInteger(target) || !this.layers[from] || !this._isGroupLayer(target)) return false;
+        this._normalizeLayerHierarchy();
+        const subtreeIndexes = this._layerDescendantIndexes(from, { includeSelf:true });
+        if (subtreeIndexes.includes(target)) return false;
+        const activeLayer = this.layers[this.activeLayerIdx];
+        const moved = subtreeIndexes.map(index => this.layers[index]);
+        const movedSet = new Set(subtreeIndexes);
+        const remaining = this.layers.filter((_, index) => !movedSet.has(index));
+        const group = remaining.find(layer => layer.id === this.layers[target]?.id);
+        if (!group) return false;
+        const groupIndexInRemaining = remaining.indexOf(group);
+        const descendantIds = new Set();
+        const collect = parentId => remaining.forEach(layer => {
+            if ((layer.parentId || null) !== parentId || descendantIds.has(layer.id)) return;
+            descendantIds.add(layer.id);
+            if (layer.kind === 'group') collect(layer.id);
+        });
+        collect(group.id);
+        let destination = groupIndexInRemaining + 1;
+        remaining.forEach((layer, index) => { if (descendantIds.has(layer.id)) destination = Math.max(destination, index + 1); });
+        moved[0].parentId = group.id;
+        this.layers = remaining.slice(0, destination).concat(moved, remaining.slice(destination));
+        this.activeLayerIdx = Math.max(0, this.layers.indexOf(activeLayer));
+        this._enforceLayerInvariants();
+        this.updateLayersPanel();
+        if (recordHistory) this.saveHistory('Move Into Group', {
+            command:this._makeCommand('layer.move', { layerId:this._ensureLayerId(moved[0]), toIndex:destination, parentId:group.id })
+        });
+        return true;
+    },
+    _resolveLayerIndexes(selection = null) {
+        const values = Array.isArray(selection) && selection.length
+            ? selection
+            : (this._selectedLayerIds?.length ? this._selectedLayerIds : [this.activeLayerIdx]);
+        return [...new Set(values.map(value => {
+            if (typeof value === 'number') return Math.round(value);
+            return this._layerIndexById(value);
+        }).filter(index => Number.isInteger(index) && index >= 0 && this.layers[index]))];
+    },
+    groupLayers(selection = null, { recordHistory = true, groupId = null, name = 'Group' } = {}) {
+        this._normalizeLayerHierarchy();
+        let indexes = this._resolveLayerIndexes(selection);
+        if (!indexes.length) return false;
+        const first = this.layers[indexes[0]];
+        const parentId = first.parentId || null;
+        indexes = indexes.filter(index => (this.layers[index].parentId || null) === parentId);
+        const selectedIds = indexes.map(index => this.layers[index].id);
+        // Selecting a group and one of its descendants should not create a
+        // cyclic hierarchy. Keep the outer selection and let its current
+        // subtree remain intact.
+        const selectedSet = new Set(selectedIds);
+        indexes = indexes.filter(index => !this._layerAncestors(index).some(parent => selectedSet.has(parent.id)));
+        if (!indexes.length) return false;
+        const groupedIds = indexes.map(index => this.layers[index].id);
+        if (indexes.some(index => this.layers[index].locked)) {
+            this.toast('Unlock the selected layers before grouping', 'error');
+            return false;
+        }
+        const layersToGroup = indexes.slice().sort((a, b) => a - b).map(index => this.layers[index]);
+        const group = {
+            id:this._coerceDocumentId(groupId, 'layer'),
+            name:this._safeText(name || 'Group', 120),
+            visible:true,
+            locked:false,
+            opacity:100,
+            blend:'source-over',
+            kind:'group',
+            parentId,
+            collapsed:false,
+            objects:[]
+        };
+        if (this.layers.some(layer => layer.id === group.id)) group.id = this._newDocumentId('layer');
+        const selectedIndexSet = new Set(indexes);
+        const insertion = Math.min(...indexes);
+        const remaining = this.layers.filter((_, index) => !selectedIndexSet.has(index));
+        const adjustedInsertion = insertion - indexes.filter(index => index < insertion).length;
+        layersToGroup.forEach(layer => { layer.parentId = group.id; });
+        this.layers = remaining.slice(0, adjustedInsertion).concat(group, layersToGroup, remaining.slice(adjustedInsertion));
+        this.activeLayerIdx = this.layers.indexOf(group);
+        this._selectedLayerIds = [group.id];
+        this._enforceLayerInvariants();
+        this.updateLayersPanel();
+        if (recordHistory) this.saveHistory('Group Layers', {
+            command:this._makeCommand('layer.group', {
+                groupId:group.id,
+                layerIds:groupedIds,
+                parentId,
+                name:group.name
+            })
+        });
+        return true;
+    },
+    ungroupLayers(target = this.activeLayerIdx, { recordHistory = true } = {}) {
+        const index = typeof target === 'number' ? Math.round(target) : this._layerIndexById(target);
+        const group = this.layers[index];
+        if (!group || group.kind !== 'group') return false;
+        if (group.locked) {
+            this.toast('Unlock the group before ungrouping', 'error');
+            return false;
+        }
+        const groupId = group.id;
+        const parentId = group.parentId || null;
+        const childIds = this._layerChildren(groupId).map(childIndex => this.layers[childIndex].id);
+        this.layers.forEach(layer => {
+            if ((layer.parentId || null) === groupId) layer.parentId = parentId;
+        });
+        this.layers.splice(index, 1);
+        const nextIndex = childIds.length
+            ? this._layerIndexById(childIds[childIds.length - 1])
+            : this._layerIndexById(parentId);
+        this.activeLayerIdx = nextIndex >= 0 ? nextIndex : Math.max(0, Math.min(index, this.layers.length - 1));
+        this._selectedLayerIds = childIds.filter(id => this._layerIndexById(id) >= 0);
+        if (!this._selectedLayerIds.length && this.layers[this.activeLayerIdx]) this._selectedLayerIds = [this.layers[this.activeLayerIdx].id];
+        this._enforceLayerInvariants();
+        this.updateLayersPanel();
+        if (recordHistory) this.saveHistory('Ungroup Layers', {
+            command:this._makeCommand('layer.ungroup', { groupId, childIds, parentId })
+        });
+        return true;
+    },
+    toggleGroupCollapsed(index) {
+        const group = this.layers[index];
+        if (!group || group.kind !== 'group') return false;
+        group.collapsed = !group.collapsed;
+        this.updateLayersPanel();
+        this.saveHistory(group.collapsed ? 'Collapse Group' : 'Expand Group');
         return true;
     },
     _moveObjectWithinLayer(object, destination) {
@@ -12264,10 +12657,11 @@ self.onmessage = function(event) {
     _addObjectAsLayer(object, name) {
         if (!this.canvas.getObjects().includes(object)) this.canvas.add(object);
         this.canvas.setActiveObject?.(object);
-        if (this._prefs?.stackNewObjects && this.layers[this.activeLayerIdx]?.kind !== 'adjustment') {
+        if (this._prefs?.stackNewObjects && this.layers[this.activeLayerIdx]?.kind !== 'adjustment' && this.layers[this.activeLayerIdx]?.kind !== 'group') {
             this.layers[this.activeLayerIdx].objects.push(object);
             return this.layers[this.activeLayerIdx];
         }
+        const active = this.layers[this.activeLayerIdx];
         const layer = {
             id:this._newDocumentId('layer'),
             name:this._safeText(name || 'Layer', 120),
@@ -12276,10 +12670,15 @@ self.onmessage = function(event) {
             opacity:100,
             blend:'source-over',
             kind:'pixel',
+            parentId:active?.kind === 'group' ? active.id : active?.parentId || null,
             objects:[object]
         };
-        this.layers.splice(this.activeLayerIdx + 1, 0, layer);
+        const insertion = active?.kind === 'group'
+            ? Math.max(...this._layerDescendantIndexes(this.activeLayerIdx, { includeSelf:true })) + 1
+            : this.activeLayerIdx + 1;
+        this.layers.splice(Math.max(0, Math.min(this.layers.length, insertion)), 0, layer);
         this.activeLayerIdx = this.layers.indexOf(layer);
+        this._selectedLayerIds = [layer.id];
         return layer;
     },
     // A readable layer name for the thing that was just made.
@@ -12308,10 +12707,16 @@ self.onmessage = function(event) {
             opacity:100,
             blend:'source-over',
             kind:'pixel',
+            parentId:this._isGroupLayer(this.activeLayerIdx) ? this.layers[this.activeLayerIdx].id : this.layers[this.activeLayerIdx]?.parentId || null,
             objects:[]
         };
-        this.layers.push(layer);
-        this.activeLayerIdx = idx;
+        const active = this.layers[this.activeLayerIdx];
+        const insertion = active?.kind === 'group'
+            ? Math.max(...this._layerDescendantIndexes(this.activeLayerIdx, { includeSelf:true })) + 1
+            : this.activeLayerIdx + 1;
+        this.layers.splice(Math.max(0, Math.min(this.layers.length, insertion)), 0, layer);
+        this.activeLayerIdx = this.layers.indexOf(layer);
+        this._selectedLayerIds = [layer.id];
         this._enforceLayerInvariants();
         this.updateLayersPanel();
         this.saveHistory('New Layer', {
@@ -12330,12 +12735,17 @@ self.onmessage = function(event) {
             opacity:100,
             blend:'source-over',
             kind:'adjustment',
+            parentId:this.layers[this.activeLayerIdx]?.kind === 'group' ? this.layers[this.activeLayerIdx].id : this.layers[this.activeLayerIdx]?.parentId || null,
             adjustment,
             objects:[]
         };
         const afterLayerId = this._ensureLayerId(this.layers[this.activeLayerIdx]);
-        this.layers.splice(this.activeLayerIdx + 1, 0, layer);
-        this.activeLayerIdx++;
+        const insertion = this.layers[this.activeLayerIdx]?.kind === 'group'
+            ? Math.max(...this._layerDescendantIndexes(this.activeLayerIdx, { includeSelf:true })) + 1
+            : this.activeLayerIdx + 1;
+        this.layers.splice(Math.max(0, Math.min(this.layers.length, insertion)), 0, layer);
+        this.activeLayerIdx = this.layers.indexOf(layer);
+        this._selectedLayerIds = [layer.id];
         try {
             await this._rebuildAdjustmentLayers();
             this._enforceLayerInvariants();
@@ -12398,15 +12808,19 @@ self.onmessage = function(event) {
         const layer = this.layers[this.activeLayerIdx];
         if (layer.locked) { this.toast('Unlock layer first', 'error'); return; }
         const deletedLayerId = this._ensureLayerId(layer);
-        layer.objects.forEach(o => this.canvas.remove(o));
-        this.layers.splice(this.activeLayerIdx, 1);
-        if (layer.kind === 'adjustment') void this._rebuildAdjustmentLayers();
+        const deletedIndexes = this._layerDescendantIndexes(this.activeLayerIdx, { includeSelf:true });
+        const deletedLayers = deletedIndexes.map(index => this.layers[index]).filter(Boolean);
+        deletedLayers.forEach(item => (item.objects || []).forEach(o => this.canvas.remove(o)));
+        const deletedSet = new Set(deletedIndexes);
+        this.layers = this.layers.filter((_, index) => !deletedSet.has(index));
+        if (deletedLayers.some(item => item.kind === 'adjustment')) void this._rebuildAdjustmentLayers();
         if (this.layers.length === 0) {
-            this.layers.push({ id:this._newDocumentId('layer'), name:'Layer 0', visible:true, locked:false, opacity:100, blend:'source-over', kind:'pixel', objects:[] });
+            this.layers.push({ id:this._newDocumentId('layer'), name:'Layer 0', visible:true, locked:false, opacity:100, blend:'source-over', kind:'pixel', parentId:null, objects:[] });
             this.activeLayerIdx = 0;
         } else {
-            this.activeLayerIdx = Math.min(this.activeLayerIdx, this.layers.length-1);
+            this.activeLayerIdx = Math.max(0, Math.min(this.activeLayerIdx, this.layers.length-1));
         }
+        this._selectedLayerIds = this.layers[this.activeLayerIdx] ? [this.layers[this.activeLayerIdx].id] : [];
         this._enforceLayerInvariants();
         this.updateLayersPanel();
         this.saveHistory('Delete Layer', {
@@ -12416,6 +12830,51 @@ self.onmessage = function(event) {
     },
     duplicateLayer() {
         const src = this.layers[this.activeLayerIdx];
+        if (!src) return false;
+        if (src.kind === 'group') {
+            const sourceIndexes = this._layerDescendantIndexes(this.activeLayerIdx, { includeSelf:true });
+            const sourceLayers = sourceIndexes.map(index => this.layers[index]);
+            const cloneMap = new Map(sourceLayers.map(layer => [layer, {
+                id:this._newDocumentId('layer'),
+                name:layer.name + (layer === src ? ' Copy' : ''),
+                visible:layer.visible !== false,
+                locked:Boolean(layer.locked),
+                opacity:layer.opacity,
+                blend:layer.blend,
+                kind:layer.kind,
+                parentId:null,
+                collapsed:Boolean(layer.collapsed),
+                adjustment:layer.kind === 'adjustment' ? this._normalizeAdjustment(layer.adjustment) : null,
+                psd:this._normalizePSDLayerMetadata(layer.psd),
+                objects:[]
+            }]));
+            sourceLayers.forEach(layer => {
+                const clone = cloneMap.get(layer);
+                clone.parentId = layer === src
+                    ? layer.parentId || null
+                    : cloneMap.get(this._layerById(layer.parentId))?.id || layer.parentId || null;
+            });
+            const work = sourceLayers.flatMap(layer => (layer.objects || []).filter(object => object.name !== '__boundary__').map(object => new Promise((resolve, reject) => {
+                try { object.clone(clone => (clone ? resolve({ layer, source:object, clone }) : reject(new Error('clone returned nothing')))); }
+                catch (error) { reject(error); }
+            })));
+            Promise.allSettled(work).then(results => {
+                results.filter(result => result.status === 'fulfilled').forEach(({ value }) => {
+                    value.clone.set({ left:value.source.left + 10, top:value.source.top + 10 });
+                    this.canvas.add(value.clone);
+                    cloneMap.get(value.layer).objects.push(value.clone);
+                });
+                const clones = sourceLayers.map(layer => cloneMap.get(layer));
+                const insertion = Math.max(...sourceIndexes) + 1;
+                this.layers.splice(insertion, 0, ...clones);
+                this.activeLayerIdx = this.layers.indexOf(clones[0]);
+                this._selectedLayerIds = [clones[0].id];
+                this._enforceLayerInvariants();
+                this.updateLayersPanel();
+                this.saveHistory('Duplicate Group', { pixelEdit:results.some(result => result.status === 'fulfilled') });
+            });
+            return true;
+        }
         const nl = {
             id:this._newDocumentId('layer'),
             name:src.name+' Copy',
@@ -12424,12 +12883,14 @@ self.onmessage = function(event) {
             opacity:src.opacity,
             blend:src.blend,
             kind:src.kind === 'adjustment' ? 'adjustment' : 'pixel',
+            parentId:src.parentId || null,
             adjustment:src.kind === 'adjustment' ? this._normalizeAdjustment(src.adjustment) : null,
             objects:[]
         };
         if (src.kind === 'adjustment') {
             this.layers.splice(this.activeLayerIdx + 1, 0, nl);
             this.activeLayerIdx++;
+            this._selectedLayerIds = [nl.id];
             this._enforceLayerInvariants();
             this.updateLayersPanel();
             this.saveHistory('Duplicate Adjustment Layer', { pixelEdit:true });
@@ -12437,7 +12898,7 @@ self.onmessage = function(event) {
         }
         const toClone = src.objects.filter(o => o.name !== '__boundary__');
         if (toClone.length === 0) {
-            this.layers.splice(this.activeLayerIdx+1, 0, nl); this.activeLayerIdx++;
+            this.layers.splice(this.activeLayerIdx+1, 0, nl); this.activeLayerIdx++; this._selectedLayerIds = [nl.id];
             this._enforceLayerInvariants(); this.updateLayersPanel(); this.saveHistory('Duplicate Layer', { pixelEdit:false });
             return;
         }
@@ -12457,7 +12918,7 @@ self.onmessage = function(event) {
                 this.canvas.add(clone);
                 nl.objects.push(clone);
             });
-            this.layers.splice(this.activeLayerIdx + 1, 0, nl); this.activeLayerIdx++;
+            this.layers.splice(this.activeLayerIdx + 1, 0, nl); this.activeLayerIdx++; this._selectedLayerIds = [nl.id];
             this._enforceLayerInvariants();
             this.updateLayersPanel();
             this.saveHistory('Duplicate Layer', { pixelEdit:cloned.some(({ clone }) => clone?.type === 'image') });
@@ -12468,6 +12929,10 @@ self.onmessage = function(event) {
     mergeDown() {
         if (this.activeLayerIdx === 0) { this.toast(this._t('Already at the bottom layer'),'info'); return; }
         const upper = this.layers[this.activeLayerIdx], lower = this.layers[this.activeLayerIdx-1];
+        if (!upper || !lower || upper.kind === 'group' || lower.kind === 'group' || (upper.parentId || null) !== (lower.parentId || null)) {
+            this.toast('Select two sibling pixel layers before merging', 'info');
+            return false;
+        }
         if (upper.kind === 'adjustment') {
             void this.applyAdjustmentLayers();
             return;
@@ -12480,10 +12945,18 @@ self.onmessage = function(event) {
         this.layers.splice(this.activeLayerIdx, 1); this.activeLayerIdx--;
         this._enforceLayerInvariants(); this.updateLayersPanel(); this.saveHistory('Merge Down', { pixelEdit:upper.objects.some(object => object?.type === 'image') || lower.objects.some(object => object?.type === 'image') });
     },
-    selectLayer(idx) {
+    selectLayer(idx, { extend = false, toggle = false } = {}) {
         if (!this.layers[idx]) return;
         if (this._layerOpacityPending && idx !== this.activeLayerIdx) this.commitLayerOpacity();
         this.activeLayerIdx = idx;
+        const id = this.layers[idx].id;
+        const current = new Set(this._selectedLayerIds || []);
+        if (toggle) {
+            if (current.has(id)) current.delete(id); else current.add(id);
+            if (!current.size) current.add(id);
+        } else if (extend) current.add(id);
+        else current.clear(), current.add(id);
+        this._selectedLayerIds = [...current].filter(layerId => this._layerIndexById(layerId) >= 0);
         this.canvas.discardActiveObject();
         this._applyLayerInteractionState();
         this.updateLayersPanel();
@@ -12506,8 +12979,7 @@ self.onmessage = function(event) {
         const opacity = Math.max(0, Math.min(100, Number(val)));
         if (!Number.isFinite(opacity) || opacity === l.opacity) return false;
         l.opacity = opacity;
-        const groupOpacity = this._getPSDGroupState(l).opacity;
-        l.objects.forEach(o => { if (o.name !== '__boundary__') o.opacity = (opacity/100) * groupOpacity; });
+        this._applyLayerInteractionState({ render:false });
         if (l.kind === 'adjustment') void this._rebuildAdjustmentLayers();
         document.getElementById('layer-opacity-val').textContent = opacity;
         this.canvas.renderAll();
@@ -12528,6 +13000,7 @@ self.onmessage = function(event) {
         if (!l || l.blend === mode) return;
         l.blend = mode;
         l.objects.forEach(o => { if (o.name !== '__boundary__') o.globalCompositeOperation = mode; });
+        this._applyLayerInteractionState({ render:false });
         this.canvas.renderAll();
         this.saveHistory('Blend: '+mode, {
             pixelEdit:false,
@@ -12722,13 +13195,18 @@ self.onmessage = function(event) {
         this._enforceLayerInvariants({ render:false });
         const list = document.getElementById('layers-list');
         this._initPanelListbox(list, 'layers', 'Layers');
+        if (!list) return;
         list.replaceChildren();
         list.removeAttribute('aria-activedescendant');
-        for (let i = this.layers.length-1; i >= 0; i--) {
+        const rows = this._visibleLayerRows();
+        rows.forEach(({ index:i, depth }, rowIndex) => {
             const l = this.layers[i], d = document.createElement('div');
-            d.className = 'layer-item'+(i===this.activeLayerIdx?' active':'');
+            const isGroup = l.kind === 'group';
+            d.className = 'layer-item'+(i===this.activeLayerIdx?' active':'')+(isGroup?' layer-group':'');
             d.id = `openshop-layer-option-${i}`;
             d.dataset.layerIndex = String(i);
+            d.dataset.layerDepth = String(depth);
+            d.style.paddingInlineStart = `${7 + depth * 16}px`;
             d.tabIndex = -1;
             const eyeSvg = l.visible
                 ? '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'
@@ -12741,16 +13219,26 @@ self.onmessage = function(event) {
             const hasTextOnPath = l.objects.some(o => o._openShopTextOnPath);
             const isBg = l.objects.some(o => o.name === '__boundary__');
             const thumbStyle = isBg ? 'layer-thumb-checker' : '';
-            const layerType = l.kind === 'adjustment'
+            const directChildren = isGroup ? this._layerChildren(l.id).length : 0;
+            const layerType = isGroup
+                ? `Group · ${directChildren} item${directChildren === 1 ? '' : 's'}${l.collapsed ? ' · Collapsed' : ''}`
+                : l.kind === 'adjustment'
                 ? `${this._adjustmentLayerName(l.adjustment?.type)} adjustment`
                 : `${l.objects.filter(o=>o.name!=='__boundary__').length} obj${hasMask?' &middot; M':''}${hasSmartObject?' &middot; SO':''}${hasTextOnPath?' &middot; Text Path':''}`;
-            d.innerHTML = this._trustedHTML`<div class="layer-drag-handle" title="Drag to reorder">&#9776;</div>
+            const disclosure = isGroup
+                ? `<button class="layer-disclosure" title="${l.collapsed?'Expand group':'Collapse group'}" aria-label="${l.collapsed?'Expand group':'Collapse group'}" aria-expanded="${l.collapsed?'false':'true'}">${l.collapsed?'▸':'▾'}</button>`
+                : '<span class="layer-disclosure-spacer" aria-hidden="true"></span>';
+            const groupThumb = isGroup
+                ? '<div class="layer-group-glyph" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7.5h7l1.7 2H21v9.5H3z"/><path d="M3 7.5V5h7l1.7 2"/></svg></div>'
+                : `<div class="layer-thumb"><div class="${thumbStyle}" style="width:32px;height:32px;${isBg?'':'background:var(--bg-depth-4);'}border-radius:2px"></div></div>`;
+            d.innerHTML = this._trustedHTML`${disclosure}<div class="layer-drag-handle" title="Drag to reorder">&#9776;</div>
                 <button class="layer-vis ${l.visible?'':'hidden'}" title="${l.visible?'Hide layer':'Show layer'}" aria-label="${l.visible?'Hide layer':'Show layer'}" aria-pressed="${l.visible?'false':'true'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">${eyeSvg}</svg></button>
                 <button class="layer-lock ${l.locked?'locked':''}" title="${l.locked?'Unlock layer':'Lock layer'}" aria-label="${l.locked?'Unlock layer':'Lock layer'}">${lockSvg}</button>
-                <div class="layer-thumb"><div class="${thumbStyle}" style="width:32px;height:32px;${isBg?'':'background:var(--bg-depth-4);'}border-radius:2px"></div></div>
+                ${groupThumb}
                 <div class="layer-info"><div class="layer-name">${this._esc(l.name)}</div><div class="layer-type">${l.locked?'Locked &middot; ':''}${l.blend!=='source-over'?this._esc(l.blend)+' &middot; ':''}${layerType}</div></div>`;
             d.querySelector('.layer-vis').addEventListener('click', e => { e.stopPropagation(); this.toggleLayerVisibility(i); });
             d.querySelector('.layer-lock').addEventListener('click', e => { e.stopPropagation(); this.toggleLayerLock(i); });
+            d.querySelector('.layer-disclosure')?.addEventListener('click', e => { e.stopPropagation(); this.toggleGroupCollapsed(i); });
             d.querySelector('.layer-name').addEventListener('dblclick', function() {
                 if (l.kind === 'adjustment') OS.showAdjustmentLayerDialog(i);
                 else if (l.objects.some(o => o._openShopSmartObject)) {
@@ -12767,13 +13255,13 @@ self.onmessage = function(event) {
             // neither list was navigable as a list by assistive technology.
             d.setAttribute('role', 'option');
             d.setAttribute('aria-selected', i === this.activeLayerIdx ? 'true' : 'false');
-            d.setAttribute('aria-posinset', String(this.layers.length - i));
-            d.setAttribute('aria-setsize', String(this.layers.length));
+            d.setAttribute('aria-posinset', String(rowIndex + 1));
+            d.setAttribute('aria-setsize', String(rows.length));
             d.setAttribute('aria-label', `${l.name}${l.visible === false ? ', hidden' : ''}${l.locked ? ', locked' : ''}`);
-            d.addEventListener('click', () => this.selectLayer(i));
+            d.addEventListener('click', event => this.selectLayer(i, { extend:event.shiftKey, toggle:event.ctrlKey || event.metaKey }));
             this.initLayerDrag(d, i);
             list.appendChild(d);
-        }
+        });
         this._setPanelListboxActive(list, list.querySelector(`[data-layer-index="${this.activeLayerIdx}"]`));
         const al = this.layers[this.activeLayerIdx];
         if (al) {
@@ -15780,6 +16268,28 @@ self.onmessage = function(event) {
                 }),
                 execute:args => this.addLayer({ id:args.layerId, name:args.name })
             }],
+            ['layer.group', {
+                label:'Group Layers',
+                validate:args => {
+                    if (!Array.isArray(args?.layerIds) || !args.layerIds.length || args.layerIds.length > this._importLimits.maxProjectLayers) throw new Error('Layer selection is invalid');
+                    return {
+                        groupId:requiredId(args?.groupId, 'Group ID'),
+                        layerIds:[...new Set(args.layerIds.map(id => requiredId(id, 'Layer ID')))],
+                        parentId:args?.parentId ? requiredId(args.parentId, 'Parent group ID') : null,
+                        name:this._safeText(args?.name || 'Group', 120)
+                    };
+                },
+                execute:args => this.groupLayers(args.layerIds, { recordHistory:false, groupId:args.groupId, name:args.name })
+            }],
+            ['layer.ungroup', {
+                label:'Ungroup Layers',
+                validate:args => ({
+                    groupId:requiredId(args?.groupId, 'Group ID'),
+                    childIds:Array.isArray(args?.childIds) ? [...new Set(args.childIds.map(id => requiredId(id, 'Layer ID')))] : [],
+                    parentId:args?.parentId ? requiredId(args.parentId, 'Parent group ID') : null
+                }),
+                execute:args => this.ungroupLayers(args.groupId, { recordHistory:false })
+            }],
             ['layer.adjustment.add', {
                 label:'Add Adjustment Layer',
                 touchesPixels:true,
@@ -15870,9 +16380,10 @@ self.onmessage = function(event) {
                 label:'Reorder Layers',
                 validate:args => ({
                     ...layerTarget(args),
-                    toIndex:Math.round(finite(args?.toIndex, 'Layer destination', 0, this._importLimits.maxProjectLayers - 1))
+                    toIndex:Math.round(finite(args?.toIndex, 'Layer destination', 0, this._importLimits.maxProjectLayers)),
+                    parentId:args?.parentId ? requiredId(args.parentId, 'Parent group ID') : null
                 }),
-                execute:args => this._moveLayer(layerIndexById(args.layerId), args.toIndex)
+                execute:args => this._moveLayer(layerIndexById(args.layerId), args.toIndex, { parentId:args.parentId })
             }],
             ['object.transform.set', {
                 label:'Transform Object',
@@ -17520,7 +18031,8 @@ self.onmessage = function(event) {
         const layerOpacity = this._normalizePSDOpacity(Number(layer.opacity ?? 100) / 100);
         const importedSingleLayer = Boolean(layer.psd && objects.length === 1);
         const opacityAlreadyMatchesLayer = objects.every(object => Math.abs(Number(object.opacity ?? 1) - layerOpacity) < 0.002);
-        const canSeparateLayerOpacity = importedSingleLayer || opacityAlreadyMatchesLayer;
+        const hasGroupAncestor = this._layerAncestors(layer).length > 0;
+        const canSeparateLayerOpacity = importedSingleLayer || opacityAlreadyMatchesLayer || hasGroupAncestor;
         const canvas = document.createElement('canvas');
         canvas.width = this.canvasW;
         canvas.height = this.canvasH;
@@ -17540,7 +18052,11 @@ self.onmessage = function(event) {
                 // painted them as solid black instead of erasing.
                 const objectComposite = state.globalCompositeOperation || 'source-over';
                 object.globalCompositeOperation = 'source-over';
-                if (canSeparateLayerOpacity) object.opacity = 1;
+                if (canSeparateLayerOpacity) {
+                    object.opacity = hasGroupAncestor && !importedSingleLayer
+                        ? this._ensureObjectBaseOpacity(object, layer)
+                        : 1;
+                }
                 const objectCanvas = object.toCanvasElement ? object.toCanvasElement({
                     enableRetinaScaling:false,
                     withoutTransform:false,
@@ -17637,7 +18153,21 @@ self.onmessage = function(event) {
         const composite = this._capturePSDCompositeCanvas();
         if (composite) structure.canvas = composite;
 
-        const groups = this._normalizePSDInterchange(this._psdInterchange)?.groups || [];
+        const liveGroups = this.layers.filter(layer => layer.kind === 'group');
+        const groups = liveGroups.length
+            ? liveGroups.map((group, groupIndex) => ({
+                id:group.id,
+                parentId:group.parentId || null,
+                order:groupIndex,
+                name:group.name,
+                hidden:group.visible === false,
+                opacity:Math.max(0, Math.min(1, Number(group.opacity ?? 100) / 100)),
+                blendMode:group.blend === 'source-over' ? 'pass through' : this._canvasBlendToPSD(group.blend),
+                opened:group.collapsed !== true,
+                locked:Boolean(group.locked)
+            }))
+            : this._normalizePSDInterchange(this._psdInterchange)?.groups || [];
+        const liveHierarchy = liveGroups.length > 0;
         const groupNodes = new Map();
         const entries = new Map([[null, []]]);
         groups.forEach(group => {
@@ -17648,7 +18178,8 @@ self.onmessage = function(event) {
                 opacity:this._normalizePSDOpacity(group.opacity),
                 hidden:Boolean(group.hidden),
                 blendMode:group.blendMode || 'pass through',
-                opened:group.opened !== false
+                opened:group.opened !== false,
+                protected:group.locked ? { transparency:true, composite:true, position:true } : undefined
             });
         });
         groups.forEach((group, groupIndex) => {
@@ -17662,6 +18193,7 @@ self.onmessage = function(event) {
         });
 
         this.layers.forEach((layer, layerIndex) => {
+            if (layer.kind === 'group') return;
             const objects = (layer.objects || []).filter(object => object.name !== '__boundary__' && !object.excludeFromExport);
             if (!objects.length && !layer.psd) return;
             const rendered = this._renderLayerCanvasForPSD(layer, report);
@@ -17699,7 +18231,7 @@ self.onmessage = function(event) {
             if (layer.psd?.sourceKind === 'vector') {
                 report.warnings.push(`"${node.name}": imported PSD vector data remains a raster fallback.`);
             }
-            const requestedParent = layer.psd?.parentId;
+            const requestedParent = liveHierarchy ? layer.parentId : layer.psd?.parentId;
             const parentId = requestedParent && groupNodes.has(requestedParent) ? requestedParent : null;
             if (!entries.has(parentId)) entries.set(parentId, []);
             entries.get(parentId).push({
@@ -17888,6 +18420,16 @@ self.onmessage = function(event) {
             const entries = this._withExportCanvasState({ transparent:true }, () => {
                 const layerEntries = [];
                 this.layers.forEach((layer, layerIndex) => {
+                    if (layer.kind === 'group') {
+                        this._oraRecordLoss(report, {
+                            code:'ora.group-flattened',
+                            path:`layer[${this._safeText(layer.name || `Group ${layerIndex + 1}`, 120)}]`,
+                            feature:'Layer group',
+                            fallback:'OpenRaster has no portable group hierarchy in this baseline; child layers were written at the stack root.',
+                            message:`"${this._safeText(layer.name || `Group ${layerIndex + 1}`, 120)}": the live group was flattened into its child layer entries.`
+                        });
+                        return;
+                    }
                     const objects = (layer.objects || []).filter(object => object?.name !== '__boundary__' && !object?.excludeFromExport);
                     if (!objects.length && layerIndex === 0 && /^background$/i.test(String(layer.name || ''))) return;
                     const layerName = this._safeText(layer.name || `Layer ${layerIndex + 1}`, 120) || `Layer ${layerIndex + 1}`;
@@ -22474,23 +23016,35 @@ self.onmessage = async function(event) {
             e.preventDefault();
             const rect = layerEl.getBoundingClientRect();
             const mid = rect.top + rect.height / 2;
-            layerEl.classList.remove('drop-above', 'drop-below');
-            layerEl.classList.add(e.clientY < mid ? 'drop-above' : 'drop-below');
+            const target = this.layers[idx];
+            const into = target?.kind === 'group' && e.clientY >= rect.top + rect.height / 3 && e.clientY <= rect.bottom - rect.height / 3;
+            layerEl.classList.remove('drop-above', 'drop-below', 'drop-into');
+            layerEl.classList.add(into ? 'drop-into' : e.clientY < mid ? 'drop-above' : 'drop-below');
         });
-        layerEl.addEventListener('dragleave', () => layerEl.classList.remove('drop-above', 'drop-below'));
+        layerEl.addEventListener('dragleave', () => layerEl.classList.remove('drop-above', 'drop-below', 'drop-into'));
         layerEl.addEventListener('drop', e => {
             e.preventDefault();
-            layerEl.classList.remove('drop-above', 'drop-below');
+            layerEl.classList.remove('drop-above', 'drop-below', 'drop-into');
             const fromIdx = +e.dataTransfer.getData('text/plain');
             const toIdx = idx;
             if (fromIdx === toIdx || !this.layers[fromIdx] || !this.layers[toIdx]) return;
             const rect = layerEl.getBoundingClientRect();
+            const target = this.layers[toIdx];
+            const into = target?.kind === 'group' && e.clientY >= rect.top + rect.height / 3 && e.clientY <= rect.bottom - rect.height / 3;
+            if (into) {
+                if (this._moveLayerIntoGroup(fromIdx, toIdx)) this.toast('Layer moved into group', 'info');
+                return;
+            }
             const placeAbove = e.clientY < rect.top + rect.height / 2;
-            const targetLayer = this.layers[toIdx];
-            const remaining = this.layers.filter((_, index) => index !== fromIdx);
+            const targetLayer = target;
+            const movedIndexes = this._layerDescendantIndexes(fromIdx, { includeSelf:true });
+            const movedSet = new Set(movedIndexes);
+            const remaining = this.layers.filter((_, index) => !movedSet.has(index));
             const targetPosition = remaining.indexOf(targetLayer);
+            if (targetPosition < 0) return;
             const destination = targetPosition + (placeAbove ? 1 : 0);
-            if (this._moveLayer(fromIdx, destination)) this.toast('Layer moved', 'info');
+            const siblingParent = targetLayer.parentId || null;
+            if (this._moveLayer(fromIdx, destination, { parentId:siblingParent })) this.toast('Layer moved', 'info');
         });
     },
 
@@ -24163,7 +24717,7 @@ self.onmessage = async function(e) {
             {label:'Animation Timeline',cat:'View',fn:()=>this.toggleTimeline()},
             {label:'Actions / Macros',cat:'View',fn:()=>this.toggleMacroPanel()},
             {label:'Pixel Grid',cat:'View',fn:()=>this.togglePixelGrid()},
-            {label:'Toggle Grid',cat:'View',fn:()=>this.toggleGrid(),key:'Ctrl+G'},
+            {label:'Toggle Grid',cat:'View',fn:()=>this.toggleGrid()},
             {label:'Toggle Rulers',cat:'View',fn:()=>this.toggleRulers()},
             {label:'Toggle Snap',cat:'View',fn:()=>this.toggleSnap()},
             {label:'Symmetry: Off',cat:'View',fn:()=>this.setSymmetryMode('off')},
@@ -24186,6 +24740,8 @@ self.onmessage = async function(e) {
             {label:'Export Diagnostics',cat:'Help',fn:()=>this.exportDiagnostics()},
             {label:'Clear Diagnostics',cat:'Help',fn:()=>this.clearDiagnostics()},
             {label:'Add Layer',cat:'Layer',fn:()=>this.addLayer()},
+            {label:'Group Layers',cat:'Layer',fn:()=>this.groupLayers(),key:'Ctrl+G'},
+            {label:'Ungroup Layers',cat:'Layer',fn:()=>this.ungroupLayers(),key:'Ctrl+Shift+G'},
             {label:'Delete Layer',cat:'Layer',fn:()=>this.deleteLayer()},
             {label:'Duplicate Layer',cat:'Layer',fn:()=>this.duplicateLayer()},
             {label:'Merge Down',cat:'Layer',fn:()=>this.mergeDown()},
@@ -24439,7 +24995,7 @@ self.onmessage = async function(e) {
                     {label:'Actual Pixels',fn:()=>this.zoomActual(),key:'Ctrl+1'},
                 ]});
                 items.push({sep:true});
-                items.push({label:'Toggle Grid',fn:()=>this.toggleGrid(),key:'Ctrl+G'});
+                items.push({label:'Toggle Grid',fn:()=>this.toggleGrid()});
                 items.push({label:'Toggle Rulers',fn:()=>this.toggleRulers(),key:'Ctrl+R'});
                 items.push({sep:true});
                 items.push({label:'Canvas Size...',fn:()=>this.showResize()});
@@ -25822,9 +26378,9 @@ self.onmessage = async function(e) {
             ['Ctrl+A','Select All'],['Ctrl+D','Deselect'],
             ['Ctrl+Shift+D','Reselect'],['Ctrl+Shift+I','Inverse Selection'],
             // Layer
-            ['Ctrl+E','Merge Down'],['Ctrl+Shift+E','Merge Visible'],
+            ['Ctrl+E','Merge Down'],['Ctrl+Shift+E','Merge Visible'],['Ctrl+G','Group Layers'],['Ctrl+Shift+G','Ungroup Layers'],
             // View
-            ['Ctrl+G','Toggle Grid'],['Ctrl+R','Toggle Rulers'],
+            ['Ctrl+R','Toggle Rulers'],
             ['Ctrl+1','Zoom 100%'],['Ctrl+0','Zoom Fit'],
             ['Ctrl++','Zoom In'],['Ctrl+-','Zoom Out'],
             ['Tab','Toggle UI Panels (while working on the canvas)'],['F','Fullscreen'],['Scroll','Zoom'],
@@ -25896,7 +26452,7 @@ self.onmessage = async function(e) {
                     case 'j':
                         e.preventDefault(); this._duplicateSelection(); return;
                     case 'g':
-                        e.preventDefault(); this.toggleGrid(); return;
+                        e.preventDefault(); if (e.shiftKey) this.ungroupLayers(); else this.groupLayers(); return;
                     case 'r':
                         e.preventDefault(); this.toggleRulers(); return;
                     case 't':
