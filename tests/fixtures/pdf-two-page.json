@@ -1,0 +1,11 @@
+{
+  "format": "pdf",
+  "source": "synthetic-two-page-raster-pdf",
+  "pages": [
+    { "name": "Page 1", "width": 320, "height": 240, "index": 0 },
+    { "name": "Page 2", "width": 320, "height": 240, "index": 1 }
+  ],
+  "declaredLosses": [
+    { "code": "pdf.rasterized-page", "feature": "PDF vector/page semantics", "fallback": "Each page is imported as a raster layer." }
+  ]
+}

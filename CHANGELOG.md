@@ -5,6 +5,7 @@ All notable changes to Openshop will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Added a machine-readable compatibility corpus with synthetic OpenShop schema/mask/animation boundaries, PSD/PDF loss vectors, and provenance-linked upstream PSD, GIF, and EXIF fixtures; Vitest now round-trips dimensions, layer hierarchy, masks, frame timing, metadata, and malformed-input reports.
 - Added a keyboard-accessible Plugin access section in Preferences with per-plugin version, source digest, lifecycle status, granted capabilities, failure details, and immediate revocation that removes persisted consent and unloads the sandbox.
 - Added complete composite-control accessibility semantics: associated names for generated form controls, owned panel and bottom tabs, command-palette combobox/listbox active descendants, keyboard canvas entry, inert mobile drawers, and axe-core gates across shell states.
 - Added one normalized Open/Place/Paste/Drop router for raster and animated-image imports. GIF, APNG, and WebP Open plus blank-workspace Drop preserve frame timing; Place, Paste, and Drop into an open document use the documented first-frame-static policy while retaining the full animation payload on the placed object.

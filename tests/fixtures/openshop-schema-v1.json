@@ -1,0 +1,32 @@
+{
+  "kind": "openshop-document",
+  "schemaVersion": 1,
+  "appVersion": "0.18.13",
+  "document": { "id": "corpus-v1-document", "name": "Schema V1 Corpus" },
+  "canvas": {
+    "width": 64,
+    "height": 48,
+    "fabric": {
+      "version": "7.4.0",
+      "objects": [
+        { "type": "rect", "name": "Background", "left": 0, "top": 0, "width": 64, "height": 48, "fill": "#ffffff", "_openShopObjectId": "object-background" },
+        { "type": "rect", "name": "Detail", "left": 8, "top": 8, "width": 24, "height": 16, "fill": "#3978ff", "_openShopObjectId": "object-detail" }
+      ]
+    }
+  },
+  "layers": [
+    { "id": "layer-background", "name": "Background", "visible": true, "locked": false, "opacity": 100, "blend": "source-over", "objectIds": ["object-background"] },
+    { "id": "layer-artwork", "name": "Artwork group", "visible": true, "locked": false, "opacity": 100, "blend": "source-over", "kind": "group", "collapsed": false, "objectIds": [] },
+    { "id": "layer-detail", "name": "Detail", "visible": true, "locked": false, "opacity": 88, "blend": "multiply", "parentId": "layer-artwork", "objectIds": ["object-detail"] }
+  ],
+  "active": { "layerId": "layer-detail", "objectIds": ["object-detail"] },
+  "guides": [{ "orientation": "vertical", "position": 16 }],
+  "selection": { "bounds": { "x": 8, "y": 8, "w": 24, "h": 16 }, "mask": null },
+  "animation": {
+    "frames": ["data:image/png;base64,AA==", "data:image/png;base64,AQ=="],
+    "delays": [80, 160],
+    "activeFrameIndex": 1
+  },
+  "metadata": { "image": { "sourceFormat": "jpeg", "exif": { "orientation": 1, "make": "Corpus", "model": "V1" } } },
+  "interchange": { "psd": null }
+}

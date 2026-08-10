@@ -1,0 +1,56 @@
+{
+  "kind": "openshop-document",
+  "schemaVersion": 2,
+  "appVersion": "0.29.0",
+  "document": { "id": "corpus-v2-document", "name": "Mask Animation Corpus" },
+  "canvas": {
+    "width": 96,
+    "height": 64,
+    "fabric": {
+      "version": "7.4.0",
+      "objects": [
+        {
+          "type": "image",
+          "name": "Masked photo",
+          "left": 4,
+          "top": 6,
+          "width": 80,
+          "height": 48,
+          "src": "data:image/png;base64,AA==",
+          "_openShopObjectId": "object-photo",
+          "_openShopLayerMask": {
+            "version": 1,
+            "enabled": true,
+            "feather": 4,
+            "density": 92,
+            "mask": { "width": 2, "height": 2, "encoding": "coverage-v1", "data": "data:application/vnd.openshop.selection;base64,/wCAQA==" }
+          }
+        },
+        { "type": "i-text", "name": "Notes", "text": "Round trip", "left": 10, "top": 10, "fill": "#ffffff", "_openShopObjectId": "object-notes" }
+      ]
+    }
+  },
+  "layers": [
+    { "id": "layer-artwork", "name": "Artwork group", "visible": true, "locked": false, "opacity": 100, "blend": "source-over", "kind": "group", "collapsed": true, "objectIds": [] },
+    { "id": "layer-photo", "name": "Masked photo", "visible": true, "locked": false, "opacity": 94, "blend": "screen", "parentId": "layer-artwork", "objectIds": ["object-photo"] },
+    { "id": "layer-notes", "name": "Notes", "visible": true, "locked": false, "opacity": 100, "blend": "source-over", "objectIds": ["object-notes"] }
+  ],
+  "active": { "layerId": "layer-photo", "objectIds": ["object-photo"] },
+  "guides": [],
+  "selection": { "bounds": null, "mask": null },
+  "animation": {
+    "frames": ["data:image/png;base64,AA==", "data:image/png;base64,AQ==", "data:image/png;base64,Ag=="],
+    "delays": [40, 120, 240],
+    "activeFrameIndex": 2
+  },
+  "metadata": {
+    "image": {
+      "sourceFormat": "jpeg",
+      "exif": { "orientation": 6, "make": "Corpus Camera", "model": "RoundTrip", "hasGps": true, "gps": { "latitude": 40.7, "longitude": -74, "altitude": 12 } },
+      "xmp": { "title": "Corpus frame", "creator": "OpenShop", "hasLocation": true },
+      "exifSegment": "data:application/vnd.openshop.exif;base64,ZXhpZg==",
+      "xmpSegment": "data:application/vnd.openshop.xmp;base64,eG1w"
+    }
+  },
+  "interchange": { "psd": { "version": 1, "layers": 2 } }
+}

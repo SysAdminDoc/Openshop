@@ -1,0 +1,24 @@
+{
+  "format": "animation",
+  "source": "Synthetic decoded frame vectors; image bytes are intentionally tiny because decoder coverage is exercised by the browser fixtures.",
+  "sequences": {
+    "gif": {
+      "container": "gif",
+      "frameCount": 11,
+      "delays": [83, 83, 83, 83, 83, 83, 83, 83, 83, 83, 83],
+      "frames": ["data:image/png;base64,AA==", "data:image/png;base64,AQ==", "data:image/png;base64,Ag=="]
+    },
+    "apng": {
+      "container": "apng",
+      "frameCount": 3,
+      "delays": [40, 120, 240],
+      "frames": ["data:image/png;base64,AA==", "data:image/png;base64,AQ==", "data:image/png;base64,Ag=="]
+    },
+    "webp": {
+      "container": "webp",
+      "frameCount": 3,
+      "delays": [25, 100, 250],
+      "frames": ["data:image/png;base64,AA==", "data:image/png;base64,AQ==", "data:image/png;base64,Ag=="]
+    }
+  }
+}

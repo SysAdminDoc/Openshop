@@ -1,0 +1,15 @@
+{
+  "kind": "openshop-document",
+  "schemaVersion": 2,
+  "appVersion": "0.29.0",
+  "document": { "id": "malformed-document", "name": "Malformed" },
+  "canvas": { "width": 16, "height": 16, "fabric": { "objects": [] } },
+  "layers": [],
+  "active": { "layerId": "layer-bad", "objectIds": [] },
+  "selection": {
+    "bounds": null,
+    "mask": { "width": 2, "height": 2, "encoding": "coverage-v1", "data": "data:application/vnd.openshop.selection;base64,AA==" }
+  },
+  "animation": { "frames": [], "delays": [], "activeFrameIndex": 0 },
+  "metadata": { "image": null }
+}

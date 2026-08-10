@@ -1,0 +1,26 @@
+{
+  "width": 128,
+  "height": 96,
+  "children": [
+    {
+      "id": "group-1",
+      "sourceKind": "group",
+      "name": "Effects",
+      "opacity": 0.5,
+      "blendMode": "multiply",
+      "unsupported": [],
+      "children": [
+        {
+          "id": "layer-1",
+          "sourceKind": "bitmap",
+          "name": "Masked photo",
+          "blendMode": "linear-dodge",
+          "opacity": 1,
+          "unsupported": ["layer mask", "smart object"],
+          "children": []
+        }
+      ]
+    }
+  ],
+  "expectedLosses": ["psd.group-opacity", "psd.unsupported-layer-mask", "psd.blend-mode", "psd.flattened-composite"]
+}

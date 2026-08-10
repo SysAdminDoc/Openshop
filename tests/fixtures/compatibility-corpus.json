@@ -1,0 +1,147 @@
+{
+  "manifestVersion": 1,
+  "purpose": "Redistributable OpenShop compatibility fixtures and invariants",
+  "provenance": {
+    "synthetic-openshop": {
+      "source": "OpenShop compatibility corpus, authored for regression testing",
+      "license": "CC0-1.0"
+    },
+    "synthetic-interop": {
+      "source": "OpenShop compatibility corpus, decoded boundary vectors",
+      "license": "CC0-1.0"
+    },
+    "ag-psd": {
+      "source": "https://github.com/Agamnentzar/ag-psd/blob/387049670cb89b88fb8fe1b7c01aeacf98dd2e3b/test/read/nested/src.psd",
+      "license": "MIT"
+    },
+    "modern-gif": {
+      "source": "https://github.com/qq15725/modern-gif/blob/ffb86f0384d58f14a4245aabf83873f253fa76b3/test/assets/test.gif",
+      "license": "MIT"
+    },
+    "exif-orientation-examples": {
+      "source": "https://github.com/recurser/exif-orientation-examples/blob/219294e144531b0c01247913cb58b6f5531b5081/Landscape_6.jpg",
+      "license": "MIT"
+    }
+  },
+  "fixtures": [
+    {
+      "id": "openshop-schema-v1",
+      "path": "openshop-schema-v1.json",
+      "format": "openshop",
+      "provenance": "synthetic-openshop",
+      "invariants": {
+        "sourceSchema": 1,
+        "targetSchema": 2,
+        "width": 64,
+        "height": 48,
+        "layerNames": ["Background", "Artwork group", "Detail"],
+        "groupNames": ["Artwork group"],
+        "animationFrames": 2,
+        "animationDelays": [80, 160]
+      }
+    },
+    {
+      "id": "openshop-schema-v2-mask-animation-metadata",
+      "path": "openshop-schema-v2.json",
+      "format": "openshop",
+      "provenance": "synthetic-openshop",
+      "invariants": {
+        "sourceSchema": 2,
+        "targetSchema": 2,
+        "width": 96,
+        "height": 64,
+        "layerNames": ["Artwork group", "Masked photo", "Notes"],
+        "groupNames": ["Artwork group"],
+        "maskObjectId": "object-photo",
+        "animationFrames": 3,
+        "animationDelays": [40, 120, 240],
+        "metadataSourceFormat": "jpeg",
+        "metadataOrientation": 6,
+        "metadataHasGps": true
+      }
+    },
+    {
+      "id": "openshop-malformed-selection-boundary",
+      "path": "openshop-malformed.json",
+      "format": "openshop",
+      "provenance": "synthetic-openshop",
+      "invariants": {
+        "expectedErrorCode": "openshop.invalid-document",
+        "expectedLossCode": "openshop.invalid-document",
+        "boundary": "truncated selection mask"
+      }
+    },
+    {
+      "id": "psd-nested-upstream",
+      "path": "photoshop-nested.psd",
+      "format": "psd",
+      "provenance": "ag-psd",
+      "invariants": {
+        "signature": "8BPS",
+        "layerNames": ["Group", "Layer 1", "Layer 2"],
+        "groups": 1,
+        "masks": 0,
+        "declaredLosses": ["psd.flattened-composite"]
+      }
+    },
+    {
+      "id": "psd-mask-loss-vector",
+      "path": "psd-mask-loss.json",
+      "format": "psd",
+      "provenance": "synthetic-interop",
+      "invariants": {
+        "width": 128,
+        "height": 96,
+        "layerNames": ["Effects", "Masked photo"],
+        "declaredLosses": ["psd.group-opacity", "psd.unsupported-layer-mask", "psd.blend-mode", "psd.flattened-composite"]
+      }
+    },
+    {
+      "id": "pdf-two-page-vector",
+      "path": "pdf-two-page.json",
+      "format": "pdf",
+      "provenance": "synthetic-interop",
+      "invariants": {
+        "pageCount": 2,
+        "pageNames": ["Page 1", "Page 2"],
+        "width": 320,
+        "height": 240,
+        "declaredLosses": ["pdf.rasterized-page"]
+      }
+    },
+    {
+      "id": "animated-frame-vectors",
+      "path": "animated-frame-vectors.json",
+      "format": "animation",
+      "provenance": "synthetic-interop",
+      "invariants": {
+        "gif": { "frameCount": 11, "delays": [83, 83, 83] },
+        "apng": { "frameCount": 3, "delays": [40, 120, 240] },
+        "webp": { "frameCount": 3, "delays": [25, 100, 250] }
+      }
+    },
+    {
+      "id": "animated-gif-upstream",
+      "path": "animated-multiframe.gif",
+      "format": "gif",
+      "provenance": "modern-gif",
+      "invariants": {
+        "signature": "GIF89a",
+        "frameCount": 11,
+        "minDistinctFrames": 2
+      }
+    },
+    {
+      "id": "jpeg-exif-upstream",
+      "path": "exif-orientation-6.jpg",
+      "format": "jpeg",
+      "provenance": "exif-orientation-examples",
+      "invariants": {
+        "signature": "FFD8",
+        "orientation": 6,
+        "sourceFormat": "jpeg",
+        "defaultExportPolicy": "strip-location"
+      }
+    }
+  ]
+}
