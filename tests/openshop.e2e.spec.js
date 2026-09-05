@@ -872,7 +872,7 @@ test('renders imported ABR tips as bounded raster layers @cross-browser', async 
   expect(result.stampCount).toBeGreaterThan(1);
 });
 
-test('applies a one-click pixel filter to an active image layer @cross-browser', async ({ page }) => {
+test('applies a one-click pixel filter to an active image layer @cross-browser', async ({ page, browserName }) => {
   await openApp(page);
   await page.getByRole('button', { name: 'Enter Studio' }).click();
 
@@ -917,7 +917,9 @@ test('applies a one-click pixel filter to an active image layer @cross-browser',
     return {
       activeName: OS.canvas.getActiveObject()?.name,
       historyAction: OS.history[OS.history.length - 1]?.action,
-      photonDisabled: OS._photonFilterDisabled
+      photonDisabled: OS._photonFilterDisabled,
+      gpuDisabled: OS._gpuFilterDisabled,
+      backends: Object.keys(OS.filterBackendReport().sharpen?.backends || {})
     };
   });
 
@@ -925,6 +927,10 @@ test('applies a one-click pixel filter to an active image layer @cross-browser',
   // The history entry carries the label; the object keeps its own identity.
   expect(result.activeName).toBe('Filter Smoke');
   expect(result.photonDisabled).toBe(false);
+  if (browserName === 'firefox') {
+    expect(result.gpuDisabled).toBe(true);
+    expect(result.backends).not.toContain('webgl2');
+  }
 });
 
 test('reports the OffscreenCanvas filter path and its main-thread fallback @cross-browser', async ({ page }) => {
@@ -1678,12 +1684,13 @@ test('stores atomic recovery generations, falls back from corruption, and forks 
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   const hostedHtml = await readFile(join(process.cwd(), 'index.html'), 'utf8');
-  await page.route('http://localhost/**', (route) => route.fulfill({
+  await page.route('http://127.0.0.1:4173/**', (route) => route.fulfill({
     status: 200,
     contentType: 'text/html',
     body: hostedHtml
   }));
-  await openApp(page, 'http://localhost/index.html');
+  await page.goto('http://127.0.0.1:4173/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => document.documentElement.dataset.osBoot === 'ready', null, { timeout: 30000 });
   await page.evaluate(() => OS.dismissWelcome());
   await page.waitForTimeout(100);
 
@@ -1722,12 +1729,12 @@ test('stores atomic recovery generations, falls back from corruption, and forks 
   const secondPage = await page.context().newPage();
   const secondErrors = [];
   secondPage.on('pageerror', (error) => secondErrors.push(error.message));
-  await secondPage.route('http://localhost/**', (route) => route.fulfill({
+  await secondPage.route('http://127.0.0.1:4173/**', (route) => route.fulfill({
     status: 200,
     contentType: 'text/html',
     body: hostedHtml
   }));
-  await secondPage.goto('http://localhost/index.html', { waitUntil: 'domcontentloaded' });
+  await secondPage.goto('http://127.0.0.1:4173/index.html', { waitUntil: 'domcontentloaded' });
   // Boot is asynchronous: the libraries are fetched, verified and executed
   // from blob URLs, so there is no OS.canvas to drive until it settles.
   await secondPage.waitForFunction(() => document.documentElement.dataset.osBoot === 'ready', null, { timeout: 30000 });
@@ -1985,7 +1992,7 @@ test('round-trips one document state through save, open, recovery, undo, and red
   const savedState = JSON.parse(projectText);
   expect(savedState).toEqual(expect.objectContaining({
     kind: 'openshop-document',
-    schemaVersion: 1,
+    schemaVersion: 3,
     canvas: expect.objectContaining({ width: 320, height: 240 }),
     layers: expect.any(Array)
   }));
@@ -3362,7 +3369,7 @@ test('exports real alpha or matte pixels and presents format loss before downloa
         context.drawImage(image, 0, 0);
         resolve([...context.getImageData(x, y, 1, 1).data]);
       };
-      image.onerror = reject;
+      image.onerror = () => reject(new Error(`Could not decode ${String(dataUrl).slice(0, 32)} for the ${x},${y} export probe`));
       image.src = dataUrl;
     });
     const waitForPreview = (overlay, labelPrefix) => new Promise((resolve, reject) => {
@@ -4006,7 +4013,10 @@ test('keeps dialog actions visible and operable across narrow portrait and lands
       expect(modalBox.x).toBeGreaterThanOrEqual(0);
       expect(modalBox.y).toBeGreaterThanOrEqual(0);
       expect(modalBox.x + modalBox.width).toBeLessThanOrEqual(viewport.width);
-      expect(modalBox.y + modalBox.height).toBeLessThanOrEqual(viewport.height);
+      expect(
+        modalBox.y + modalBox.height,
+        `${dialog} modal bottom at ${viewport.width}x${viewport.height}`
+      ).toBeLessThanOrEqual(viewport.height);
 
       const actions = modal.locator('.modal-btns button');
       expect(await actions.count()).toBeGreaterThan(0);
@@ -4016,7 +4026,10 @@ test('keeps dialog actions visible and operable across narrow portrait and lands
         expect(box.x).toBeGreaterThanOrEqual(0);
         expect(box.y).toBeGreaterThanOrEqual(0);
         expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
-        expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+        expect(
+          box.y + box.height,
+          `${dialog} action ${index} bottom at ${viewport.width}x${viewport.height}`
+        ).toBeLessThanOrEqual(viewport.height);
         expect(box.height).toBeGreaterThanOrEqual(43);
         expect(await action.evaluate((button) => parseFloat(getComputedStyle(button).minHeight))).toBeGreaterThanOrEqual(44);
       }
@@ -4476,6 +4489,7 @@ test('drives the whole menubar from the keyboard with clean accessible names @cr
   await expect(page.locator('.menu-bar > .menu-item').first()).toHaveAttribute('aria-expanded', 'true');
 
   // Arrow into the submenu, then back out of it.
+  await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowDown');
@@ -5307,7 +5321,7 @@ test('collects diagnostics a bug report can attach @cross-browser', async ({ pag
   // Failures reached the user as a toast and the developer as nothing, so
   // every issue filed so far is prose and a screenshot.
   const result = await page.evaluate(() => {
-    OS.createNewDocument(120, 90, '#ffffff');
+    OS.createNewDocument(120, 90);
     OS.clearDiagnostics();
 
     OS.toast('something went wrong', 'error');
@@ -6547,7 +6561,14 @@ test('brush and eraser strokes become layer pixels, not draggable paths @cross-b
     };
     const settle = () => new Promise(r => setTimeout(r, 500));
     const pixel = (x, y) => {
-      const d = OS._readDocumentImageData().data;
+      const image = OS.layers[OS.activeLayerIdx].objects.find(object => object.type === 'image');
+      const source = image.getElement();
+      const probe = document.createElement('canvas');
+      probe.width = source.naturalWidth || source.width;
+      probe.height = source.naturalHeight || source.height;
+      const context = probe.getContext('2d');
+      context.drawImage(source, 0, 0);
+      const d = context.getImageData(0, 0, probe.width, probe.height).data;
       const i = (y * 120 + x) * 4;
       return [d[i], d[i + 1], d[i + 2], d[i + 3]];
     };
@@ -6834,6 +6855,7 @@ test('dismissing the welcome screen twice does not double-bind the editor @cross
     let pastes = 0;
     const realPaste = OS._pasteSelection.bind(OS);
     OS._pasteSelection = () => { pastes += 1; };
+    OS._clipboard = {};
 
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', ctrlKey: true, bubbles: true }));
@@ -6841,6 +6863,7 @@ test('dismissing the welcome screen twice does not double-bind the editor @cross
 
     OS.undo = realUndo;
     OS._pasteSelection = realPaste;
+    OS._clipboard = null;
     return { flyoutHosts: document.querySelectorAll('#flyout-host').length, undos, pastes };
   });
 
@@ -8198,7 +8221,7 @@ test('flags untranslated interface strings through the pseudo-locale', async ({ 
   const domSet = new Set(result.domKeys);
   const missingInChrome = result.missingInChinese
     .filter(key => domSet.has(key) && !sameEverywhere.has(key));
-  expect(new Set(missingInChrome)).toEqual(new Set(['OpenRaster (.ora)', 'Light', 'Tilt dynamics']));
+  expect(new Set(missingInChrome)).toEqual(new Set());
 
   // The inventory now also covers the command palette, which the dictionary
   // does not reach yet. Measuring it is the point — the metric used to report
@@ -8608,11 +8631,10 @@ test('surfaces an editor initialization failure with a reload control', async ({
   await page.route('http://127.0.0.1:4173/', async route => {
     const response = await route.fetch();
     let body = await response.text();
-    if (!body.includes('    OS.init();')) throw new Error('Could not find the editor initialization call');
-    body = body.replace(
-      '    OS.init();',
-      "    OS.init = () => { throw new Error('forced editor initialization failure'); };\n    OS.init();"
-    );
+    const initCall = /^(\s+)OS\.init\(\);$/m;
+    if (!initCall.test(body)) throw new Error('Could not find the editor initialization call');
+    body = body.replace(initCall, (_, indent) =>
+      `${indent}OS.init = () => { throw new Error('forced editor initialization failure'); };\n${indent}OS.init();`);
     // The test intentionally changes an inline script, so use the server shell
     // without its production CSP hash for this isolated failure injection.
     body = body.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>\s*/i, '');
@@ -8847,11 +8869,16 @@ test('runs the Photon WASM backend for real on the operation it is allowed @slow
     const third = await addImage();
     const before = pixelOf(third);
     const pending = OS.applyFilterDirect('Invert');
-    OS.cancelActiveCompute();
+    let filterJob = null;
+    for (let attempt = 0; attempt < 50 && !filterJob; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      filterJob = OS._activeComputeJob('image-processing');
+    }
+    const cancelAccepted = OS.cancelActiveCompute();
     await pending;
     const afterCancel = pixelOf(OS.canvas.getActiveObject() || third);
 
-    return { cold, warm, cancelUnchanged: before.join() === afterCancel.join() };
+    return { cold, warm, cancelAccepted, cancelUnchanged: before.join() === afterCancel.join() };
   });
 
   // The flag is only set once the worker reports the verified module loaded,
@@ -8860,6 +8887,7 @@ test('runs the Photon WASM backend for real on the operation it is allowed @slow
   // #c8501e inverted.
   expect(result.cold.pixel.slice(0, 3)).toEqual([55, 175, 225]);
   expect(result.warm.pixel.slice(0, 3)).toEqual([55, 175, 225]);
+  expect(result.cancelAccepted).toBe(true);
   expect(result.cancelUnchanged).toBe(true);
   console.log(`Photon invert: cold ${result.cold.ms}ms, warm ${result.warm.ms}ms`);
 });

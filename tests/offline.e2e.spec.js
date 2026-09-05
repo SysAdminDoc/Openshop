@@ -553,8 +553,13 @@ test.describe('hosted offline contract', () => {
     // The old worker remains active, so the page can still ask it for status.
     await setServerState(request, { revision:'test-v2-promotion' });
     const interrupted = await page.evaluate(async () => {
+      const workerUrl = new URL('./sw.js?openshop-test-abort-promotion=1', document.baseURI).href;
+      OPENSHOP_STATIC_SCRIPT_URLS.add(workerUrl);
+      const trustedWorkerUrl = OPENSHOP_SCRIPT_POLICY
+        ? OPENSHOP_SCRIPT_POLICY.createScriptURL(workerUrl)
+        : workerUrl;
       const registration = await navigator.serviceWorker.register(
-        './sw.js?openshop-test-abort-promotion=1',
+        trustedWorkerUrl,
         { scope:'./', updateViaCache:'none' }
       );
       const installing = registration.installing || await new Promise(resolve => {
@@ -577,8 +582,13 @@ test.describe('hosted offline contract', () => {
     // staging cache and candidate, proving the marker is resumable as well as
     // keeping the old shell alive during the failed attempt.
     const resumed = await page.evaluate(async () => {
+      const workerUrl = new URL('./sw.js?openshop-test-abort-promotion=0', document.baseURI).href;
+      OPENSHOP_STATIC_SCRIPT_URLS.add(workerUrl);
+      const trustedWorkerUrl = OPENSHOP_SCRIPT_POLICY
+        ? OPENSHOP_SCRIPT_POLICY.createScriptURL(workerUrl)
+        : workerUrl;
       const registration = await navigator.serviceWorker.register(
-        './sw.js?openshop-test-abort-promotion=0',
+        trustedWorkerUrl,
         { scope:'./', updateViaCache:'none' }
       );
       const installing = registration.installing || await new Promise(resolve => {

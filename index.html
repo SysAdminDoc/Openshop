@@ -2,15 +2,25 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta property="og:image" content="./design/openshop-studio-master.png">
+<meta property="og:image" content="./design/openshop-social-preview.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="OpenShop — Free browser-based image editor with layers, AI tools, selections, filters, PSD import, and a Photoshop-inspired workflow. No server, no signup, no install.">
-<meta property="og:title" content="OpenShop — Free Online Image Editor">
-<meta property="og:description" content="Professional image editing in your browser. Layers, AI tools, selections, filters, PSD import. Zero install.">
+<meta name="description" content="OpenShop is a private browser image editor with layers, selections, PSD interchange, local export, and an installable offline shell.">
+<meta property="og:title" content="OpenShop | Private Browser Image Editor">
+<meta property="og:description" content="Layers, selections, PSD interchange, and local export. No signup or upload step.">
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="OpenShop">
+<meta property="og:url" content="https://sysadmindoc.github.io/Openshop/">
+<meta property="og:image:alt" content="OpenShop editing a layered poster in the browser">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="OpenShop | Private Browser Image Editor">
+<meta name="twitter:description" content="A layered image studio that runs in your browser. No signup or upload step.">
+<meta name="twitter:image" content="./design/openshop-social-preview.png">
+<meta name="twitter:image:alt" content="OpenShop editing a layered poster in the browser">
 <meta name="theme-color" content="#0a0c10" id="theme-color-meta">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-AI1RkMtQdXpsyI97xMvbcaXhxaPFGso1GTonDhNDAs8=' 'sha256-ZFwPz8jePUa+4O7AQHC72j3sG8y9bwBWTitIcIwCR8A=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
-<title>OpenShop v0.30.0 — Online Image Editor</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self' 'sha256-AI1RkMtQdXpsyI97xMvbcaXhxaPFGso1GTonDhNDAs8=' 'sha256-jGUjHWw5ehC7LBtTu2+ZUCif54TBTDAAstV//2GzOLQ=' 'wasm-unsafe-eval' blob:; require-trusted-types-for 'script'; trusted-types openshop-loader; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co blob:; worker-src 'self' blob:; frame-src 'self' blob:;">
+<title>OpenShop v0.31.0 | Browser Image Editor</title>
 <script>
 // OpenShop-specific Fabric configuration. The editor uses Fabric 7's native
 // Promise-based APIs directly; keep only the defaults and serialization
@@ -640,6 +650,17 @@ animation:marchAnts .4s linear infinite}
 .modal-row input:focus{border-color:var(--accent)}
 .modal-row input[type="range"]{padding:0}
 .modal-btns{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:16px}
+@media(max-height:800px) and (min-width:768px){
+  .modal .modal-btns{
+    position:sticky;
+    z-index:2;
+    bottom:-24px;
+    margin:16px -24px -24px;
+    padding:10px 24px 20px;
+    border-top:1px solid var(--border);
+    background:linear-gradient(180deg,color-mix(in srgb, var(--bg-depth-2) 97%, transparent),var(--bg-depth-1) 28%);
+  }
+}
 .btn{padding:7px 18px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:var(--bg-depth-3);color:var(--text-primary);transition:var(--transition-chrome);line-height:1.2}
 .btn:hover{background:var(--bg-depth-4);border-color:var(--border-active)}
 .btn:active{transform:scale(.97);transition-duration:.05s}
@@ -3106,10 +3127,10 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
 
 <!-- ===== TOP MENU ===== -->
 <div id="topbar">
-    <div class="logo" aria-label="OpenShop version 0.30.0">
+    <div class="logo" aria-label="OpenShop version 0.31.0">
         <span class="logo-mark">OS</span>
         <span class="logo-word">OpenShop</span>
-        <span class="logo-version">v0.30</span>
+        <span class="logo-version">v0.31</span>
     </div>
     <div class="menu-bar" role="menubar" aria-label="Main menu">
     <div class="menu-item" role="menuitem" aria-haspopup="true">File
@@ -3722,7 +3743,7 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
 <div id="welcome-overlay" role="dialog" aria-modal="true" aria-label="Welcome to OpenShop">
     <div class="welcome-inner">
         <section class="welcome-hero">
-            <div class="welcome-brand"><span class="welcome-mark">OS</span><span>OpenShop</span><small>v0.30</small></div>
+            <div class="welcome-brand"><span class="welcome-mark">OS</span><span>OpenShop</span><small>v0.31</small></div>
             <div class="welcome-kicker"><span></span> Local creative studio</div>
             <h1>Edit boldly.<br><em>Stay local.</em></h1>
             <p>A full image workspace that opens in one file. Your canvas, layers, and exports stay on this device.</p>
@@ -4104,7 +4125,7 @@ html[data-os-workspace="mobile"][data-os-bottom-tab="timeline"] body:not(.fullsc
 
 <script>
 // ================================================================
-//  OpenShop v0.30.0 — Core Engine (Phase 10: Pro Toolbar)
+//  OpenShop v0.31.0 | Core Engine (Phase 10: Pro Toolbar)
 // ================================================================
 // Static controls declare opaque action IDs; executable behavior lives only in this reviewed registry.
 const OS_EVENT_HANDLERS = Object.freeze({
@@ -5463,6 +5484,7 @@ const OS = {
         "Grow": "扩大",
         "Guides": "参考线",
         "Halftone...": "半调...",
+        "Healing: Spot Healing Brush Tool": "修复：污点修复画笔工具",
         "History": "历史记录",
         "Horizontal": "水平",
         "Hue Rotation...": "色相旋转...",
@@ -5477,6 +5499,7 @@ const OS = {
         "Layers": "图层",
         "Lens Correction...": "镜头校正...",
         "Levels...": "色阶...",
+        "Light": "浅色",
         "Liquify...": "液化...",
         "Midnight": "午夜",
         "Mode": "模式",
@@ -5492,6 +5515,7 @@ const OS = {
         "Place Image": "置入图像",
         "Open PSD": "打开 PSD",
         "Open Project": "打开项目",
+        "OpenRaster (.ora)": "OpenRaster (.ora)",
         "Panels": "面板",
         "Paste": "粘贴",
         "Pattern": "图案",
@@ -5499,6 +5523,7 @@ const OS = {
         "Photo Filter...": "照片滤镜...",
         "Photo Presets...": "照片预设...",
         "Pixel Grid": "像素网格",
+        "Pixel-perfect": "像素精确",
         "Pixelate...": "像素化...",
         "Points": "顶点数",
         "Posterize...": "色调分离...",
@@ -5511,6 +5536,7 @@ const OS = {
         "Redo": "重做",
         "Remove Background (AI)": "移除背景（AI）",
         "Replace Color...": "替换颜色...",
+        "Refine Edge...": "优化边缘...",
         "Reselect": "重新选择",
         "Resize Canvas": "调整画布大小",
         "Rotate 90° CCW": "逆时针旋转 90°",
@@ -5520,6 +5546,7 @@ const OS = {
         "Scale": "缩放",
         "Segment Select": "分割选择",
         "Select": "选择",
+        "Selection: Quick Selection Tool": "选择：快速选择工具",
         "Selective Color...": "可选颜色...",
         "Sepia": "怀旧褐色",
         "Shadows / Highlights...": "阴影 / 高光...",
@@ -5527,6 +5554,7 @@ const OS = {
         "Show": "显示",
         "Sides": "边数",
         "Similar": "选取相似",
+        "Tilt dynamics": "倾斜动态",
         "Transform Selection...": "变换选区...",
         "Save Selection...": "保存选区...",
         "Load Selection...": "载入选区...",
@@ -5847,7 +5875,7 @@ const OS = {
     // scene. A blank workspace owns the shell, tools, panels, preferences, and
     // viewport without manufacturing a hidden document just to paint the UI.
     session: {
-        application: { id:'openshop', version:'0.30.0', ready:false },
+        application: { id:'openshop', version:'0.31.0', ready:false },
         workspace: { layout:'default', mode:'standard' },
         tool: { selectedId:'select' },
         document: { activeId:null, openIds:[], name:null },
@@ -5885,7 +5913,7 @@ const OS = {
     // while the app was 0.24.0 — and any future compatibility gate keyed on
     // appVersion would have misread them. The release-metadata test pins this
     // to package.json along with every other version string.
-    version: '0.30.0',
+    version: '0.31.0',
     // Canvas pixels are CSS pixels, so 96 is the honest default. A document
     // created in millimetres or inches carries whatever it was created at, and
     // the PSD and PDF exporters declare that rather than assuming 96.
@@ -6952,7 +6980,8 @@ const OS = {
     cancelActiveCompute() {
         // PSD import owns its own progress overlay and Cancel button, so it is
         // never the shared-progress job; only that dialog routes through here.
-        const job = this._activeProgressJobId ? this._computeJobs.get(this._activeProgressJobId) : null;
+        const job = (this._activeProgressJobId ? this._computeJobs.get(this._activeProgressJobId) : null)
+            || this._activeComputeJob('image-processing');
         if (!job) return false;
         const cancelled = this._cancelComputeJob(job, `${job.kind} cancelled`);
         if (cancelled) this.toast(`${job.kind} cancelled`, 'info');
@@ -7036,7 +7065,7 @@ const OS = {
         if (label) label.textContent = labels[this._persistenceState];
         const dirtyPrefix = this._isDirty ? '* ' : '';
         const stateSuffix = this._persistenceState === 'saving' ? ' (Saving)' : this._persistenceState === 'error' ? ' (Save failed)' : '';
-        document.title = `${dirtyPrefix}${this._docName || 'Untitled'}${stateSuffix} — OpenShop v0.30.0`;
+        document.title = `${dirtyPrefix}${this._docName || 'Untitled'}${stateSuffix} | OpenShop v0.31.0`;
         if (this.session) this.session.persistence = { state:this._persistenceState, dirty:Boolean(this._isDirty) };
     },
     _persistLocal(key, value, { label = 'Storage', announce = true } = {}) {
@@ -7706,6 +7735,12 @@ const OS = {
         }
         return { kind:'identity' };
     },
+    _adaptColorMatrix(matrix, adaptation) {
+        if (!Array.isArray(matrix) || matrix.length !== 3) return null;
+        return adaptation.map(row => [0, 1, 2].map(column =>
+            row.reduce((total, value, index) => total + value * matrix[index][column], 0)
+        ));
+    },
     _parseICCProfile(bytes) {
         const source = this._iccBytes(bytes);
         if (!source || source.byteLength < 132 || source.byteLength > this._importLimits.maxColorProfileBytes) return null;
@@ -7728,11 +7763,19 @@ const OS = {
         const descriptionTag = readTag('desc') || readTag('mluc') || readTag('cprt');
         const description = descriptionTag ? this._iccTagText(source, descriptionTag.offset, descriptionTag.size) : '';
         const xyzTags = ['rXYZ', 'gXYZ', 'bXYZ'].map(readTag);
-        const matrixRows = xyzTags.every(Boolean) ? [
+        const profileMatrixRows = xyzTags.every(Boolean) ? [
             xyzTags.map(tag => this._iccFixed16(view, tag.offset + 8)),
             xyzTags.map(tag => this._iccFixed16(view, tag.offset + 12)),
             xyzTags.map(tag => this._iccFixed16(view, tag.offset + 16))
         ] : null;
+        // ICC RGB primaries are encoded in the D50 profile connection space.
+        // OpenShop performs its pixel conversion in D65, so adapt once while
+        // parsing instead of treating D50 coordinates as working-space values.
+        const matrixRows = profileMatrixRows ? this._adaptColorMatrix(profileMatrixRows, [
+            [0.9554734, -0.0230985, 0.0632593],
+            [-0.0283697, 1.0099955, 0.0210414],
+            [0.012314, -0.0205077, 1.3303659]
+        ]) : null;
         const curves = ['rTRC', 'gTRC', 'bTRC'].map(signature => {
             const tag = readTag(signature);
             return tag ? this._iccCurve(source, tag.offset, tag.size) : { kind:'identity' };
@@ -10930,9 +10973,13 @@ const OS = {
     _makeMatrixICCProfile(space = 'srgb') {
         const p3 = space === 'display-p3';
         const name = p3 ? 'Display P3' : 'sRGB IEC61966-2.1';
-        const matrix = p3
-            ? [[0.48657095, 0.26566769, 0.19821729], [0.22897456, 0.69173852, 0.07928691], [0, 0.04511338, 1.04394437]]
-            : [[0.4124564, 0.3575761, 0.1804375], [0.2126729, 0.7151524, 0.072175], [0.0193339, 0.119192, 0.9503041]];
+        // ICC matrix tags use a D50 profile connection space. The editor's
+        // working matrices are D65, so Bradford-adapt them before serialization.
+        const matrix = this._adaptColorMatrix(this._colorSpaceMatrix(space), [
+            [1.0479298, 0.0229468, -0.0501922],
+            [0.0296278, 0.9904345, -0.0170738],
+            [-0.009243, 0.0150552, 0.7518743]
+        ]);
         const writeAscii = (target, offset, value) => target.set([...String(value).slice(0, 4)].map(character => character.charCodeAt(0)), offset);
         const fixed = value => Math.max(-0x80000000, Math.min(0x7FFFFFFF, Math.round(value * 65536)));
         const descriptionBytes = new TextEncoder().encode(`${name}\0`);
@@ -11076,15 +11123,29 @@ const OS = {
             const end = offset + 8 + length + (length & 1);
             if (end > source.length) throw new Error('WebP chunks are truncated');
             const type = String.fromCharCode(...source.slice(offset, offset + 4));
-            if (type !== 'ICCP') chunks.push(source.slice(offset, end));
+            if (type !== 'ICCP') chunks.push({ type, bytes:source.slice(offset, end) });
             offset = end;
         }
         if (offset !== source.length) throw new Error('WebP chunk stream is invalid');
+        const extendedIndex = chunks.findIndex(chunk => chunk.type === 'VP8X');
+        if (extendedIndex < 0) throw new Error('WebP ICC embedding requires an extended VP8X container');
+        const extended = new Uint8Array(chunks[extendedIndex].bytes);
+        if (extended.length !== 18 || new DataView(extended.buffer).getUint32(4, true) !== 10) {
+            throw new Error('WebP VP8X chunk is invalid');
+        }
+        // ICCP must follow VP8X, and the feature bit must advertise it. Placing
+        // ICCP before VP8X creates a RIFF file that browsers correctly reject.
+        extended[8] |= 0x20;
         const profileChunk = new Uint8Array(8 + profileBytes.length + (profileBytes.length & 1));
         profileChunk.set([0x49, 0x43, 0x43, 0x50], 0);
         new DataView(profileChunk.buffer).setUint32(4, profileBytes.length, true);
         profileChunk.set(profileBytes, 8);
-        const output = this._concatByteArrays([source.slice(0, 12), profileChunk, ...chunks]);
+        const output = this._concatByteArrays([
+            source.slice(0, 12),
+            extended,
+            profileChunk,
+            ...chunks.filter((_, index) => index !== extendedIndex).map(chunk => chunk.bytes)
+        ]);
         new DataView(output.buffer).setUint32(4, output.length - 8, true);
         return output;
     },
@@ -25904,7 +25965,12 @@ self.onmessage = async function(event) {
     _photonFilterWorker: null,
     _filterWorkerPhotonReady: false,
     _photonFilterDisabled: false,
-    _gpuFilterDisabled: false,
+    // Firefox can terminate its graphics process when an OffscreenCanvas
+    // WebGL2 context is created inside this filter worker, especially on the
+    // software renderer. Its offscreen 2D worker stays fast and stable, so
+    // start on that path instead of relying on an exception the page cannot
+    // catch after the graphics process exits.
+    _gpuFilterDisabled: typeof navigator !== 'undefined' && String(navigator.userAgent || '').includes('Firefox/'),
     _gpuParityOps: Object.freeze(['invert', 'grayscale', 'threshold', 'brightness', 'contrast', 'blur', 'sharpen']),
     _filterBenchmarks: {},
     _recordFilterBenchmark(op, backend, durationMs) {

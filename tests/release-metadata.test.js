@@ -21,7 +21,7 @@ describe('release metadata', () => {
     const server = read('tests/server.mjs');
 
     expect(manifest.version, 'manifest.webmanifest version').toBe(version);
-    expect(index, 'index.html title version').toContain(`<title>OpenShop v${version} —`);
+    expect(index, 'index.html title version').toContain(`<title>OpenShop v${version} |`);
     expect(index, 'index.html about version').toContain(`aria-label="OpenShop version ${version}"`);
     expect(index, 'index.html runtime version').toContain(`application: { id:'openshop', version:'${version}'`);
     expect(index, 'index.html document version').toContain(`version: '${version}'`);

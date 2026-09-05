@@ -1,11 +1,11 @@
 {
   "name": "openshop",
-  "version": "0.30.0",
+  "version": "0.31.0",
   "private": true,
-  "description": "Single-file browser image editor test harness",
+  "description": "Private browser image editor with layers, PSD interchange, and local export",
   "type": "module",
   "release": {
-    "shellRevision": 2
+    "shellRevision": 1
   },
   "engines": {
     "node": ">=22.22.2"
@@ -19,6 +19,7 @@
     "security:check": "node tools/security.mjs --check",
     "security:write": "node tools/security.mjs --write",
     "runtime:sync": "node tools/sync-runtime-assets.mjs",
+    "marketing:capture": "node tools/capture-marketing.mjs",
     "test:perf": "node --expose-gc tools/performance-budget.mjs --check",
     "test:mobile": "playwright test --project=mobile-chromium --project=mobile-firefox --project=mobile-webkit",
     "test:release": "npm run css:check && npm run security:check && npm audit --audit-level=high && npm run test:perf && npm run test:coverage && npm run test:e2e && npm run test:cross-browser && npm run test:mobile",

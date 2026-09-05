@@ -1,5 +1,5 @@
-# Roadmap — Openshop
+# Roadmap: OpenShop
 
-Actionable work only. Historical and completed roadmap material is archived in CHANGELOG.md; blocked work is kept in Roadmap_Blocked.md.
+`ROADMAP.md` is the single actionable source. Historical and completed work is archived in `CHANGELOG.md`. Blocked work stays in `Roadmap_Blocked.md`.
 
 No open items.

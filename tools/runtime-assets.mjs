@@ -456,6 +456,7 @@ export const OPENSHOP_LOCAL_SHELL_ASSETS = Object.freeze([
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',
+  './design/openshop-social-preview.png',
   './design/openshop-studio-master.png',
   './design/openshop-menu-states.png'
 ]);

@@ -4,6 +4,25 @@ All notable changes to Openshop will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.31.0] - 2026-09-05
+
+### Added
+- Added four reproducible product screenshots captured from the real editor in headless Chromium.
+- Added a social preview built around the current layered workspace, plus focused format, development, security, and privacy documentation.
+- Added a deterministic marketing capture command that also refreshes both PWA install images.
+
+### Changed
+- Rebuilt the README as a shorter product page with clear launch options, honest network boundaries, visible format limits, and direct documentation links.
+- Updated the browser metadata, manifest copy, GitHub description assets, and release-facing version surfaces.
+- Moved the complete release gate to the documented local workflow and removed obsolete remote automation.
+
+### Fixed
+- Kept export controls reachable on short desktop displays.
+- Corrected WebP ICC chunk order and D50 profile matrices so colour-managed exports remain valid and keep their intended colours.
+- Let filter cancellation reach a running image job before the progress panel appears.
+- Kept Firefox on the stable offscreen worker when its worker WebGL2 path can terminate the graphics process.
+- Kept the verified production shell eligible during synthetic offline-update and interrupted-promotion tests after a version bump.
+
 ## [v0.30.0] - 2026-08-10
 
 ### Added

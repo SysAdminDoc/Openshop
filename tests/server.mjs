@@ -21,6 +21,7 @@ const publicFiles = new Map([
   ['/manifest.webmanifest', 'manifest.webmanifest'],
   ['/icon-192.png', 'icon-192.png'],
   ['/icon-512.png', 'icon-512.png'],
+  ['/design/openshop-social-preview.png', 'design/openshop-social-preview.png'],
   ['/design/openshop-studio-master.png', 'design/openshop-studio-master.png'],
   ['/design/openshop-menu-states.png', 'design/openshop-menu-states.png']
 ]);
@@ -181,9 +182,16 @@ async function handleRequest(request, response) {
     let body = await readFile(file);
     if (pathname === '/sw.js') {
       const source = body.toString('utf8');
+      const servedRevision = workerRevision.replace(/[^a-zA-Z0-9._-]/g, '');
+      const trustedRevisionHeader = 'const TRUSTED_SHELL_REVISIONS = new Set([\n    SHELL_REVISION,';
       body = source.replace(
         `const SHELL_REVISION = '${productionRevision}';`,
-        `const SHELL_REVISION = '${workerRevision.replace(/[^a-zA-Z0-9._-]/g, '')}';`
+        `const SHELL_REVISION = '${servedRevision}';`
+      ).replace(
+        trustedRevisionHeader,
+        servedRevision === productionRevision
+          ? trustedRevisionHeader
+          : `${trustedRevisionHeader}\n    '${productionRevision}',`
       );
     }
     send(response, 200, body, {

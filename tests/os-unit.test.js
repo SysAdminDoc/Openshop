@@ -2985,6 +2985,15 @@ describe('OpenShop core object', () => {
     expect(p3).toEqual(expect.objectContaining({ name:'Display P3', colorSpace:'display-p3', valid:true }));
     expect(p3.matrix).toHaveLength(3);
     expect(p3.matrix[0]).toHaveLength(3);
+    expect(p3.matrix[0][0]).toBeCloseTo(0.48657095, 3);
+    expect(srgb.matrix[0][0]).toBeCloseTo(0.4124564, 3);
+
+    const profileView = new DataView(p3Bytes.buffer, p3Bytes.byteOffset, p3Bytes.byteLength);
+    const rXYZRow = Array.from({ length:profileView.getUint32(128, false) }, (_, index) => 132 + index * 12)
+      .find(offset => String.fromCharCode(...p3Bytes.slice(offset, offset + 4)) === 'rXYZ');
+    const rXYZOffset = profileView.getUint32(rXYZRow + 4, false);
+    // ICC tags use a D50 connection space even though OpenShop converts in D65.
+    expect(profileView.getInt32(rXYZOffset + 8, false) / 65536).toBeCloseTo(0.5151464, 3);
 
     const source = new ImageData(new Uint8ClampedArray([64, 128, 150, 255, 180, 140, 120, 127]), 2, 1);
     const toSRGB = OS._convertImageDataColorProfile(source, p3, 'srgb');
@@ -3009,9 +3018,17 @@ describe('OpenShop core object', () => {
     const jpegUrl = `data:image/jpeg;base64,${OS._bytesToBase64(jpeg)}`;
     expect(OS._readJPEGICCProfile(OS._dataUrlToBytes(OS._embedRasterICCDataUrl(jpegUrl, 'jpeg', p3Bytes)))).toEqual(p3Bytes);
 
-    const webp = new Uint8Array([0x52,0x49,0x46,0x46,0x04,0x00,0x00,0x00,0x57,0x45,0x42,0x50]);
+    const webp = new Uint8Array([
+      0x52,0x49,0x46,0x46,0x16,0x00,0x00,0x00,0x57,0x45,0x42,0x50,
+      0x56,0x50,0x38,0x58,0x0A,0x00,0x00,0x00,
+      0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+    ]);
     const webpUrl = `data:image/webp;base64,${OS._bytesToBase64(webp)}`;
-    expect(OS._readWebPICCProfile(OS._dataUrlToBytes(OS._embedRasterICCDataUrl(webpUrl, 'webp', p3Bytes))).bytes).toEqual(p3Bytes);
+    const embeddedWebpBytes = OS._dataUrlToBytes(OS._embedRasterICCDataUrl(webpUrl, 'webp', p3Bytes));
+    expect(String.fromCharCode(...embeddedWebpBytes.slice(12, 16))).toBe('VP8X');
+    expect(embeddedWebpBytes[20] & 0x20).toBe(0x20);
+    expect(String.fromCharCode(...embeddedWebpBytes.slice(30, 34))).toBe('ICCP');
+    expect(OS._readWebPICCProfile(embeddedWebpBytes).bytes).toEqual(p3Bytes);
   });
 
   it('chooses one explicit PSD composite fallback for unsupported document-wide semantics', () => {
@@ -3111,7 +3128,7 @@ describe('release metadata', () => {
     expect(html, 'document <title>').toContain(`<title>OpenShop v${version} `);
     expect(html, 'logo accessible name').toContain(`aria-label="OpenShop version ${version}"`);
     expect(html, 'engine banner comment').toContain(`//  OpenShop v${version} `);
-    expect(html, 'live document.title template').toContain(`— OpenShop v${version}\``);
+    expect(html, 'live document.title template').toContain(` | OpenShop v${version}\``);
     expect(html, 'topbar logo badge').toContain(`<span class="logo-version">${short}</span>`);
     // The first screen a new user sees. It said v0.21 on a v0.24 build because
     // this list was the drift gate and did not include it.
