@@ -5,6 +5,16 @@
 [![Platform](https://img.shields.io/badge/platform-browser-orange)](https://sysadmindoc.github.io/Openshop/)
 [![Install](https://img.shields.io/badge/install-optional-2ee5f5)](https://sysadmindoc.github.io/Openshop/)
 
+<p align="center">
+  <a href="https://ko-fi.com/X8K126YVER">
+    <img height="42" src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" alt="Buy me a coffee on Ko-fi" />
+  </a>
+</p>
+
+<p align="center">
+  <sub><em>If OpenShop helps you edit without an account or subscription, a coffee helps me keep the studio maintained.</em></sub>
+</p>
+
 ![OpenShop, a private image studio that runs in the browser](design/openshop-social-preview.png)
 
 OpenShop is an open-source browser image editor for layered work, PSD interchange, precise selections, and local export. Open it online, install the hosted app, or keep the single HTML file nearby. There is no account and no editing server.
